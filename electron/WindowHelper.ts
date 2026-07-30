@@ -162,6 +162,12 @@ export class WindowHelper {
 
   // Debounce timer for persisting overlay bounds to disk.
   private _persistBoundsTimer: NodeJS.Timeout | null = null;
+
+  // Auto-clamp latch: set by setOverlayDimensions when compact auto-growth
+  // hits the OS work-area height cap (95%). Once latched, the renderer
+  // switches to viewport-bound layout (h-screen) to keep controls pinned
+  // at the bottom. Cleared on session reset / explicit compact restore.
+  private _compactAutoLatched = false;
   // ──────────────────────────────────────────────────────────────────────────
 
   private appState: AppState;
@@ -171,10 +177,11 @@ export class WindowHelper {
   // Constants
   private static readonly OVERLAY_DEFAULT_WIDTH = 780;
   private static readonly OVERLAY_MIN_HEIGHT = 216;
-  // Minimum overlay dimensions when resizable: wide enough for the answer panel
-  // (min 480px), tall enough for a usable chat view (min 180px).
+  // Minimum overlay dimensions when resizable: 480px to fit quick-action row,
+  // 280px for TopPill (62px) + quick actions (32px) + composer (80px) +
+  // usable answer area (≥100px). The old 180px could not fit the full chrome.
   private static readonly OVERLAY_MIN_WIDTH = 480;
-  private static readonly OVERLAY_MIN_RESIZE_HEIGHT = 180;
+  private static readonly OVERLAY_MIN_RESIZE_HEIGHT = 280;
   // Vertical offset for the meeting overlay's initial position, expressed as
   // a fraction of the screen's work-area height. 0.035 places the top edge
   // ~37 px below the work-area top on a 1055-tall display — comfortably
@@ -255,7 +262,7 @@ export class WindowHelper {
     const [currentX, currentY] = activeWindow.getPosition();
     const primaryDisplay = screen.getPrimaryDisplay();
     const workArea = primaryDisplay.workAreaSize;
-    const maxAllowedWidth = Math.floor(workArea.width * 0.9);
+    const maxAllowedWidth = Math.floor(workArea.width * 0.95);
     const newWidth = Math.min(width, maxAllowedWidth);
     const newHeight = Math.ceil(height);
     const maxX = workArea.width - newWidth;
@@ -287,8 +294,8 @@ export class WindowHelper {
     const currentX = currentBounds.x;
     const currentY = currentBounds.y;
     const workArea = this.getDisplayWorkArea(currentBounds);
-    const maxAllowedWidth = Math.floor(workArea.width * 0.9);
-    const maxAllowedHeight = Math.floor(workArea.height * 0.9);
+    const maxAllowedWidth = Math.floor(workArea.width * 0.95);
+    const maxAllowedHeight = Math.floor(workArea.height * 0.95);
     const newWidth = Math.min(Math.max(width, WindowHelper.OVERLAY_MIN_WIDTH), maxAllowedWidth);
     const newHeight = Math.min(Math.max(height, 1), maxAllowedHeight);
     const maxX = workArea.x + workArea.width - newWidth;
@@ -308,6 +315,16 @@ export class WindowHelper {
     this._programmaticResizeCount++;
     this.overlayWindow.setBounds({ x: newX, y: newY, width: newWidth, height: newHeight });
     this.overlayBounds = this.overlayWindow.getBounds();
+
+    // Auto-clamp detection: if the OS work-area height cap was hit (content
+    // taller than 95 % work area), latch into viewport mode so controls stay
+    // pinned at the bottom instead of being pushed below the viewport.
+    if (!this._compactAutoLatched && newHeight < height - 20) {
+      this._userSizing = true;
+      this._compactAutoLatched = true;
+      this.broadcastSizingMode();
+      console.log('[WindowHelper] Content hit OS height cap; latched into viewport mode');
+    }
   }
 
   // Variant of setOverlayDimensions that keeps the horizontal CENTER of the
@@ -323,8 +340,8 @@ export class WindowHelper {
     const currentBounds = this.overlayWindow.getBounds();
     const currentContentSize = this.overlayWindow.getContentSize();
     const workArea = this.getDisplayWorkArea(currentBounds);
-    const maxAllowedWidth = Math.floor(workArea.width * 0.9);
-    const maxAllowedHeight = Math.floor(workArea.height * 0.9);
+    const maxAllowedWidth = Math.floor(workArea.width * 0.95);
+    const maxAllowedHeight = Math.floor(workArea.height * 0.95);
     const newWidth = Math.min(Math.max(width, 300), maxAllowedWidth);
     const newHeight = Math.min(Math.max(height, 1), maxAllowedHeight);
 
@@ -352,6 +369,14 @@ export class WindowHelper {
     this._programmaticResizeCount++;
     this.overlayWindow.setBounds({ x: newX, y: newY, width: newWidth, height: newHeight });
     this.overlayBounds = this.overlayWindow.getBounds();
+
+    // Auto-clamp detection (same as setOverlayDimensions)
+    if (!this._compactAutoLatched && newHeight < height - 20) {
+      this._userSizing = true;
+      this._compactAutoLatched = true;
+      this.broadcastSizingMode();
+      console.log('[WindowHelper] Content hit OS height cap; latched into viewport mode (centered)');
+    }
   }
 
   public createWindow(): void {
@@ -673,6 +698,7 @@ export class WindowHelper {
             // User resized via native edges/corners — exit expanded mode,
             // clear stale pre-expand bounds, persist, and broadcast so the
             // UI icon changes to Expand (defect #4).
+            const wasNotSizing = !this._userSizing;
             this._userSizing = true;
             if (this._overlayExpanded) {
               this._overlayExpanded = false;
@@ -680,6 +706,9 @@ export class WindowHelper {
               this.broadcastExpandedState();
             }
             this.persistOverlayBoundsDebounced();
+            if (wasNotSizing) {
+              this.broadcastSizingMode(); // transition compact→viewport
+            }
           }
         }
       });
@@ -744,6 +773,7 @@ export class WindowHelper {
   public resetOverlayPosition(): void {
     this.overlayBounds = null;
     this._userSizing = false;
+    this._compactAutoLatched = false;
     this._overlayExpanded = false;
     this._preExpandBounds = null;
     // Also persist the reset
@@ -755,6 +785,7 @@ export class WindowHelper {
     } catch (e) { /* ignore */ }
     // Notify all renderers that expanded state changed
     this.broadcastExpandedState();
+    this.broadcastSizingMode();
     console.log('[WindowHelper] Overlay position reset to default for next meeting.');
   }
 
@@ -763,6 +794,9 @@ export class WindowHelper {
    *  Unlike resetOverlayPosition(), this does NOT clear overlayBounds or
    *  _userSizing — user-set dimensions survive across interviews (defect #3). */
   public prepareForNewMeeting(): void {
+    // Clear any auto-clamp latch so the next meeting starts in compact mode
+    // (content-driven sizing) and can grow from scratch.
+    this._compactAutoLatched = false;
     // If currently expanded, restore to pre-expand bounds so the overlay
     // opens at the user's last non-expanded size on the next meeting.
     if (this._overlayExpanded) {
@@ -785,6 +819,7 @@ export class WindowHelper {
       }
       this.persistOverlayBoundsDebounced();
       this.broadcastExpandedState();
+      this.broadcastSizingMode();
     } else if (this.overlayBounds) {
       // Not expanded and has saved bounds: retain them (already protected
       // by _userSizing from loadSavedOverlayBounds or prior resize).
@@ -854,6 +889,7 @@ export class WindowHelper {
     this._overlayExpanded = true;
     this.persistOverlayBoundsDebounced();
     this.broadcastExpandedState();
+    this.broadcastSizingMode();
     console.log('[WindowHelper] Expanded overlay to work area:', this.overlayBounds);
   }
 
@@ -868,6 +904,7 @@ export class WindowHelper {
       this._userSizing = true;  // protect current bounds from auto-size
       this.persistOverlayBoundsDebounced();
       this.broadcastExpandedState();
+      this.broadcastSizingMode();
       console.log('[WindowHelper] Restored from expanded (no pre-expand saved):', this.overlayBounds);
       return;
     }
@@ -884,6 +921,7 @@ export class WindowHelper {
     this._preExpandBounds = null;
     this.persistOverlayBoundsDebounced();
     this.broadcastExpandedState();
+    this.broadcastSizingMode();
     console.log('[WindowHelper] Restored overlay to pre-expand bounds:', this.overlayBounds);
   }
 
@@ -893,6 +931,36 @@ export class WindowHelper {
         win.webContents.send('overlay-expanded-changed', this._overlayExpanded);
       }
     });
+  }
+
+  /** Derive sizing mode from internal flags and broadcast to renderers.
+   *  'compact' — content drives window size (default / first-run)
+   *  'viewport' — window size drives content (user-resized or expanded) */
+  public broadcastSizingMode(): void {
+    const mode: 'compact' | 'viewport' =
+      this._userSizing || this._overlayExpanded ? 'viewport' : 'compact';
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send('overlay-sizing-mode', mode);
+      }
+    });
+  }
+
+  public getSizingMode(): 'compact' | 'viewport' {
+    return this._userSizing || this._overlayExpanded ? 'viewport' : 'compact';
+  }
+
+  /** Clear the auto-clamp latch and return to compact (content-driven) mode.
+   *  Only takes effect if the viewport mode was triggered by the auto-clamp
+   *  latch, NOT by explicit user resize or expand — those require an explicit
+   *  resetOverlayPosition() to undo. Called from the renderer on session
+   *  reset (messages cleared / new meeting). */
+  public clearCompactLatch(): void {
+    if (!this._compactAutoLatched) return;
+    this._compactAutoLatched = false;
+    this._userSizing = false;
+    this.broadcastSizingMode();
+    console.log('[WindowHelper] Cleared auto-compact latch; returned to compact sizing');
   }
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -1076,8 +1144,8 @@ export class WindowHelper {
           ? this._preExpandBounds
           : (savedBounds ?? currentBounds),
       );
-      const maxAllowedWidth = Math.floor(workArea.width * 0.9);
-      const maxAllowedHeight = Math.floor(workArea.height * 0.9);
+      const maxAllowedWidth = Math.floor(workArea.width * 0.95);
+      const maxAllowedHeight = Math.floor(workArea.height * 0.95);
 
       // If we were expanded when hidden, re-apply expanded bounds.
       let targetBounds: Electron.Rectangle;
@@ -1135,6 +1203,7 @@ export class WindowHelper {
       if (this._overlayExpanded) {
         this.broadcastExpandedState();
       }
+      this.broadcastSizingMode();
       this.overlayWindow.webContents.send('ensure-expanded');
 
       // Restore opacity before showing (it may have been zeroed by hideMainWindow).

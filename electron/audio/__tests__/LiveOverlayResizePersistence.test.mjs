@@ -244,3 +244,143 @@ test('resize handler sets _userSizing on manual resize', () => {
     'resize handler must set _userSizing on manual resize',
   );
 });
+
+// ── Auto-clamp latch (compact growth hits OS height cap) ─────────────────
+
+test('setOverlayDimensions detects OS height cap and latches into viewport mode', () => {
+  const src = readHelper();
+  // Find the method by its full TypeScript signature
+  const dimStart = src.indexOf('public setOverlayDimensions(width: number, height: number)');
+  const dimEnd = src.indexOf('// Variant of setOverlayDimensions', dimStart);
+  const dimMethod = src.slice(dimStart, dimEnd);
+
+  // Must compare newHeight < height with threshold
+  assert.ok(
+    /newHeight\s*<\s*height\s*-\s*20/.test(dimMethod),
+    'setOverlayDimensions must detect clamp with threshold: newHeight < height - 20',
+  );
+
+  // Must set _compactAutoLatched and call broadcastSizingMode
+  assert.ok(
+    /_compactAutoLatched\s*=\s*true[\s\S]{0,100}broadcastSizingMode/.test(dimMethod),
+    'setOverlayDimensions must set _compactAutoLatched and broadcast on clamp',
+  );
+
+  // Must set _userSizing when latch triggers
+  assert.ok(
+    /_compactAutoLatched[\s\S]{0,50}_userSizing\s*=\s*true/.test(dimMethod),
+    'setOverlayDimensions must set _userSizing on clamp latch',
+  );
+});
+
+test('setOverlayDimensionsCentered detects OS height cap and latches into viewport mode', () => {
+  const src = readHelper();
+  const centeredStart = src.indexOf('public setOverlayDimensionsCentered(width: number, height: number)');
+  const centeredEnd = src.indexOf('public createWindow', centeredStart);
+  const centeredMethod = src.slice(centeredStart, centeredEnd);
+
+  assert.ok(
+    /newHeight\s*<\s*height\s*-\s*20/.test(centeredMethod),
+    'setOverlayDimensionsCentered must detect clamp with threshold',
+  );
+
+  assert.ok(
+    /_compactAutoLatched\s*=\s*true[\s\S]{0,100}broadcastSizingMode/.test(centeredMethod),
+    'setOverlayDimensionsCentered must set _compactAutoLatched and broadcast',
+  );
+});
+
+test('_compactAutoLatched flag exists and is cleared in resetOverlayPosition and prepareForNewMeeting', () => {
+  const src = readHelper();
+
+  // Must declare the flag
+  assert.ok(
+    /private\s+_compactAutoLatched\s*=\s*false/.test(src),
+    '_compactAutoLatched flag must be declared',
+  );
+
+  // Must clear in resetOverlayPosition
+  const resetMethod = src.slice(
+    src.indexOf('public resetOverlayPosition'),
+    src.indexOf('public getLastOverlayBounds'),
+  );
+  assert.ok(
+    /_compactAutoLatched\s*=\s*false/.test(resetMethod),
+    'resetOverlayPosition must clear _compactAutoLatched',
+  );
+
+  // Must clear in prepareForNewMeeting
+  const prepareMethod = src.slice(
+    src.indexOf('public prepareForNewMeeting'),
+    src.indexOf('public getLastOverlayBounds'),
+  );
+  assert.ok(
+    /_compactAutoLatched\s*=\s*false/.test(prepareMethod),
+    'prepareForNewMeeting must clear _compactAutoLatched',
+  );
+});
+
+test('clearCompactLatch only clears latch-originated viewport mode', () => {
+  const src = readHelper();
+  const clearMethod = src.slice(
+    src.indexOf('public clearCompactLatch'),
+    src.indexOf('public isVisible'),
+  );
+
+  // Must guard on _compactAutoLatched
+  assert.ok(
+    /if\s*\(!\s*this\._compactAutoLatched\s*\)\s*return/.test(clearMethod),
+    'clearCompactLatch must guard on _compactAutoLatched',
+  );
+
+  // Must clear _userSizing
+  assert.ok(
+    /_userSizing\s*=\s*false/.test(clearMethod),
+    'clearCompactLatch must clear _userSizing',
+  );
+
+  // Must broadcast sizing mode
+  assert.ok(
+    /broadcastSizingMode/.test(clearMethod),
+    'clearCompactLatch must broadcastSizingMode',
+  );
+});
+
+// ── IPC contract verification ────────────────────────────────────────────
+
+test('clear-compact-latch IPC is wired across all layers', () => {
+  const helper = readHelper();
+  const ipc = readFileSync(
+    path.resolve(__dirname, '../../ipcHandlers.ts'), 'utf8',
+  );
+  const preload = readFileSync(
+    path.resolve(__dirname, '../../preload.ts'), 'utf8',
+  );
+  const types = readFileSync(
+    path.resolve(__dirname, '../../../src/types/electron.d.ts'), 'utf8',
+  );
+
+  // Main: clearCompactLatch method exists
+  assert.ok(
+    /public clearCompactLatch/.test(helper),
+    'WindowHelper must expose public clearCompactLatch',
+  );
+
+  // IPC handler: clear-compact-latch channel
+  assert.ok(
+    /safeHandle\(['"]clear-compact-latch['"]/.test(ipc),
+    'ipcHandlers must register clear-compact-latch handler',
+  );
+
+  // Preload: clearCompactLatch API as part of ElectronAPI
+  assert.ok(
+    /clearCompactLatch/.test(preload),
+    'preload must expose clearCompactLatch',
+  );
+
+  // Types: clearCompactLatch in interface
+  assert.ok(
+    /clearCompactLatch/.test(types),
+    'electron.d.ts must declare clearCompactLatch',
+  );
+});

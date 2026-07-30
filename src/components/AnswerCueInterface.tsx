@@ -435,6 +435,7 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
   const shellRef = React.useRef<HTMLDivElement>(null);
   const [isExpanded, setIsExpanded] = useState(true);
   const [overlayExpanded, setOverlayExpanded] = useState(false); // Fills work area (not native fullscreen)
+  const [sizingMode, setSizingMode] = useState<'compact' | 'viewport'>('compact');
   const [inputValue, setInputValue] = useState('');
   const { shortcuts, isShortcutPressed } = useShortcuts();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -1007,10 +1008,9 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
   // the TopPill's horizontal center invariant across resizes.
   const reportShellSize = useCallback(() => {
     if (!contentRef.current) return;
-    // When expanded to work-area fill, the OS window is explicitly sized by
-    // main. Skip programmatic dimension updates so the content-driven sizing
-    // doesn't fight the expanded bounds.
-    if (overlayExpanded) return;
+    // In viewport-bound mode (user-resized or expanded), the OS window is the
+    // authority — content must adapt to window bounds, not vice versa.
+    if (sizingMode === 'viewport') return;
     const rect = contentRef.current.getBoundingClientRect();
     const shellTargetWidth = Math.round(shellWidth.get());
     const width = selectedScreenshot ? Math.max(shellTargetWidth, 900) : shellTargetWidth;
@@ -1021,7 +1021,7 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
     } else {
       window.electronAPI?.updateContentDimensions({ width, height });
     }
-  }, [selectedScreenshot, shellWidth, overlayExpanded]);
+  }, [selectedScreenshot, shellWidth, sizingMode]);
 
   // Drive OS window width from the shell-width motion value, rAF-coalesced
   // so we emit at most one IPC per paint frame and skip ≤1px deltas. The
@@ -1036,6 +1036,8 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
 
     const flush = () => {
       rafId = null;
+      // In viewport-bound mode, skip: the OS window is the authority.
+      if (sizingMode === 'viewport') return;
       const shellTargetWidth = Math.round(shellWidth.get());
       const width = selectedScreenshot ? Math.max(shellTargetWidth, 900) : shellTargetWidth;
       if (Math.abs(width - lastSentWidth) < 1) return;
@@ -1059,7 +1061,7 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
       unsubscribe();
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [selectedScreenshot, shellWidth]);
+  }, [selectedScreenshot, shellWidth, sizingMode]);
 
   // ResizeObserver: rAF-debounced so the spring can update height without
   // flooding IPC. Width is constant in expanded mode, so per-frame updates
@@ -1369,6 +1371,23 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
     return () => unsubscribe();
   }, []);
 
+  // Listen for sizing mode changes (compact ↔ viewport) from main.
+  // 'viewport' means the user has manually resized or expanded — the renderer
+  // must bind to the actual window size. 'compact' means content drives size.
+  useEffect(() => {
+    if (!window.electronAPI?.onOverlaySizingModeChanged) return;
+    const unsubscribe = window.electronAPI.onOverlaySizingModeChanged(
+      (mode: 'compact' | 'viewport') => {
+        setSizingMode(mode);
+      },
+    );
+    // Fetch initial mode
+    window.electronAPI?.getOverlaySizingMode?.().then((v: 'compact' | 'viewport') => {
+      if (v) setSizingMode(v);
+    }).catch(() => {});
+    return () => unsubscribe();
+  }, []);
+
   // Toggle overlay expand/restore (fill work area / return to prior bounds).
   const handleToggleOverlayExpand = useCallback(() => {
     window.electronAPI?.toggleOverlayExpand?.();
@@ -1379,6 +1398,8 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
     if (!window.electronAPI?.onSessionReset) return;
     const unsubscribe = window.electronAPI.onSessionReset(() => {
       console.log('[AnswerCueInterface] Resetting session state...');
+      // Release auto-clamp latch so the new meeting starts in compact mode
+      window.electronAPI?.clearCompactLatch?.().catch(() => {});
       setMessages([]);
       setSelectedScreenshot(null);
       setScreenshotSaveError(null);
@@ -3084,6 +3105,8 @@ Provide only the answer, nothing else.`;
     setAnswerPanelPinned(false);
     lastManualSubmitRef.current = null;
     manualSubmitInFlightRef.current = false;
+    // Release auto-clamp latch so content can re-grow in compact mode
+    window.electronAPI?.clearCompactLatch?.().catch(() => {});
   };
 
   // PERF: useCallback so MessageRow's memo comparator can rely on a stable
@@ -4369,7 +4392,9 @@ Provide only the answer, nothing else.`;
     <div
       ref={contentRef}
       data-interface-theme={isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : undefined}
-      className="overlay-force-dark flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-0 rounded-[24px] font-sans gap-2 overlay-text-primary"
+      className={`overlay-force-dark flex flex-col items-center mx-auto bg-transparent p-0 rounded-[24px] font-sans gap-2 overlay-text-primary ${
+        sizingMode === 'viewport' ? 'w-screen h-screen min-h-0' : 'w-fit h-fit min-h-0'
+      }`}
     >
       <AnimatePresence initial={false}>
         {isExpanded && (
@@ -4378,22 +4403,30 @@ Provide only the answer, nothing else.`;
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.3, ease: 'easeInOut' }}
-            className="flex flex-col items-center gap-2 w-full"
+            className={`flex flex-col items-center gap-2 w-full ${
+              sizingMode === 'viewport' ? 'flex-1 min-h-0' : ''
+            }`}
           >
-            <TopPill
-              expanded={isExpanded}
-              onToggle={() => setIsExpanded(!isExpanded)}
-              onQuit={() => (onEndMeeting ? onEndMeeting() : window.electronAPI.quitApp())}
-              appearance={appearance}
-              isMaximized={overlayExpanded}
-              onToggleExpand={handleToggleOverlayExpand}
-            />
+            <div className="shrink-0">
+              <TopPill
+                expanded={isExpanded}
+                onToggle={() => setIsExpanded(!isExpanded)}
+                onQuit={() => (onEndMeeting ? onEndMeeting() : window.electronAPI.quitApp())}
+                appearance={appearance}
+                isMaximized={overlayExpanded}
+                onToggleExpand={handleToggleOverlayExpand}
+              />
+            </div>
             {/* LIVE OVERLAY SHELL: this is the visible page during an interview.
                 It owns the mode pill, audio warning, rolling transcript strip,
                 AI response panel, quick actions, input bar, and model selector. */}
             <motion.div
               ref={shellRef}
-              className={`relative backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass} ${overlayExpanded ? 'w-full max-w-full' : 'max-w-full'}`}
+              className={`relative backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass} ${
+                overlayExpanded ? 'w-full max-w-full' : 'max-w-full'
+              } ${
+                sizingMode === 'viewport' ? 'flex-1 min-h-0' : ''
+              }`}
               style={{
                 ...appearance.shellStyle,
                 width: overlayExpanded ? '100%' : shellWidth,
@@ -4402,7 +4435,7 @@ Provide only the answer, nothing else.`;
               {isGlassTheme && <GlassEffectLayer parentRef={shellRef} cornerRadius={24} />}
 
               {hasStatusPill && (
-              <div className="relative no-drag flex flex-wrap items-center justify-center gap-1.5 px-4 pt-3 pb-1">
+              <div className="relative no-drag flex flex-wrap shrink-0 items-center justify-center gap-1.5 px-4 pt-3 pb-1">
                 {shouldShowSttSummaryPill && (
                   <div
                     className={`${statusPillBaseClass} ${getStatusToneClass(sttSummary.tone)}`}
@@ -4590,9 +4623,14 @@ Provide only the answer, nothing else.`;
               {showAiResponsePanel && (
                 <motion.div
                   ref={scrollContainerRef}
-                  className="relative z-10 flex-1 overflow-y-auto p-4 space-y-3 no-drag isolate"
+                  className={`relative z-10 overflow-y-auto p-4 space-y-3 no-drag isolate ${
+                    sizingMode === 'viewport' ? 'flex-1 min-h-0' : ''
+                  }`}
                   layout={false}
-                  style={{ scrollbarWidth: 'thin', maxHeight: overlayExpanded ? 'none' : scrollMaxH }}
+                  style={{
+                    scrollbarWidth: 'thin',
+                    ...(sizingMode === 'compact' ? { maxHeight: '600px' } : {}),
+                  }}
                 >
                   {/* Every row spans the full inner width of the scroll
                                         container, which itself rides the shell's animated
@@ -4695,9 +4733,9 @@ Provide only the answer, nothing else.`;
                 </motion.div>
               )}
 
-              {/* Quick Actions - Minimal & Clean */}
+              {/* Quick Actions - wrap to two rows at narrow widths */}
               <div
-                className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}
+                className={`flex flex-wrap shrink-0 justify-center items-center gap-1.5 px-4 pb-3 ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}
               >
                 <button
                   onClick={handleWhatToSay}
@@ -4745,7 +4783,7 @@ Provide only the answer, nothing else.`;
               </div>
 
               {/* Input Area */}
-              <div className="p-3 pt-0">
+              <div className="shrink-0 p-3 pt-0">
                 {/* Latent Context Preview (Attached Screenshot) */}
                 {attachedContext.length > 0 && (
                   <div
@@ -5044,6 +5082,18 @@ Provide only the answer, nothing else.`;
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
+              </div>
+              {/* Resize grip — subtle bottom-right affordance, pointer-events-none
+                  so native window edges remain fully functional. */}
+              <div
+                className={`absolute bottom-1 right-1 pointer-events-none transition-opacity duration-300 ${
+                  sizingMode === 'viewport' ? 'opacity-0' : 'opacity-20 hover:opacity-30'
+                }`}
+                aria-hidden="true"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" className="overlay-text-muted">
+                  <path d="M11 1v2.5L8.5 1H11zM11 6v1.5L6.5 1H5l6 5zM11 11v-2.5L3.5 11H1l10-10v3l-3-3H6.5L11 6z" />
+                </svg>
               </div>
             </motion.div>
           </motion.div>

@@ -500,6 +500,9 @@ interface ElectronAPI {
   toggleOverlayExpand: () => Promise<void>;
   getOverlayExpanded: () => Promise<boolean>;
   onOverlayExpandedChanged: (callback: (expanded: boolean) => void) => () => void;
+  getOverlaySizingMode: () => Promise<'compact' | 'viewport'>;
+  onOverlaySizingModeChanged: (callback: (mode: 'compact' | 'viewport') => void) => () => void;
+  clearCompactLatch: () => Promise<void>;
   toggleAdvancedSettings: () => Promise<void>;
   openSettingsTab: (tab: string) => Promise<void>;
   onOpenSettingsTab: (callback: (tab: string) => void) => () => void;
@@ -1031,6 +1034,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleAdvancedSettings: () => ipcRenderer.invoke('toggle-advanced-settings'),
   toggleOverlayExpand: () => ipcRenderer.invoke('toggle-overlay-expand'),
   getOverlayExpanded: () => ipcRenderer.invoke('get-overlay-expanded'),
+  getOverlaySizingMode: () => ipcRenderer.invoke('get-overlay-sizing-mode'),
+  onOverlaySizingModeChanged: (callback: (mode: 'compact' | 'viewport') => void) => {
+    const subscription = (_: any, mode: 'compact' | 'viewport') => callback(mode);
+    ipcRenderer.on('overlay-sizing-mode', subscription);
+    return () => {
+      ipcRenderer.removeListener('overlay-sizing-mode', subscription);
+    };
+  },
+  clearCompactLatch: () => ipcRenderer.invoke('clear-compact-latch'),
   onOverlayExpandedChanged: (callback: (expanded: boolean) => void) => {
     const subscription = (_: any, expanded: boolean) => callback(expanded);
     ipcRenderer.on('overlay-expanded-changed', subscription);

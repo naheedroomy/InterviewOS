@@ -945,6 +945,19 @@ export function initializeIpcHandlers(appState: AppState): void {
     return appState.getWindowHelper().isOverlayExpanded();
   });
 
+  // Sizing mode: 'compact' (content drives size) or 'viewport' (window drives size).
+  safeHandle('get-overlay-sizing-mode', async () => {
+    return appState.getWindowHelper().getSizingMode();
+  });
+
+  // Clear auto-clamp latch: return to compact content-driven sizing after
+  // a session reset (messages cleared / new meeting). Only takes effect if
+  // viewport mode was triggered by the auto-clamp latch, not by explicit
+  // user resize or expand.
+  safeHandle('clear-compact-latch', async () => {
+    appState.getWindowHelper().clearCompactLatch();
+  });
+
   // Settings Window
   safeHandle('toggle-settings-window', (event, { x, y } = {}) => {
     appState.settingsWindowHelper.toggleWindow(x, y);

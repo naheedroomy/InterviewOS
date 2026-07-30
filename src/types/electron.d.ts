@@ -75,6 +75,9 @@ export interface ElectronAPI {
   toggleOverlayExpand: () => Promise<void>
   getOverlayExpanded: () => Promise<boolean>
   onOverlayExpandedChanged: (callback: (expanded: boolean) => void) => () => void
+  getOverlaySizingMode: () => Promise<'compact' | 'viewport'>
+  onOverlaySizingModeChanged: (callback: (mode: 'compact' | 'viewport') => void) => () => void
+  clearCompactLatch: () => Promise<void>
   getRecognitionLanguages: () => Promise<Record<string, any>>
   getScreenshots: () => Promise<Array<{ path: string; preview: string }>>
   deleteScreenshot: (
