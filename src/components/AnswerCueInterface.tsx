@@ -434,6 +434,7 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
   const isModernTheme = interfaceTheme === 'modern';
   const shellRef = React.useRef<HTMLDivElement>(null);
   const [isExpanded, setIsExpanded] = useState(true);
+  const [overlayExpanded, setOverlayExpanded] = useState(false); // Fills work area (not native fullscreen)
   const [inputValue, setInputValue] = useState('');
   const { shortcuts, isShortcutPressed } = useShortcuts();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -1006,6 +1007,10 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
   // the TopPill's horizontal center invariant across resizes.
   const reportShellSize = useCallback(() => {
     if (!contentRef.current) return;
+    // When expanded to work-area fill, the OS window is explicitly sized by
+    // main. Skip programmatic dimension updates so the content-driven sizing
+    // doesn't fight the expanded bounds.
+    if (overlayExpanded) return;
     const rect = contentRef.current.getBoundingClientRect();
     const shellTargetWidth = Math.round(shellWidth.get());
     const width = selectedScreenshot ? Math.max(shellTargetWidth, 900) : shellTargetWidth;
@@ -1016,7 +1021,7 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
     } else {
       window.electronAPI?.updateContentDimensions({ width, height });
     }
-  }, [selectedScreenshot, shellWidth]);
+  }, [selectedScreenshot, shellWidth, overlayExpanded]);
 
   // Drive OS window width from the shell-width motion value, rAF-coalesced
   // so we emit at most one IPC per paint frame and skip ≤1px deltas. The
@@ -1349,6 +1354,24 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
       setIsExpanded(true);
     });
     return () => unsubscribe();
+  }, []);
+
+  // Listen for overlay expanded state changes (Expand/Restore from main process).
+  useEffect(() => {
+    if (!window.electronAPI?.onOverlayExpandedChanged) return;
+    const unsubscribe = window.electronAPI.onOverlayExpandedChanged((expanded: boolean) => {
+      setOverlayExpanded(expanded);
+    });
+    // Fetch initial expanded state
+    window.electronAPI?.getOverlayExpanded?.().then((v: boolean) => {
+      setOverlayExpanded(v);
+    }).catch(() => {});
+    return () => unsubscribe();
+  }, []);
+
+  // Toggle overlay expand/restore (fill work area / return to prior bounds).
+  const handleToggleOverlayExpand = useCallback(() => {
+    window.electronAPI?.toggleOverlayExpand?.();
   }, []);
 
   // Session Reset Listener - Clears UI when a NEW meeting starts
@@ -4362,20 +4385,18 @@ Provide only the answer, nothing else.`;
               onToggle={() => setIsExpanded(!isExpanded)}
               onQuit={() => (onEndMeeting ? onEndMeeting() : window.electronAPI.quitApp())}
               appearance={appearance}
+              isMaximized={overlayExpanded}
+              onToggleExpand={handleToggleOverlayExpand}
             />
             {/* LIVE OVERLAY SHELL: this is the visible page during an interview.
                 It owns the mode pill, audio warning, rolling transcript strip,
                 AI response panel, quick actions, input bar, and model selector. */}
             <motion.div
               ref={shellRef}
-              className={`relative max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}
+              className={`relative backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass} ${overlayExpanded ? 'w-full max-w-full' : 'max-w-full'}`}
               style={{
                 ...appearance.shellStyle,
-                width: shellWidth,
-                // Removed will-change: 'width' — Framer Motion animates shellWidth
-                // using transform (translateX), not CSS width, so this hint created
-                // a ghost compositor layer with stale dimensions from the first
-                // meeting's layout, blocking correct compositing on remount.
+                width: overlayExpanded ? '100%' : shellWidth,
               }}
             >
               {isGlassTheme && <GlassEffectLayer parentRef={shellRef} cornerRadius={24} />}
@@ -4571,7 +4592,7 @@ Provide only the answer, nothing else.`;
                   ref={scrollContainerRef}
                   className="relative z-10 flex-1 overflow-y-auto p-4 space-y-3 no-drag isolate"
                   layout={false}
-                  style={{ scrollbarWidth: 'thin', maxHeight: scrollMaxH }}
+                  style={{ scrollbarWidth: 'thin', maxHeight: overlayExpanded ? 'none' : scrollMaxH }}
                 >
                   {/* Every row spans the full inner width of the scroll
                                         container, which itself rides the shell's animated

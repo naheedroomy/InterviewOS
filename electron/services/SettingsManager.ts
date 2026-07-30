@@ -54,6 +54,12 @@ export interface AppSettings {
     // When true (default) and the active mode is a technical / coding interview, prefer
     // direct vision LLM over structured-extract-then-answer for lowest latency.
     technicalInterviewVisionFirst?: boolean;
+    // Last remembered overlay bounds and expanded state, persisted across app restarts.
+    // Validated against current display topology on load; never restored fully off-screen.
+    overlayBounds?: { x: number; y: number; width: number; height: number; displayId: number } | null;
+    overlayExpanded?: boolean;
+    // Pre-expand bounds: saved when toggling into expanded mode, restored on un-expand.
+    preExpandBounds?: { x: number; y: number; width: number; height: number; displayId: number } | null;
 }
 
 export const VALID_SCREEN_UNDERSTANDING_MODES = ['vision_first', 'vision_only', 'private_vision'] as const;

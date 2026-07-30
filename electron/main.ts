@@ -3364,11 +3364,11 @@ export class AppState {
       // dialog itself when it first attempts to access screen content.
     }
 
-    // Reset overlay position BEFORE the switch so the new meeting starts in
-    // a predictable centered position regardless of where the previous
-    // session left it. (Moved up from below so setWindowMode('overlay') reads
-    // the reset bounds.)
-    this.windowHelper.resetOverlayPosition();
+    // Prepare overlay for new meeting: exit expanded mode if active, but
+    // preserve the user's remembered size/position so they don't have to
+    // re-drag/resize the overlay for every interview (defect #3). The
+    // overlay appears at the last non-expanded location set by the user.
+    this.windowHelper.prepareForNewMeeting();
 
     // ─── WINDOW SWAP BEFORE STATE BROADCAST ───────────────────────────────
     // Switch to the overlay BEFORE flipping `isMeetingActive` to true. If we

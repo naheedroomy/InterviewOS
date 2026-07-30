@@ -1,4 +1,4 @@
-import { ChevronUp, ChevronDown } from "lucide-react";
+import { ChevronUp, ChevronDown, Maximize2, Minimize2 } from "lucide-react";
 import type { OverlayAppearance } from "../../lib/overlayAppearance";
 
 interface TopPillProps {
@@ -6,6 +6,10 @@ interface TopPillProps {
     onToggle: () => void;
     onQuit: () => void;
     appearance: OverlayAppearance;
+    /** Whether the overlay is currently expanded to fill the work area. */
+    isMaximized?: boolean;
+    /** Called when the user clicks the Expand/Restore button. */
+    onToggleExpand?: () => void;
 }
 
 export default function TopPill({
@@ -13,6 +17,8 @@ export default function TopPill({
     onToggle,
     onQuit,
     appearance,
+    isMaximized = false,
+    onToggleExpand,
 }: TopPillProps) {
     return (
         <div className="flex justify-center mt-2 select-none z-50">
@@ -29,6 +35,30 @@ export default function TopPill({
         "
                 style={appearance.pillStyle}
             >
+                {/* EXPAND / RESTORE BUTTON */}
+                {onToggleExpand && (
+                  <button
+                    onClick={onToggleExpand}
+                    className={`
+            w-8 h-8
+            rounded-full
+            overlay-icon-surface
+            overlay-text-primary
+            flex items-center justify-center
+            interaction-base interaction-press
+            hover:bg-accent-primary/10
+          `}
+                    style={appearance.iconStyle}
+                    title={isMaximized ? 'Restore size' : 'Expand'}
+                  >
+                    {isMaximized ? (
+                      <Minimize2 className="w-3.5 h-3.5" />
+                    ) : (
+                      <Maximize2 className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                )}
+
                 {/* CENTER SEGMENT */}
                 <button
                     onClick={onToggle}

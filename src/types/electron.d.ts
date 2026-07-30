@@ -72,6 +72,9 @@ export interface ElectronAPI {
     height: number
   }) => Promise<void>
   onToggleExpand: (callback: () => void) => () => void
+  toggleOverlayExpand: () => Promise<void>
+  getOverlayExpanded: () => Promise<boolean>
+  onOverlayExpandedChanged: (callback: (expanded: boolean) => void) => () => void
   getRecognitionLanguages: () => Promise<Record<string, any>>
   getScreenshots: () => Promise<Array<{ path: string; preview: string }>>
   deleteScreenshot: (

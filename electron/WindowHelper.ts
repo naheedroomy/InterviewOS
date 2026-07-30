@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, screen } from 'electron';
 import path from 'node:path';
 import { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
+import { SettingsManager } from './services/SettingsManager';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -32,6 +33,137 @@ export class WindowHelper {
     | { inactive?: boolean; timeout?: NodeJS.Timeout }
     | null = null;
 
+  // ─── Persist overlay bounds to SettingsManager (atomic write via rename) ───
+  private persistOverlayBoundsDebounced(): void {
+    if (this._persistBoundsTimer) clearTimeout(this._persistBoundsTimer);
+    this._persistBoundsTimer = setTimeout(() => {
+      this._persistBoundsTimer = null;
+      this.flushOverlayBounds();
+    }, 800);
+  }
+
+  private flushOverlayBounds(): void {
+    try {
+      const sm = SettingsManager.getInstance();
+      if (this.overlayBounds) {
+        const display = screen.getDisplayMatching(this.overlayBounds);
+        sm.set('overlayBounds', { ...this.overlayBounds, displayId: display.id });
+      }
+      sm.set('overlayExpanded', this._overlayExpanded);
+      if (this._preExpandBounds) {
+        const preDisplay = screen.getDisplayMatching(this._preExpandBounds);
+        sm.set('preExpandBounds', { ...this._preExpandBounds, displayId: preDisplay.id });
+      } else {
+        sm.set('preExpandBounds', null);
+      }
+    } catch (e) {
+      console.error('[WindowHelper] Failed to persist overlay bounds:', e);
+    }
+  }
+
+  // Validate saved bounds against current display topology. Returns a
+  // clamped copy that is fully on-screen, or null if the display is gone.
+  private validateSavedBounds(
+    saved: { x: number; y: number; width: number; height: number; displayId: number },
+  ): Electron.Rectangle | null {
+    const allDisplays = screen.getAllDisplays();
+    const targetDisplay = allDisplays.find((d) => d.id === saved.displayId);
+    if (!targetDisplay) {
+      // Old display no longer connected — fall back to primary display
+      // but only if at least 40% of the saved rect overlaps it.
+      const primary = screen.getPrimaryDisplay();
+      const wa = primary.workArea;
+      const overlapX = Math.max(0, Math.min(saved.x + saved.width, wa.x + wa.width) - Math.max(saved.x, wa.x));
+      const overlapY = Math.max(0, Math.min(saved.y + saved.height, wa.y + wa.height) - Math.max(saved.y, wa.y));
+      const overlapArea = overlapX * overlapY;
+      const savedArea = saved.width * saved.height;
+      if (savedArea <= 0 || overlapArea / savedArea < 0.4) return null;
+      // Clamp to primary
+      return this.clampBoundsToWorkArea(saved, wa);
+    }
+    return this.clampBoundsToWorkArea(saved, targetDisplay.workArea);
+  }
+
+  private clampBoundsToWorkArea(
+    bounds: { x: number; y: number; width: number; height: number },
+    wa: Electron.Rectangle,
+  ): Electron.Rectangle {
+    const minW = WindowHelper.OVERLAY_MIN_WIDTH;
+    const minH = WindowHelper.OVERLAY_MIN_RESIZE_HEIGHT;
+    const maxW = Math.floor(wa.width * 0.95);
+    const maxH = Math.floor(wa.height * 0.95);
+    const w = Math.min(Math.max(bounds.width, minW), maxW);
+    const h = Math.min(Math.max(bounds.height, minH), maxH);
+    const x = Math.min(Math.max(bounds.x, wa.x), wa.x + wa.width - w);
+    const y = Math.min(Math.max(bounds.y, wa.y), wa.y + wa.height - h);
+    return { x, y, width: w, height: h };
+  }
+
+  // Load saved bounds from settings, validate, and populate `overlayBounds`.
+  private loadSavedOverlayBounds(): void {
+    try {
+      const sm = SettingsManager.getInstance();
+      const savedBounds = sm.get('overlayBounds');
+      const savedExpanded = sm.get('overlayExpanded');
+      const savedPreExpand = sm.get('preExpandBounds');
+
+      if (savedBounds) {
+        const validated = this.validateSavedBounds(savedBounds);
+        if (validated) {
+          this.overlayBounds = validated;
+          // Mark as user-sized so auto-resize does not overwrite
+          // remembered bounds (defect #2).
+          this._userSizing = true;
+          console.log('[WindowHelper] Loaded saved overlay bounds:', validated);
+        } else {
+          console.log('[WindowHelper] Saved overlay bounds invalid for current display; resetting.');
+          this.overlayBounds = null;
+          sm.set('overlayBounds', null);
+        }
+      }
+
+      // Load expanded state only if the window exists and we have pre-expand bounds.
+      // We defer the actual expand until the overlay window is ready.
+      if (savedExpanded && savedPreExpand) {
+        const validatedPre = this.validateSavedBounds(savedPreExpand);
+        if (validatedPre) {
+          this._preExpandBounds = validatedPre;
+          this._overlayExpanded = savedExpanded;
+        } else {
+          sm.set('overlayExpanded', false);
+          sm.set('preExpandBounds', null);
+        }
+      }
+    } catch (e) {
+      console.error('[WindowHelper] Failed to load saved overlay bounds:', e);
+    }
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+  // userSizing: true when the user has manually resized the overlay via native
+  // edges/corners. While true, programmatic setOverlayDimensions calls are
+  // silently skipped so the renderer's auto-resize does not fight user intent.
+  // Set by resize handler (not move handler), cleared by expand/restore and
+  // on explicit reset. When saved/restored user bounds exist, this is set to
+  // true to protect them from auto-size.
+  private _userSizing = false;
+
+  // Counter-based programmatic resize tracking: incremented before every
+  // setBounds() from our own code, decremented by both the 'move' and 'resize'
+  // event handlers. This replaces the old single-boolean approach which broke
+  // when setBounds() emitted both events and the first handler cleared the
+  // flag before the second could read it.
+  private _programmaticResizeCount = 0;
+
+  // Expanded state: fills the work area. Not a native macOS fullscreen Space.
+  private _overlayExpanded = false;
+
+  // Bounds captured before expanding — restored on un-expand.
+  private _preExpandBounds: Electron.Rectangle | null = null;
+
+  // Debounce timer for persisting overlay bounds to disk.
+  private _persistBoundsTimer: NodeJS.Timeout | null = null;
+  // ──────────────────────────────────────────────────────────────────────────
+
   private appState: AppState;
   private contentProtection: boolean = false;
   private opacityTimeout: NodeJS.Timeout | null = null;
@@ -39,17 +171,26 @@ export class WindowHelper {
   // Constants
   private static readonly OVERLAY_DEFAULT_WIDTH = 780;
   private static readonly OVERLAY_MIN_HEIGHT = 216;
+  // Minimum overlay dimensions when resizable: wide enough for the answer panel
+  // (min 480px), tall enough for a usable chat view (min 180px).
+  private static readonly OVERLAY_MIN_WIDTH = 480;
+  private static readonly OVERLAY_MIN_RESIZE_HEIGHT = 180;
   // Vertical offset for the meeting overlay's initial position, expressed as
   // a fraction of the screen's work-area height. 0.035 places the top edge
   // ~37 px below the work-area top on a 1055-tall display — comfortably
   // below the menu bar with visible breathing room.
   private static readonly OVERLAY_DEFAULT_TOP_RATIO = 0.035;
+  // Inset when expanded to work-area fill: ~6px from each edge so the
+  // frameless window doesn't bleed past the screen's rounded corners /
+  // camera notch and the user can still grab the frame to resize back.
+  private static readonly EXPAND_INSET = 6;
 
   // Movement variables (apply to active window)
   private step: number = 20;
 
   constructor(appState: AppState) {
     this.appState = appState;
+    this.loadSavedOverlayBounds();
   }
 
   private attachWindowDiagnostics(label: string, win: BrowserWindow): void {
@@ -137,6 +278,9 @@ export class WindowHelper {
   // Dedicated method for overlay window resizing - decoupled from launcher
   public setOverlayDimensions(width: number, height: number): void {
     if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
+    // Guard: if the user has manually resized or expanded, skip programmatic
+    // size changes so the renderer's auto-resize does not fight user intent.
+    if (this._userSizing || this._overlayExpanded) return;
 
     const currentBounds = this.overlayWindow.getBounds();
     const currentContentSize = this.overlayWindow.getContentSize();
@@ -145,8 +289,8 @@ export class WindowHelper {
     const workArea = this.getDisplayWorkArea(currentBounds);
     const maxAllowedWidth = Math.floor(workArea.width * 0.9);
     const maxAllowedHeight = Math.floor(workArea.height * 0.9);
-    const newWidth = Math.min(Math.max(width, 300), maxAllowedWidth); // min 300, max 90%
-    const newHeight = Math.min(Math.max(height, 1), maxAllowedHeight); // min 1, max 90%
+    const newWidth = Math.min(Math.max(width, WindowHelper.OVERLAY_MIN_WIDTH), maxAllowedWidth);
+    const newHeight = Math.min(Math.max(height, 1), maxAllowedHeight);
     const maxX = workArea.x + workArea.width - newWidth;
     const maxY = workArea.y + workArea.height - newHeight;
     const newX = Math.min(Math.max(currentX, workArea.x), maxX);
@@ -161,6 +305,7 @@ export class WindowHelper {
       return;
     }
 
+    this._programmaticResizeCount++;
     this.overlayWindow.setBounds({ x: newX, y: newY, width: newWidth, height: newHeight });
     this.overlayBounds = this.overlayWindow.getBounds();
   }
@@ -172,6 +317,8 @@ export class WindowHelper {
   // mx-auto compensates by reducing margin equally — net visual movement = 0.
   public setOverlayDimensionsCentered(width: number, height: number): void {
     if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
+    // Guard: skip if the user has manually resized or expanded.
+    if (this._userSizing || this._overlayExpanded) return;
 
     const currentBounds = this.overlayWindow.getBounds();
     const currentContentSize = this.overlayWindow.getContentSize();
@@ -202,6 +349,7 @@ export class WindowHelper {
     // Atomic frame change: a single setBounds avoids the 1-frame split where
     // the OS window has the new size but the old origin (or vice versa), which
     // is what causes the shell to visibly slide and snap during code-expansion.
+    this._programmaticResizeCount++;
     this.overlayWindow.setBounds({ x: newX, y: newY, width: newWidth, height: newHeight });
     this.overlayBounds = this.overlayWindow.getBounds();
   }
@@ -330,12 +478,12 @@ export class WindowHelper {
     );
 
     const overlaySettings: Electron.BrowserWindowConstructorOptions = {
-      width: WindowHelper.OVERLAY_DEFAULT_WIDTH,
-      height: 1,
+      width: this.overlayBounds ? this.overlayBounds.width : WindowHelper.OVERLAY_DEFAULT_WIDTH,
+      height: this.overlayBounds ? this.overlayBounds.height : WindowHelper.OVERLAY_MIN_HEIGHT,
       x: overlayDefaultX,
       y: overlayDefaultY,
-      minWidth: 300,
-      minHeight: 1,
+      minWidth: WindowHelper.OVERLAY_MIN_WIDTH,
+      minHeight: WindowHelper.OVERLAY_MIN_RESIZE_HEIGHT,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -348,7 +496,7 @@ export class WindowHelper {
       backgroundColor: '#00000000',
       alwaysOnTop: true,
       focusable: true,
-      resizable: false, // Enforce automatic resizing only
+      resizable: true,
       movable: true,
       skipTaskbar: true, // Don't show separately in dock/taskbar
       hasShadow: false, // Prevent shadow from adding perceived size/artifacts
@@ -505,12 +653,34 @@ export class WindowHelper {
       this.overlayWindow.on('move', () => {
         if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
           this.overlayBounds = this.overlayWindow.getBounds();
+          if (this._programmaticResizeCount > 0) {
+            this._programmaticResizeCount--;
+          } else {
+            // User dragged the window — persist position but do NOT set
+            // _userSizing: move-only actions should not block programmatic
+            // auto-resize (defect #5).
+            this.persistOverlayBoundsDebounced();
+          }
         }
       });
 
       this.overlayWindow.on('resize', () => {
         if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
           this.overlayBounds = this.overlayWindow.getBounds();
+          if (this._programmaticResizeCount > 0) {
+            this._programmaticResizeCount--;
+          } else {
+            // User resized via native edges/corners — exit expanded mode,
+            // clear stale pre-expand bounds, persist, and broadcast so the
+            // UI icon changes to Expand (defect #4).
+            this._userSizing = true;
+            if (this._overlayExpanded) {
+              this._overlayExpanded = false;
+              this._preExpandBounds = null;
+              this.broadcastExpandedState();
+            }
+            this.persistOverlayBoundsDebounced();
+          }
         }
       });
 
@@ -573,7 +743,53 @@ export class WindowHelper {
   // opens at the default centered position (called on new meeting start).
   public resetOverlayPosition(): void {
     this.overlayBounds = null;
+    this._userSizing = false;
+    this._overlayExpanded = false;
+    this._preExpandBounds = null;
+    // Also persist the reset
+    try {
+      const sm = SettingsManager.getInstance();
+      sm.set('overlayBounds', null);
+      sm.set('overlayExpanded', false);
+      sm.set('preExpandBounds', null);
+    } catch (e) { /* ignore */ }
+    // Notify all renderers that expanded state changed
+    this.broadcastExpandedState();
     console.log('[WindowHelper] Overlay position reset to default for next meeting.');
+  }
+
+  /** Prepare for a new meeting: exit expanded mode if active, but preserve
+   *  user size/position so the overlay re-appears at the remembered location.
+   *  Unlike resetOverlayPosition(), this does NOT clear overlayBounds or
+   *  _userSizing — user-set dimensions survive across interviews (defect #3). */
+  public prepareForNewMeeting(): void {
+    // If currently expanded, restore to pre-expand bounds so the overlay
+    // opens at the user's last non-expanded size on the next meeting.
+    if (this._overlayExpanded) {
+      if (this._preExpandBounds) {
+        // Use pre-expand bounds as the new in-memory overlay bounds.
+        // Don't call setBounds() — the overlay may not be visible or may
+        // get repositioned by the subsequent switchToOverlay call.
+        this.overlayBounds = { ...this._preExpandBounds };
+      } else {
+        // No pre-expand bounds: capture current window bounds as the user bounds.
+        if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+          this.overlayBounds = this.overlayWindow.getBounds();
+        }
+      }
+      this._overlayExpanded = false;
+      this._preExpandBounds = null;
+      // Protect the retained/user bounds from auto-size.
+      if (this.overlayBounds) {
+        this._userSizing = true;
+      }
+      this.persistOverlayBoundsDebounced();
+      this.broadcastExpandedState();
+    } else if (this.overlayBounds) {
+      // Not expanded and has saved bounds: retain them (already protected
+      // by _userSizing from loadSavedOverlayBounds or prior resize).
+    }
+    console.log('[WindowHelper] Prepared for new meeting; overlayBounds retained:', this.overlayBounds);
   }
 
   public getLastOverlayBounds(): Electron.Rectangle | null {
@@ -587,6 +803,98 @@ export class WindowHelper {
     const bounds = this.overlayWindow.getBounds();
     return screen.getDisplayMatching(bounds).id;
   }
+
+  // ─── Expand / Restore ────────────────────────────────────────────────────
+
+  public isOverlayExpanded(): boolean {
+    return this._overlayExpanded;
+  }
+
+  /** Clear user-sizing guard so programmatic resizes take effect again.
+   *  Called by expand/restore and on new meeting. */
+  public clearUserSizing(): void {
+    this._userSizing = false;
+  }
+
+  /** Toggle between expanded (work-area fill) and restored (last user bounds).
+   *  Does NOT create a native macOS fullscreen Space. Broadcasts state to all
+   *  renderers so the UI icon can update. */
+  public toggleOverlayExpand(): void {
+    if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
+
+    if (this._overlayExpanded) {
+      this.restoreFromExpanded();
+    } else {
+      this.expandToWorkArea();
+    }
+  }
+
+  private expandToWorkArea(): void {
+    if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
+
+    // Save current bounds so restore works correctly.
+    this._preExpandBounds = this.overlayWindow.getBounds();
+    const wa = this.getDisplayWorkArea(this._preExpandBounds);
+    const inset = WindowHelper.EXPAND_INSET;
+
+    const targetBounds: Electron.Rectangle = {
+      x: wa.x + inset,
+      y: wa.y + inset,
+      width: wa.width - inset * 2,
+      height: wa.height - inset * 2,
+    };
+
+    // Clamp against work area
+    const clamped = this.clampBoundsToWorkArea(targetBounds, wa);
+
+    this._programmaticResizeCount++;
+    this._userSizing = false;
+    this.overlayWindow.setBounds(clamped);
+    this.overlayBounds = this.overlayWindow.getBounds();
+    this._overlayExpanded = true;
+    this.persistOverlayBoundsDebounced();
+    this.broadcastExpandedState();
+    console.log('[WindowHelper] Expanded overlay to work area:', this.overlayBounds);
+  }
+
+  private restoreFromExpanded(): void {
+    if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
+
+    if (!this._preExpandBounds) {
+      // No pre-expand bounds — just exit expanded mode without resetting
+      // user position (the current window bounds become the user bounds).
+      this._overlayExpanded = false;
+      this.overlayBounds = this.overlayWindow.getBounds();
+      this._userSizing = true;  // protect current bounds from auto-size
+      this.persistOverlayBoundsDebounced();
+      this.broadcastExpandedState();
+      console.log('[WindowHelper] Restored from expanded (no pre-expand saved):', this.overlayBounds);
+      return;
+    }
+
+    const wa = this.getDisplayWorkArea(this._preExpandBounds);
+    const clamped = this.clampBoundsToWorkArea(this._preExpandBounds, wa);
+
+    // Restoring pre-expand user bounds: protect them from auto-size.
+    this._programmaticResizeCount++;
+    this._userSizing = true;  // defect #2 — restored bounds are user's size
+    this.overlayWindow.setBounds(clamped);
+    this.overlayBounds = this.overlayWindow.getBounds();
+    this._overlayExpanded = false;
+    this._preExpandBounds = null;
+    this.persistOverlayBoundsDebounced();
+    this.broadcastExpandedState();
+    console.log('[WindowHelper] Restored overlay to pre-expand bounds:', this.overlayBounds);
+  }
+
+  private broadcastExpandedState(): void {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send('overlay-expanded-changed', this._overlayExpanded);
+      }
+    });
+  }
+  // ──────────────────────────────────────────────────────────────────────────
 
   public isVisible(): boolean {
     return this.isWindowVisible;
@@ -763,34 +1071,70 @@ export class WindowHelper {
             height: Math.max(this.overlayBounds.height, WindowHelper.OVERLAY_MIN_HEIGHT),
           }
         : null;
-      const workArea = this.getDisplayWorkArea(savedBounds ?? currentBounds);
+      const workArea = this.getDisplayWorkArea(
+        this._overlayExpanded && this._preExpandBounds
+          ? this._preExpandBounds
+          : (savedBounds ?? currentBounds),
+      );
       const maxAllowedWidth = Math.floor(workArea.width * 0.9);
       const maxAllowedHeight = Math.floor(workArea.height * 0.9);
-      const targetBounds = savedBounds
-        ? {
-            x: Math.min(
-              Math.max(savedBounds.x, workArea.x),
-              workArea.x + workArea.width - Math.min(savedBounds.width, maxAllowedWidth),
-            ),
-            y: Math.min(
-              Math.max(savedBounds.y, workArea.y),
-              workArea.y + workArea.height - Math.min(savedBounds.height, maxAllowedHeight),
-            ),
-            width: Math.min(savedBounds.width, maxAllowedWidth),
-            height: Math.min(savedBounds.height, maxAllowedHeight),
-          }
-        : {
-            x: Math.floor(workArea.x + (workArea.width - WindowHelper.OVERLAY_DEFAULT_WIDTH) / 2),
-            y: Math.floor(workArea.y + workArea.height * WindowHelper.OVERLAY_DEFAULT_TOP_RATIO),
-            width: WindowHelper.OVERLAY_DEFAULT_WIDTH,
-            height: Math.max(
-              Math.min(currentBounds.height, maxAllowedHeight),
-              WindowHelper.OVERLAY_MIN_HEIGHT,
-            ),
-          };
 
+      // If we were expanded when hidden, re-apply expanded bounds.
+      let targetBounds: Electron.Rectangle;
+      if (this._overlayExpanded) {
+        const inset = WindowHelper.EXPAND_INSET;
+        targetBounds = this.clampBoundsToWorkArea(
+          {
+            x: workArea.x + inset,
+            y: workArea.y + inset,
+            width: workArea.width - inset * 2,
+            height: workArea.height - inset * 2,
+          },
+          workArea,
+        );
+      } else if (savedBounds) {
+        targetBounds = {
+          x: Math.min(
+            Math.max(savedBounds.x, workArea.x),
+            workArea.x + workArea.width - Math.min(savedBounds.width, maxAllowedWidth),
+          ),
+          y: Math.min(
+            Math.max(savedBounds.y, workArea.y),
+            workArea.y + workArea.height - Math.min(savedBounds.height, maxAllowedHeight),
+          ),
+          width: Math.min(savedBounds.width, maxAllowedWidth),
+          height: Math.min(savedBounds.height, maxAllowedHeight),
+        };
+      } else {
+        targetBounds = {
+          x: Math.floor(workArea.x + (workArea.width - WindowHelper.OVERLAY_DEFAULT_WIDTH) / 2),
+          y: Math.floor(workArea.y + workArea.height * WindowHelper.OVERLAY_DEFAULT_TOP_RATIO),
+          width: WindowHelper.OVERLAY_DEFAULT_WIDTH,
+          height: Math.max(
+            Math.min(currentBounds.height, maxAllowedHeight),
+            WindowHelper.OVERLAY_MIN_HEIGHT,
+          ),
+        };
+      }
+
+      this._programmaticResizeCount++;
+      if (this._overlayExpanded) {
+        // Expanded mode: keep _userSizing false so auto-resize can work
+        // when collapsing. The expanded guard (_overlayExpanded) already
+        // prevents auto-resize from fighting expanded bounds.
+        this._userSizing = false;
+      } else if (savedBounds) {
+        // Restored saved user bounds: protect them from auto-size.
+        this._userSizing = true;  // defect #2
+      } else {
+        // Default centered position — no user sizing to protect.
+        this._userSizing = false;
+      }
       this.overlayWindow.setBounds(targetBounds);
       this.overlayBounds = this.overlayWindow.getBounds();
+      if (this._overlayExpanded) {
+        this.broadcastExpandedState();
+      }
       this.overlayWindow.webContents.send('ensure-expanded');
 
       // Restore opacity before showing (it may have been zeroed by hideMainWindow).

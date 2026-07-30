@@ -936,6 +936,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     return appState.getWindowHelper().isMainWindowMaximized();
   });
 
+  // Overlay expand/restore — fills work area without native fullscreen Space.
+  safeHandle('toggle-overlay-expand', async () => {
+    appState.getWindowHelper().toggleOverlayExpand();
+  });
+
+  safeHandle('get-overlay-expanded', async () => {
+    return appState.getWindowHelper().isOverlayExpanded();
+  });
+
   // Settings Window
   safeHandle('toggle-settings-window', (event, { x, y } = {}) => {
     appState.settingsWindowHelper.toggleWindow(x, y);

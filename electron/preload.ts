@@ -497,6 +497,9 @@ interface ElectronAPI {
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void;
   onEnsureExpanded: (callback: () => void) => () => void;
   onToggleExpand: (callback: () => void) => () => void;
+  toggleOverlayExpand: () => Promise<void>;
+  getOverlayExpanded: () => Promise<boolean>;
+  onOverlayExpandedChanged: (callback: (expanded: boolean) => void) => () => void;
   toggleAdvancedSettings: () => Promise<void>;
   openSettingsTab: (tab: string) => Promise<void>;
   onOpenSettingsTab: (callback: (tab: string) => void) => () => void;
@@ -1026,6 +1029,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   toggleAdvancedSettings: () => ipcRenderer.invoke('toggle-advanced-settings'),
+  toggleOverlayExpand: () => ipcRenderer.invoke('toggle-overlay-expand'),
+  getOverlayExpanded: () => ipcRenderer.invoke('get-overlay-expanded'),
+  onOverlayExpandedChanged: (callback: (expanded: boolean) => void) => {
+    const subscription = (_: any, expanded: boolean) => callback(expanded);
+    ipcRenderer.on('overlay-expanded-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('overlay-expanded-changed', subscription);
+    };
+  },
   openSettingsTab: (tab: string) => ipcRenderer.invoke('settings:open-tab', tab),
   onOpenSettingsTab: (callback: (tab: string) => void) => {
     const subscription = (_: any, tab: string) => callback(tab);
