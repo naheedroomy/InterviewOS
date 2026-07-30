@@ -3157,6 +3157,80 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // ─── V2 workspace APIs ────────────────────────────────────────────────────
+
+  safeHandle('interview-workspace:resolve-draft', async (_, options?: { preferredId?: string; forceNew?: boolean }) => {
+    try {
+      const { workspace, created } = InterviewWorkspaceStateManager.getInstance().resolveDraft(options);
+      return { success: true, workspace, created };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:resolve-draft error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not resolve draft workspace.' };
+    }
+  });
+
+  safeHandle('interview-workspace:update-prep', async (_, payload: { id: string; messages?: any[]; contextMarkdown?: string; selectedDocumentIds?: string[] }) => {
+    try {
+      const workspace = InterviewWorkspaceStateManager.getInstance().updatePrepContext(
+        payload.id, payload.contextMarkdown, payload.selectedDocumentIds, payload.messages,
+      );
+      return { success: !!workspace, workspace };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:update-prep error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not update prep context.' };
+    }
+  });
+
+  safeHandle('interview-workspace:begin-run', async (_, id: string) => {
+    try {
+      const workspace = InterviewWorkspaceStateManager.getInstance().beginRun(id);
+      return { success: !!workspace, workspace };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:begin-run error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not begin workspace run.' };
+    }
+  });
+
+  safeHandle('interview-workspace:finish-run', async (_, payload: { id: string; meetingId: string }) => {
+    try {
+      const workspace = InterviewWorkspaceStateManager.getInstance().finishRun(payload.id, payload.meetingId);
+      return { success: true, workspace };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:finish-run error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not finish workspace run.' };
+    }
+  });
+
+  safeHandle('interview-workspace:cancel-run', async (_, id: string) => {
+    try {
+      const workspace = InterviewWorkspaceStateManager.getInstance().cancelRun(id);
+      return { success: !!workspace, workspace };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:cancel-run error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not cancel workspace run.' };
+    }
+  });
+
+  safeHandle('interview-workspace:list', async () => {
+    try {
+      const workspaces = InterviewWorkspaceStateManager.getInstance().listWorkspaces();
+      return { success: true, workspaces };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:list error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not list workspaces.' };
+    }
+  });
+
+  safeHandle('interview-workspace:delete', async (_, id: string) => {
+    try {
+      const deleted = InterviewWorkspaceStateManager.getInstance().deleteWorkspace(id);
+      return { success: deleted };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:delete error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not delete workspace.' };
+    }
+  });
+
   safeHandle('start-meeting', async (event, metadata?: any) => {
     try {
       await appState.startMeeting(metadata);

@@ -107,10 +107,24 @@ export class MeetingPersistence {
         // 0. Force-save any pending interim transcript
         this.session.flushInterimTranscript();
 
+        // 0a. Capture workspace state ID early so failure paths can cancel active runs.
+        //     session.getMeetingMetadata() survives session.reset() — it is not cleared
+        //     by reset() — but readers are more maintainable when placed early.
+        const _earlyMeta = this.session.getMeetingMetadata();
+        const _earlyWorkspaceStateId = _earlyMeta?.interviewContext?.workspaceStateId;
+
         // 1. Snapshot valid data BEFORE resetting
         const durationMs = Date.now() - this.session.getSessionStartTime();
         if (durationMs < 1000) {
             console.log("Meeting too short, ignoring.");
+            // Cancel active workspace run so it can be reused
+            if (_earlyWorkspaceStateId) {
+                try {
+                    InterviewWorkspaceStateManager.getInstance().cancelRun(_earlyWorkspaceStateId);
+                } catch (e) {
+                    console.warn('[MeetingPersistence] Failed to cancel workspace run on short meeting:', e);
+                }
+            }
             this.session.reset();
             return null;
         }
@@ -133,6 +147,14 @@ export class MeetingPersistence {
         }
         if (doNotPersist) {
             console.log('[MeetingPersistence] doNotPersist set — skipping save (no DB row, no summary).');
+            // Cancel active workspace run so it can be reused
+            if (_earlyWorkspaceStateId) {
+                try {
+                    InterviewWorkspaceStateManager.getInstance().cancelRun(_earlyWorkspaceStateId);
+                } catch (e) {
+                    console.warn('[MeetingPersistence] Failed to cancel workspace run on doNotPersist:', e);
+                }
+            }
             try {
                 const { telemetryService } = require('./services/telemetry/TelemetryService');
                 telemetryService.track({
@@ -184,12 +206,11 @@ export class MeetingPersistence {
         const workspaceStateId = metadataSnapshot?.interviewContext?.workspaceStateId;
         if (workspaceStateId) {
             try {
-                InterviewWorkspaceStateManager.getInstance().attachMeeting(workspaceStateId, meetingId, {
-                    contextMarkdown: metadataSnapshot?.interviewContext?.contextMarkdown,
-                    selectedDocumentIds: metadataSnapshot?.interviewContext?.selectedDocumentIds,
-                });
+                // V2: finishRun appends the meeting to the workspace and reverts to draft.
+                // The meeting (not the workspace) remains the authority for transcript/summary/RAG.
+                InterviewWorkspaceStateManager.getInstance().finishRun(workspaceStateId, meetingId);
             } catch (workspaceErr: any) {
-                console.warn('[MeetingPersistence] Failed to attach workspace state to meeting:', workspaceErr?.message);
+                console.warn('[MeetingPersistence] Failed to finish workspace run:', workspaceErr?.message);
             }
         }
 

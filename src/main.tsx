@@ -14,13 +14,19 @@ document.documentElement.setAttribute(
 
 // Step 1: Apply cached theme synchronously — before React renders.
 // This ensures useResolvedTheme()'s initial useState read sees the correct value.
-const cachedTheme = localStorage.getItem(THEME_CACHE_KEY) as 'light' | 'dark' | null;
+// Guard localStorage access against Chromium LevelDB corruption (ghostery/brave bug).
+let cachedTheme: 'light' | 'dark' | null = null;
+try {
+  cachedTheme = localStorage.getItem(THEME_CACHE_KEY) as 'light' | 'dark' | null;
+} catch {
+  // localStorage unavailable/corrupt — fall back to system preference
+}
 const systemTheme = window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 const urlTheme = new URLSearchParams(window.location.search).get('theme');
 const previewTheme = urlTheme === 'light' || urlTheme === 'dark' ? urlTheme : null;
 document.documentElement.setAttribute('data-theme', previewTheme ?? cachedTheme ?? systemTheme);
 if (previewTheme) {
-  localStorage.setItem(THEME_CACHE_KEY, previewTheme);
+  try { localStorage.setItem(THEME_CACHE_KEY, previewTheme); } catch { /* non-critical */ }
 }
 
 // Step 2: Confirm/correct from main process (authoritative) and keep cache in sync.
@@ -29,12 +35,12 @@ if (previewTheme) {
 if (window.electronAPI?.getThemeMode && !previewTheme) {
   window.electronAPI.getThemeMode().then(({ resolved }) => {
     document.documentElement.setAttribute('data-theme', resolved);
-    localStorage.setItem(THEME_CACHE_KEY, resolved);
+    try { localStorage.setItem(THEME_CACHE_KEY, resolved); } catch { /* non-critical */ }
   });
 
   window.electronAPI?.onThemeChanged?.(({ resolved }) => {
     document.documentElement.setAttribute('data-theme', resolved);
-    localStorage.setItem(THEME_CACHE_KEY, resolved);
+    try { localStorage.setItem(THEME_CACHE_KEY, resolved); } catch { /* non-critical */ }
   });
 }
 

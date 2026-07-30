@@ -688,6 +688,35 @@ const docToPrepAttachment = (doc: InterviewContextDocument): PrepMessageAttachme
     sizeBytes: doc.sizeBytes,
 });
 
+// ─── Workspace pointer localStorage helpers (fault-tolerant, bounded, validated) ───
+
+const WORKSPACE_POINTER_KEY = 'answercue_current_interview_workspace_id';
+const MAX_WORKSPACE_ID_LENGTH = 256;
+
+function safeReadWorkspacePointer(): string | null {
+    try {
+        const raw = localStorage.getItem(WORKSPACE_POINTER_KEY);
+        if (typeof raw === 'string' && raw.trim().length > 0 && raw.length <= MAX_WORKSPACE_ID_LENGTH) {
+            return raw.trim();
+        }
+    } catch { /* localStorage unavailable */ }
+    return null;
+}
+
+function safeWriteWorkspacePointer(id: string): boolean {
+    try {
+        if (typeof id === 'string' && id.trim().length > 0 && id.length <= MAX_WORKSPACE_ID_LENGTH) {
+            localStorage.setItem(WORKSPACE_POINTER_KEY, id.trim());
+            return true;
+        }
+    } catch { /* localStorage unavailable */ }
+    return false;
+}
+
+function safeClearWorkspacePointer(): void {
+    try { localStorage.removeItem(WORKSPACE_POINTER_KEY); } catch { /* ignore */ }
+}
+
 const INTERVIEW_WORKSPACE_BEFORE_PROMPT = `You are the user's pre-interview context builder.
 
 Primary goal: collect, clarify, and structure the information the live interview assistant should remember when the interview starts.
@@ -1082,6 +1111,7 @@ interface InterviewPrepPanelProps {
     onDraftChange: (value: string) => void;
     onSubmit: () => void;
     onStartInterview: () => void;
+    onPrepareNextRun: () => void;
     onUploadDoc: () => void;
     onToggleDoc: (id: string) => void;
     onDeleteDoc: (id: string) => void;
@@ -1105,6 +1135,7 @@ const InterviewPrepPanel: React.FC<InterviewPrepPanelProps> = ({
     onDraftChange,
     onSubmit,
     onStartInterview,
+    onPrepareNextRun,
     onUploadDoc,
     onToggleDoc,
     onDeleteDoc,
@@ -1326,7 +1357,17 @@ const InterviewPrepPanel: React.FC<InterviewPrepPanelProps> = ({
                     <h2 className="text-[14px] font-semibold text-text-primary">{panelTitle}</h2>
                     <p className="text-[11px] text-text-tertiary truncate">{panelSubtitle}</p>
                 </div>
-                {!meeting && (
+                {meeting ? (
+                    !isMeetingFinalizing(meeting) && (
+                        <button
+                            onClick={onPrepareNextRun}
+                            className="h-9 px-4 rounded-md inline-flex items-center gap-2 text-[13px] font-semibold text-white bg-accent-primary hover:opacity-90 transition-colors"
+                        >
+                            <img src={icon} alt="" className="w-4 h-4 object-contain brightness-0 invert" />
+                            Prepare next run
+                        </button>
+                    )
+                ) : (
                     <button
                         onClick={onStartInterview}
                         className={`h-9 px-4 rounded-md inline-flex items-center gap-2 text-[13px] font-semibold text-white transition-colors ${isMeetingActive ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-accent-primary hover:opacity-90'}`}
@@ -1976,6 +2017,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
 
     const pendingOpenLatestInterviewRef = useRef(false);
     const selectedMeetingRef = useRef<Meeting | null>(null);
+    const workspaceGenerationRef = useRef(0);
     const {
         appendToken: appendWorkspaceToken,
         getBufferedContent: getWorkspaceBufferedContent,
@@ -2013,30 +2055,84 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         setWorkspaceContextDocIds([]);
     }, [resetWorkspaceStreamBuffer]);
 
-    const hydrateDraftWorkspace = useCallback(async () => {
-        const draftId = localStorage.getItem('answercue_current_interview_workspace_id') || genMessageId();
-        localStorage.setItem('answercue_current_interview_workspace_id', draftId);
-        setWorkspaceStateId(draftId);
+    const hydrateDraftWorkspace = useCallback(async (opts?: { forceNew?: boolean }) => {
+        const generation = ++workspaceGenerationRef.current;
         setWorkspaceConversationState('idle');
         setWorkspaceErrorMessage(null);
         resetWorkspaceStreamBuffer();
 
-        try {
-            const state = await window.electronAPI?.interviewWorkspaceGetById?.(draftId) as InterviewWorkspaceState | null | undefined;
-            if (state && !state.meetingId && state.status !== 'complete') {
-                const docIds = Array.isArray(state.selectedDocumentIds) ? state.selectedDocumentIds : [];
-                setPrepMessages((Array.isArray(state.messages) ? state.messages : []).map(message => ({
-                    ...message,
-                    isStreaming: false,
-                })));
-                setSelectedDocIds(docIds);
-                setWorkspaceContextDocIds(docIds);
+        const applyWorkspaceState = (state: any) => {
+            if (!state?.id) return;
+            setWorkspaceStateId(state.id);
+            const messages = (Array.isArray(state.messages) ? state.messages : []).map((message: any) => ({
+                ...message,
+                isStreaming: false,
+            }));
+            const docIds = Array.isArray(state.selectedDocumentIds) ? state.selectedDocumentIds : [];
+            setPrepMessages(messages);
+            setSelectedDocIds(docIds);
+            setWorkspaceContextDocIds(docIds);
+        };
+
+        // 1) Try V2 resolveDraft API first
+        if (window.electronAPI?.interviewWorkspaceResolveDraft) {
+            try {
+                const preferredId = safeReadWorkspacePointer() || undefined;
+                const result = await window.electronAPI.interviewWorkspaceResolveDraft({
+                    preferredId,
+                    forceNew: opts?.forceNew ?? false,
+                });
+                if (generation !== workspaceGenerationRef.current) return;
+                if (result?.success && result?.workspace) {
+                    const workspace = result.workspace;
+                    // Always hydrate from resolveDraft — it is the canonical current workspace.
+                    // Historical runs (meetingId / meetingIds) do not disqualify reuse.
+                    safeWriteWorkspacePointer(workspace.id);
+                    applyWorkspaceState(workspace);
+                    return;
+                }
+                if (result?.success && (result.created || opts?.forceNew)) {
+                    // Force-new created a blank workspace — store the pointer.
+                    if (result.workspace) {
+                        safeWriteWorkspacePointer(result.workspace.id);
+                        setWorkspaceStateId(result.workspace.id);
+                    }
+                    setPrepMessages([]);
+                    setSelectedDocIds([]);
+                    setWorkspaceContextDocIds([]);
+                    return;
+                }
+                // V2 failed — do NOT fall through to write-before-durable local-id generation.
+                // The pointer stays unchanged; the backend owns workspace creation.
+                console.error('[Launcher] resolveDraft returned unsuccessful:', result?.error);
                 return;
+            } catch (error) {
+                console.error('[Launcher] resolveDraft failed, falling back to old API:', error);
             }
-        } catch (error) {
-            console.error('[Launcher] Failed to load draft interview workspace:', error);
         }
 
+        // 2) Fallback to old API ONLY when V2 is absent
+        const savedId = safeReadWorkspacePointer();
+        // Never generate a new pointer before durable persistence; re-use or leave untouched.
+        if (savedId) {
+            setWorkspaceStateId(savedId);
+            try {
+                const state = await window.electronAPI?.interviewWorkspaceGetById?.(savedId) as InterviewWorkspaceState | null | undefined;
+                if (generation !== workspaceGenerationRef.current) return;
+                if (state) {
+                    applyWorkspaceState(state);
+                    return;
+                }
+            } catch (error) {
+                console.error('[Launcher] Failed to load draft interview workspace via old API:', error);
+            }
+        }
+        // No pointer and no V2 — truly fresh start with a generated id (old API only).
+        if (!savedId) {
+            const fallbackId = genMessageId();
+            setWorkspaceStateId(fallbackId);
+            safeWriteWorkspacePointer(fallbackId);
+        }
         setPrepMessages([]);
         setSelectedDocIds([]);
         setWorkspaceContextDocIds([]);
@@ -2141,21 +2237,45 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         status?: InterviewWorkspaceState['status'];
     } = {}) => {
         const id = overrides.id || workspaceStateId;
-        if (!id || !window.electronAPI?.interviewWorkspaceSave) return null;
+        if (!id) return null;
 
         const messages = overrides.messages ?? prepMessages;
         const selectedDocumentIds = getWorkspaceDocumentIds(
             messages,
             overrides.selectedDocumentIds ?? selectedDocIds,
         );
-        const meetingId = overrides.meetingId ?? selectedMeeting?.id;
-        const status = overrides.status ?? (meetingId ? 'complete' : isMeetingActive ? 'active' : 'draft');
         const documentsForContext = interviewDocs.filter(doc => selectedDocumentIds.includes(doc.id));
         const contextMarkdown = buildInterviewContextMarkdown(messages, documentsForContext);
         const persistedMessages = messages.map(message => ({
             ...message,
             isStreaming: false,
         }));
+
+        // 1) Try V2 updatePrep for draft/prep-only persistence (no meeting linkage)
+        const explicitMeetingId = overrides.meetingId;
+        if (
+            !explicitMeetingId &&
+            window.electronAPI?.interviewWorkspaceUpdatePrep
+        ) {
+            try {
+                const result = await window.electronAPI.interviewWorkspaceUpdatePrep({
+                    id,
+                    messages: persistedMessages,
+                    contextMarkdown,
+                    selectedDocumentIds,
+                });
+                if (result?.success) return result;
+            } catch (error) {
+                console.error('[Launcher] updatePrep failed, falling back to save:', error);
+            }
+        }
+
+        // 2) Fallback to save (full state persistence, with optional meeting linkage)
+        if (!window.electronAPI?.interviewWorkspaceSave) return null;
+
+        // Only set meetingId/status when explicitly provided, not from selectedMeeting
+        const meetingId = explicitMeetingId;
+        const status = overrides.status ?? (meetingId ? 'complete' : isMeetingActive ? 'active' : 'draft');
 
         const result = await window.electronAPI.interviewWorkspaceSave({
             id,
@@ -2176,30 +2296,72 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         isMeetingActive,
         prepMessages,
         selectedDocIds,
-        selectedMeeting?.id,
         workspaceStateId,
     ]);
 
     useEffect(() => {
-        const savedDraftId = localStorage.getItem('answercue_current_interview_workspace_id');
+        const savedDraftId = safeReadWorkspacePointer();
         if (!savedDraftId) {
-            localStorage.setItem('answercue_current_interview_workspace_id', workspaceStateId);
+            // No saved pointer — resolve a fresh draft workspace
+            hydrateDraftWorkspace({ forceNew: false }).catch(error =>
+                console.error('[Launcher] Startup workspace hydration failed:', error),
+            );
             return;
         }
 
-        setWorkspaceStateId(savedDraftId);
-        window.electronAPI?.interviewWorkspaceGetById?.(savedDraftId)
-            .then((state: InterviewWorkspaceState | null) => {
-                if (!state || state.meetingId || state.status === 'complete') return;
-                setPrepMessages((Array.isArray(state.messages) ? state.messages : []).map(message => ({
-                    ...message,
-                    isStreaming: false,
-                })));
-                const docIds = Array.isArray(state.selectedDocumentIds) ? state.selectedDocumentIds : [];
-                setSelectedDocIds(docIds);
-                setWorkspaceContextDocIds(docIds);
-            })
-            .catch(error => console.error('[Launcher] Failed to restore draft interview workspace:', error));
+        const generation = ++workspaceGenerationRef.current;
+
+        // Try V2 resolveDraft first
+        const resolveWithV2 = window.electronAPI?.interviewWorkspaceResolveDraft
+            ? window.electronAPI.interviewWorkspaceResolveDraft({ preferredId: savedDraftId, forceNew: false })
+            : null;
+
+        const load = async () => {
+            if (resolveWithV2) {
+                try {
+                    const result = await resolveWithV2;
+                    if (generation !== workspaceGenerationRef.current) return;
+                    if (result?.success && result?.workspace) {
+                        const workspace = result.workspace;
+                        safeWriteWorkspacePointer(workspace.id);
+                        setWorkspaceStateId(workspace.id);
+                        const messages = (Array.isArray(workspace.messages) ? workspace.messages : []).map((message: any) => ({
+                            ...message,
+                            isStreaming: false,
+                        }));
+                        const docIds = Array.isArray(workspace.selectedDocumentIds) ? workspace.selectedDocumentIds : [];
+                        setPrepMessages(messages);
+                        setSelectedDocIds(docIds);
+                        setWorkspaceContextDocIds(docIds);
+                        return;
+                    }
+                    // V2 failed — do not write a stale pointer; keep the existing one and
+                    // attempt old-API hydration below.
+                } catch (error) {
+                    console.error('[Launcher] V2 startup hydration failed:', error);
+                }
+            }
+
+            // Fallback to old API
+            setWorkspaceStateId(savedDraftId);
+            try {
+                const state = await window.electronAPI?.interviewWorkspaceGetById?.(savedDraftId) as InterviewWorkspaceState | null | undefined;
+                if (generation !== workspaceGenerationRef.current) return;
+                if (state) {
+                    setPrepMessages((Array.isArray(state.messages) ? state.messages : []).map((message: any) => ({
+                        ...message,
+                        isStreaming: false,
+                    })));
+                    const docIds = Array.isArray(state.selectedDocumentIds) ? state.selectedDocumentIds : [];
+                    setSelectedDocIds(docIds);
+                    setWorkspaceContextDocIds(docIds);
+                }
+            } catch (error) {
+                console.error('[Launcher] Failed to restore draft interview workspace:', error);
+            }
+        };
+
+        load().catch(error => console.error('[Launcher] Startup workspace load failed:', error));
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -2882,6 +3044,17 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         }
     };
 
+    const handlePrepareNextRun = () => {
+        // Return to preparation for the SAME workspace:
+        // retain prep messages/docs, clear selected meeting and run-local UI.
+        selectMeeting(null);
+        setForwardMeeting(null);
+        setLiveTranscript([]);
+        setWorkspaceConversationState('idle');
+        setWorkspaceErrorMessage(null);
+        resetWorkspaceStreamBuffer();
+    };
+
     const selectedDocs = interviewDocs.filter(doc => selectedDocIds.includes(doc.id));
     const attachedDocIds = new Set(
         prepMessages.flatMap(message => message.attachments?.map(doc => doc.id) || []),
@@ -2894,10 +3067,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     const docDetailsTarget = interviewDocs.find(doc => doc.id === docDetailsTargetId) || null;
     const prepContextMarkdown = buildInterviewContextMarkdown(prepMessages, contextDocs);
 
-    const handleNewInterview = () => {
-        const nextWorkspaceId = genMessageId();
-        localStorage.setItem('answercue_current_interview_workspace_id', nextWorkspaceId);
-        setWorkspaceStateId(nextWorkspaceId);
+    const handleNewInterview = async () => {
+        const generation = ++workspaceGenerationRef.current;
         selectMeeting(null);
         setForwardMeeting(null);
         setActiveMenuId(null);
@@ -2910,8 +3081,37 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         setLiveTranscript([]);
         pendingOpenLatestInterviewRef.current = false;
         resetWorkspaceStreamBuffer();
+
+        // Await durable creation via V2 resolveDraft forceNew, or fallback
+        if (window.electronAPI?.interviewWorkspaceResolveDraft) {
+            try {
+                const result = await window.electronAPI.interviewWorkspaceResolveDraft({
+                    forceNew: true,
+                });
+                if (generation !== workspaceGenerationRef.current) return;
+                if (result?.success && result?.workspace) {
+                    safeWriteWorkspacePointer(result.workspace.id);
+                    setWorkspaceStateId(result.workspace.id);
+                    analytics.trackCommandExecuted('new_interview_ready_from_sidebar');
+                    return;
+                }
+                // V2 failed — do NOT write a generated pointer; keep existing.
+                // The backend owns workspace creation; retry on next action.
+                console.error('[Launcher] forceNew resolveDraft failed:', result?.error);
+                analytics.trackCommandExecuted('new_interview_ready_from_sidebar');
+                return;
+            } catch (error) {
+                console.error('[Launcher] resolveDraft forceNew error:', error);
+                // Fall through to legacy path only because V2 threw (unexpected)
+            }
+        }
+
+        // Legacy fallback — only reached when V2 is absent or threw unexpectedly
+        const fallbackId = genMessageId();
+        safeWriteWorkspacePointer(fallbackId);
+        setWorkspaceStateId(fallbackId);
         window.electronAPI?.interviewWorkspaceSave?.({
-            id: nextWorkspaceId,
+            id: fallbackId,
             status: 'draft',
             messages: [],
             selectedDocumentIds: [],
@@ -3393,11 +3593,33 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             ...workspaceContextDocIds,
             ...prepMessages.flatMap(message => message.attachments?.map(doc => doc.id) || []),
         ]));
-        await persistWorkspaceState({
-            messages: prepMessages,
-            selectedDocumentIds: interviewDocumentIds,
-            status: 'active',
-        });
+
+        // 1) Persist prep state and mark run active via V2 beginRun, or fallback
+        if (window.electronAPI?.interviewWorkspaceBeginRun) {
+            try {
+                await window.electronAPI.interviewWorkspaceUpdatePrep({
+                    id: workspaceStateId,
+                    messages: prepMessages.map(message => ({ ...message, isStreaming: false })),
+                    contextMarkdown: prepContextMarkdown,
+                    selectedDocumentIds: interviewDocumentIds,
+                });
+                await window.electronAPI.interviewWorkspaceBeginRun(workspaceStateId);
+            } catch (error) {
+                console.error('[Launcher] beginRun failed, falling back to save:', error);
+                await persistWorkspaceState({
+                    messages: prepMessages,
+                    selectedDocumentIds: interviewDocumentIds,
+                    status: 'active',
+                });
+            }
+        } else {
+            await persistWorkspaceState({
+                messages: prepMessages,
+                selectedDocumentIds: interviewDocumentIds,
+                status: 'active',
+            });
+        }
+
         onStartMeeting({
             source: 'manual',
             interviewContext: {
@@ -4386,6 +4608,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                     onDraftChange={setPrepDraft}
                                                     onSubmit={submitPrepMessage}
                                                     onStartInterview={startPreparedInterview}
+                                                    onPrepareNextRun={handlePrepareNextRun}
                                                     onUploadDoc={handleUploadInterviewDoc}
                                                     onToggleDoc={toggleSelectedDoc}
                                                     onDeleteDoc={handleDeleteInterviewDoc}

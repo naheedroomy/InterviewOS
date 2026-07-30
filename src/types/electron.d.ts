@@ -32,6 +32,40 @@ export interface DynamicActionPayload {
   }
 }
 
+// ─── Interview Workspace State (v2) ──────────────────────────────────────────
+// Mirrors electron/services/InterviewWorkspaceStateManager.ts types.
+// Kept as structural interfaces to preserve the main↔renderer type boundary.
+
+export interface InterviewWorkspaceAttachment {
+  id: string;
+  name: string;
+  fileType: 'md' | 'txt' | 'pdf' | 'docx';
+  contextKind?: 'resume' | 'project' | 'other';
+  sizeBytes: number;
+}
+
+export interface InterviewWorkspaceMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: number;
+  phase?: 'before' | 'during' | 'after';
+  attachments?: InterviewWorkspaceAttachment[];
+}
+
+export interface InterviewWorkspaceState {
+  id: string;
+  meetingIds: string[];
+  activeMeetingId?: string;
+  meetingId?: string;
+  status: 'draft' | 'active' | 'complete';
+  messages: InterviewWorkspaceMessage[];
+  selectedDocumentIds: string[];
+  contextMarkdown?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ElectronAPI {
   updateContentDimensions: (dimensions: {
     width: number
@@ -262,6 +296,15 @@ export interface ElectronAPI {
   interviewWorkspaceGetById: (id: string) => Promise<any | null>
   interviewWorkspaceGetByMeeting: (meetingId: string) => Promise<any | null>
   interviewWorkspaceSave: (state: any) => Promise<{ success: boolean; state?: any; error?: string }>
+
+  // V2 workspace APIs
+  interviewWorkspaceResolveDraft: (options?: { preferredId?: string; forceNew?: boolean }) => Promise<{ success: boolean; workspace?: InterviewWorkspaceState; created?: boolean; error?: string }>
+  interviewWorkspaceUpdatePrep: (payload: { id: string; messages?: InterviewWorkspaceMessage[]; contextMarkdown?: string; selectedDocumentIds?: string[] }) => Promise<{ success: boolean; workspace?: InterviewWorkspaceState; error?: string }>
+  interviewWorkspaceBeginRun: (id: string) => Promise<{ success: boolean; workspace?: InterviewWorkspaceState; error?: string }>
+  interviewWorkspaceFinishRun: (payload: { id: string; meetingId: string }) => Promise<{ success: boolean; workspace?: InterviewWorkspaceState; error?: string }>
+  interviewWorkspaceCancelRun: (id: string) => Promise<{ success: boolean; workspace?: InterviewWorkspaceState; error?: string }>
+  interviewWorkspaceList: () => Promise<{ success: boolean; workspaces?: InterviewWorkspaceState[]; error?: string }>
+  interviewWorkspaceDelete: (id: string) => Promise<{ success: boolean; error?: string }>
   startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string }>
   endMeeting: () => Promise<{ success: boolean; error?: string }>
   finalizeMicSTT: () => Promise<void>

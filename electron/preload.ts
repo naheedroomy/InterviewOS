@@ -342,6 +342,15 @@ interface ElectronAPI {
   interviewWorkspaceGetById: (id: string) => Promise<any | null>;
   interviewWorkspaceGetByMeeting: (meetingId: string) => Promise<any | null>;
   interviewWorkspaceSave: (state: any) => Promise<{ success: boolean; state?: any; error?: string }>;
+
+  // V2 workspace APIs
+  interviewWorkspaceResolveDraft: (options?: { preferredId?: string; forceNew?: boolean }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+  interviewWorkspaceUpdatePrep: (payload: { id: string; messages?: any[]; contextMarkdown?: string; selectedDocumentIds?: string[] }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+  interviewWorkspaceBeginRun: (id: string) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+  interviewWorkspaceFinishRun: (payload: { id: string; meetingId: string }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+  interviewWorkspaceCancelRun: (id: string) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+  interviewWorkspaceList: () => Promise<{ success: boolean; workspaces?: any[]; error?: string }>;
+  interviewWorkspaceDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
   startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string }>;
   endMeeting: () => Promise<{ success: boolean; error?: string }>;
   finalizeMicSTT: () => Promise<void>;
@@ -1393,6 +1402,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   interviewWorkspaceGetById: (id: string) => ipcRenderer.invoke('interview-workspace:get-by-id', id),
   interviewWorkspaceGetByMeeting: (meetingId: string) => ipcRenderer.invoke('interview-workspace:get-by-meeting', meetingId),
   interviewWorkspaceSave: (state: any) => ipcRenderer.invoke('interview-workspace:save', state),
+
+  // V2 workspace APIs
+  interviewWorkspaceResolveDraft: (options?: { preferredId?: string; forceNew?: boolean }) =>
+    ipcRenderer.invoke('interview-workspace:resolve-draft', options),
+  interviewWorkspaceUpdatePrep: (payload: { id: string; messages?: any[]; contextMarkdown?: string; selectedDocumentIds?: string[] }) =>
+    ipcRenderer.invoke('interview-workspace:update-prep', payload),
+  interviewWorkspaceBeginRun: (id: string) =>
+    ipcRenderer.invoke('interview-workspace:begin-run', id),
+  interviewWorkspaceFinishRun: (payload: { id: string; meetingId: string }) =>
+    ipcRenderer.invoke('interview-workspace:finish-run', payload),
+  interviewWorkspaceCancelRun: (id: string) =>
+    ipcRenderer.invoke('interview-workspace:cancel-run', id),
+  interviewWorkspaceList: () =>
+    ipcRenderer.invoke('interview-workspace:list'),
+  interviewWorkspaceDelete: (id: string) =>
+    ipcRenderer.invoke('interview-workspace:delete', id),
+
   startMeeting: (metadata?: any) => ipcRenderer.invoke('start-meeting', metadata),
   endMeeting: () => ipcRenderer.invoke('end-meeting'),
   finalizeMicSTT: () => ipcRenderer.invoke('finalize-mic-stt'),

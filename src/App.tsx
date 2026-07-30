@@ -104,8 +104,10 @@ const App: React.FC = () => {
 
   // Overlay opacity — only meaningful when isOverlayWindow, but stored centrally
   // so it can be initialized once from localStorage and updated via IPC.
+  // Guard against corrupt localStorage throwing during React mount.
   const [overlayOpacity, setOverlayOpacity] = useState<number>(() => {
-    const stored = localStorage.getItem('natively_overlay_opacity');
+    let stored: string | null = null;
+    try { stored = localStorage.getItem('natively_overlay_opacity'); } catch { /* localStorage unavailable */ }
     const parsed = stored ? parseFloat(stored) : NaN;
     // Treat missing value or the old default (0.65) as "not user-set"
     const isUserSet = Number.isFinite(parsed) && parsed !== OVERLAY_OPACITY_DEFAULT;
@@ -334,7 +336,8 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isOverlayWindow || !window.electronAPI?.onThemeChanged) return;
     return window.electronAPI.onThemeChanged(() => {
-      const stored = localStorage.getItem('natively_overlay_opacity');
+      let stored: string | null = null;
+      try { stored = localStorage.getItem('natively_overlay_opacity'); } catch { /* non-critical */ }
       if (!stored) {
         setOverlayOpacity(getDefaultOverlayOpacity());
       }
