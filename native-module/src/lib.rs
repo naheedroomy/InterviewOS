@@ -327,48 +327,59 @@ impl Drop for SystemAudioCapture {
 }
 
 // ============================================================================
-// MICROPHONE CAPTURE (CPAL)
+// MICROPHONE CAPTURE (CPAL) — LAZY INIT
 //
-// Design: The MicrophoneStream (CPAL handle) is recreated on every start()
-// call. This guarantees the ring buffer consumer is always fresh, allowing
-// seamless stop→start restart cycles (e.g. between meetings).
+// Design: The constructor does ZERO CPAL/CoreAudio work — it only stores the
+// device ID. All CPAL device opening, config negotiation, stream building,
+// and playback happens on a background thread spawned by start(). This
+// guarantees the Electron main thread never blocks on CoreAudio HAL, even
+// when a device reconfiguration (e.g. Bluetooth connect/disconnect) stalls
+// the HAL for tens of seconds.
+//
+// Lifecycle:
+//   constructor → stores device_id only
+//   start()     → spawns worker thread → MicrophoneStream::new → play → DSP loop
+//   stop()      → signals cancellation, detaches worker (NEVER joins)
+//   drop        → calls stop()
+//
+// Cancellation uses a generation counter: each start() increments the
+// generation; each blocking boundary in the worker checks whether its own
+// generation is still active. A delayed old-init worker from a previous
+// generation sees the mismatch and exits silently, preventing a stale init
+// from becoming active after a restart cycle.
 // ============================================================================
 
 #[napi]
 pub struct MicrophoneCapture {
-    stop_signal: Arc<AtomicBool>,
-    capture_thread: Option<thread::JoinHandle<()>>,
-    /// Shared atomic sample rate — updated once the CPAL device is opened.
-    sample_rate: Arc<AtomicU32>,
-    /// Stores the requested device ID for recreation on restart.
     device_id: Option<String>,
-    /// Holds the live CPAL stream. Recreated on each start().
-    input: Option<microphone::MicrophoneStream>,
+    stop_signal: Arc<AtomicBool>,
+    /// Monotonically increasing generation counter. Incremented on every
+    /// start() call.  The worker thread captures its generation at start
+    /// and checks it after each blocking CoreAudio boundary.  If the
+    /// generation differs the worker is stale and exits immediately.
+    generation: Arc<AtomicU32>,
+    capture_thread: Option<thread::JoinHandle<()>>,
+    /// Shared atomic sample rate — set to 48000 by default; updated by the
+    /// worker thread once the CPAL device is opened successfully.
+    sample_rate: Arc<AtomicU32>,
 }
 
 #[napi]
 impl MicrophoneCapture {
     #[napi(constructor)]
     pub fn new(device_id: Option<String>) -> napi::Result<Self> {
-        // Eagerly create the stream to detect device errors early and read the
-        // native sample rate.
-        let input = match microphone::MicrophoneStream::new(device_id.clone()) {
-            Ok(i) => i,
-            Err(e) => return Err(napi::Error::from_reason(format!("Failed: {}", e))),
-        };
-
-        let native_rate = input.sample_rate();
-        println!(
-            "[MicrophoneCapture] Initialized. Device: {:?}, Rate: {}Hz",
-            device_id, native_rate
-        );
-
+        // LAZY CONSTRUCTOR: NO CPAL / CoreAudio work.
+        // All device enumeration, stream building, and playback happens on
+        // a background thread in start().  This constructor cannot block.
+        println!("[MicrophoneCapture] Created (lazy). Device: {:?}", device_id);
         Ok(MicrophoneCapture {
-            stop_signal: Arc::new(AtomicBool::new(false)),
-            capture_thread: None,
-            sample_rate: Arc::new(AtomicU32::new(native_rate)),
             device_id,
-            input: Some(input),
+            stop_signal: Arc::new(AtomicBool::new(false)),
+            generation: Arc::new(AtomicU32::new(0)),
+            capture_thread: None,
+            // Safe default; the worker thread overwrites this once the
+            // real device rate is known.
+            sample_rate: Arc::new(AtomicU32::new(48000)),
         })
     }
 
@@ -383,81 +394,111 @@ impl MicrophoneCapture {
         callback: ThreadsafeFunction<Buffer>,
         on_speech_ended: Option<ThreadsafeFunction<bool>>,
     ) -> napi::Result<()> {
+        // Double-start guard
+        if self.capture_thread.is_some() {
+            return Err(napi::Error::from_reason("Capture already running"));
+        }
+
+        // Bump generation so the new worker has a unique generation token.
+        // Any stale worker from a prior start()/stop() cycle will see a
+        // mismatch and exit.
+        self.stop_signal.store(false, Ordering::SeqCst);
+        let my_gen = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
+
+        let stop_signal = self.stop_signal.clone();
+        let generation = self.generation.clone();
+        let sample_rate_shared = self.sample_rate.clone();
+        let device_id = self.device_id.clone();
         let tsfn = callback;
         let speech_ended_tsfn = on_speech_ended;
 
-        self.stop_signal.store(false, Ordering::SeqCst);
-        let stop_signal = self.stop_signal.clone();
-
-        // If the stream was consumed by a previous start() cycle, recreate it.
-        // This is the fix for the one-shot take_consumer() bug.
-        if self.input.is_none() {
-            println!("[MicrophoneCapture] Recreating CPAL stream for restart...");
-            match microphone::MicrophoneStream::new(self.device_id.clone()) {
-                Ok(i) => {
-                    let rate = i.sample_rate();
-                    self.sample_rate.store(rate, Ordering::Release);
-                    self.input = Some(i);
-                }
-                Err(e) => {
-                    return Err(napi::Error::from_reason(format!(
-                        "[MicrophoneCapture] Failed to recreate stream: {}",
-                        e
-                    )));
-                }
-            }
-        }
-
-        let input_ref = self
-            .input
-            .as_mut()
-            .ok_or_else(|| napi::Error::from_reason("Input missing"))?;
-
-        input_ref
-            .play()
-            .map_err(|e| napi::Error::from_reason(format!("{}", e)))?;
-
-        let native_rate = input_ref.sample_rate();
-        self.sample_rate.store(native_rate, Ordering::Release);
-
-        let mut consumer = input_ref
-            .take_consumer()
-            .ok_or_else(|| napi::Error::from_reason("Failed to get consumer"))?;
-
-        // Hand the DSP thread a clone of the err_signal so we can surface
-        // CPAL callback-thread errors (USB unplug, device reset, exclusive-
-        // mode steal) to the JS layer instead of just logging to stderr.
-        let err_signal = input_ref.err_signal();
-
-        // DSP thread with silence suppression + WebRTC VAD
         self.capture_thread = Some(thread::spawn(move || {
+            // ── Cancellation check helper ────────────────────────────────
+            // The worker checks its generation immediately after every
+            // blocking boundary (CoreAudio init, play, etc.) so a stale
+            // worker exits ASAP rather than emitting data after restart.
+            let is_current = || -> bool {
+                !stop_signal.load(Ordering::Relaxed)
+                    && generation.load(Ordering::Acquire) == my_gen
+            };
+
+            // ── 1. Create CPAL stream (MAY BLOCK on CoreAudio HAL) ─────
+            let mut input = match microphone::MicrophoneStream::new(device_id.clone()) {
+                Ok(i) => i,
+                Err(e) => {
+                    let msg = format!("[MicrophoneCapture] Init failed: {}", e);
+                    eprintln!("{}", msg);
+                    tsfn.call(
+                        Err(napi::Error::from_reason(msg)),
+                        ThreadsafeFunctionCallMode::NonBlocking,
+                    );
+                    return;
+                }
+            };
+
+            if !is_current() { return; }
+
+            let native_rate = input.sample_rate();
+            sample_rate_shared.store(native_rate, Ordering::Release);
+            println!(
+                "[MicrophoneCapture] Background init complete. Rate: {}Hz. Starting DSP.",
+                native_rate
+            );
+
+            // ── 2. Play stream (MAY BLOCK on CoreAudio HAL) ─────────────
+            if let Err(e) = input.play() {
+                let msg = format!("[MicrophoneCapture] Play failed: {}", e);
+                eprintln!("{}", msg);
+                tsfn.call(
+                    Err(napi::Error::from_reason(msg)),
+                    ThreadsafeFunctionCallMode::NonBlocking,
+                );
+                return;
+            }
+
+            if !is_current() { return; }
+
+            // ── 3. Extract ring-buffer consumer ─────────────────────────
+            let mut consumer = match input.take_consumer() {
+                Some(c) => c,
+                None => {
+                    let msg = "[MicrophoneCapture] Failed to get consumer".to_string();
+                    eprintln!("{}", msg);
+                    tsfn.call(
+                        Err(napi::Error::from_reason(msg)),
+                        ThreadsafeFunctionCallMode::NonBlocking,
+                    );
+                    return;
+                }
+            };
+
+            let err_signal = input.err_signal();
+
+            // ── 4. DSP loop with silence suppression + WebRTC VAD ───────
+            // input (MicrophoneStream) stays alive for the lifetime of this
+            // closure so the CPAL Stream and its ring-buffer producer remain
+            // active.
             let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
                 native_sample_rate: native_rate,
                 ..SilenceSuppressionConfig::for_microphone()
             });
 
-            // 20ms chunks at native rate
             let chunk_size = (native_rate as usize / 1000) * 20;
             let mut frame_buffer: Vec<i16> = Vec::with_capacity(chunk_size * 4);
             let mut raw_batch: Vec<f32> = Vec::with_capacity(4096);
-            // PERF: pre-allocated scratch — see SystemAudioCapture for rationale.
             let mut frame_scratch: Vec<i16> = Vec::with_capacity(chunk_size);
             // PERF: coalesce up to CHUNK_BATCH_COUNT frames into one tsfn call.
             let mut emitter = BatchEmitter::new(chunk_size * 2);
 
-            println!("[MicrophoneCapture] DSP thread started (VAD + suppression active, rate={}Hz, chunk={})", native_rate, chunk_size);
+            println!(
+                "[MicrophoneCapture] DSP thread started (VAD + suppression active, rate={}Hz, chunk={})",
+                native_rate, chunk_size
+            );
 
             loop {
-                if stop_signal.load(Ordering::Relaxed) {
-                    break;
-                }
+                if !is_current() { break; }
 
-                // Surface any callback-thread error to JS exactly once. After
-                // reporting, we keep looping so a subsequent device recovery
-                // (e.g. user re-plugged the USB mic) is still observed via the
-                // ringbuf — but main.ts will typically destroy + recreate this
-                // capture on receiving the error. Flush any batched audio first
-                // so partial trailing speech reaches STT before the error event.
+                // Surface any callback-thread error to JS exactly once.
                 if let Ok(mut slot) = err_signal.lock() {
                     if let Some(msg) = slot.take() {
                         let full = format!("[MicrophoneCapture] CPAL error: {}", msg);
@@ -470,12 +511,12 @@ impl MicrophoneCapture {
                     }
                 }
 
-                // 1. Drain ALL available samples from ring buffer (lock-free)
+                // Drain ALL available samples from ring buffer (lock-free)
                 while let Some(sample) = consumer.try_pop() {
                     raw_batch.push(sample);
                 }
 
-                // 2. Convert f32 -> i16 at native sample rate
+                // Convert f32 -> i16 at native sample rate
                 if !raw_batch.is_empty() {
                     for &f in &raw_batch {
                         let scaled = (f * 32767.0).clamp(-32768.0, 32767.0);
@@ -484,8 +525,10 @@ impl MicrophoneCapture {
                     raw_batch.clear();
                 }
 
-                // 3. Process in 20ms chunks through the two-stage gate
+                // Process in 20ms chunks through the two-stage gate
                 while frame_buffer.len() >= chunk_size {
+                    if !is_current() { break; }
+
                     frame_scratch.clear();
                     frame_scratch.extend(frame_buffer.drain(0..chunk_size));
 
@@ -500,9 +543,7 @@ impl MicrophoneCapture {
                             let silence = vec![0u8; chunk_size * 2];
                             emitter.push(&silence, &tsfn);
                         }
-                        FrameAction::Suppress => {
-                            // Do nothing — partial batch can age out via timeout.
-                        }
+                        FrameAction::Suppress => {}
                     }
 
                     if speech_ended {
@@ -514,13 +555,12 @@ impl MicrophoneCapture {
                 }
 
                 emitter.maybe_flush_timeout(&tsfn);
-
-                // 4. Short sleep
                 thread::sleep(Duration::from_millis(DSP_POLL_MS));
             }
 
             emitter.flush(&tsfn);
             println!("[MicrophoneCapture] DSP thread stopped.");
+            // input (MicrophoneStream) is dropped here → stream.stop() called
         }));
 
         Ok(())
@@ -529,14 +569,21 @@ impl MicrophoneCapture {
     #[napi]
     pub fn stop(&mut self) {
         self.stop_signal.store(true, Ordering::SeqCst);
+        // Bump generation: any delayed old-init worker sees mismatch and exits.
+        self.generation.fetch_add(1, Ordering::Release);
+        // Drop handle — NEVER join. The worker may be blocked in CoreAudio
+        // init (which would make join() hang the main thread indefinitely).
+        // Dropping JoinHandle detaches the thread; it exits on its own when
+        // is_current() returns false.
         if let Some(handle) = self.capture_thread.take() {
-            let _ = handle.join();
+            drop(handle); // detach
         }
-        // Pause and destroy the CPAL stream so start() recreates it fresh.
-        if let Some(ref input) = self.input {
-            let _ = input.pause();
-        }
-        self.input = None;
+    }
+}
+
+impl Drop for MicrophoneCapture {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 

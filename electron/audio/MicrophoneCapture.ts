@@ -2,8 +2,9 @@ import { EventEmitter } from 'events';
 import { loadNativeModule } from './nativeModuleLoader';
 
 // RustMicCapture is the native Rust class (napi-rs) that captures microphone input.
-// Uses eager init — the monitor is created in the constructor and kept alive across
-// stop/restart cycles to avoid re-initialization latency.
+// Uses lazy init — the constructor does ZERO CoreAudio work. All CPAL device
+// opening, stream building, and playback happens on a background thread inside
+// start(). This guarantees the main thread never blocks on CoreAudio HAL.
 const NativeModule: any = loadNativeModule();
 const { MicrophoneCapture: RustMicCapture } = NativeModule || {};
 
@@ -38,14 +39,12 @@ export class MicrophoneCapture extends EventEmitter {
         } else {
             console.log(`[MicrophoneCapture] Initialized wrapper. Device ID: ${this.deviceId || 'default'}`);
             try {
-                console.log('[MicrophoneCapture] Creating native monitor (Eager Init)...');
+                // LAZY CONSTRUCTOR: no CPAL/CoreAudio work — instant.
                 this.monitor = new RustMicCapture(this.deviceId);
             } catch (e) {
                 console.error('[MicrophoneCapture] Failed to create native monitor:', e);
                 // Re-throw so callers (e.g. reconfigureAudio) can catch and fall back to
-                // the default device. Without this, the constructor returns a broken
-                // instance (monitor=null) and the fallback try/catch in main.ts is
-                // never reached, leaving the user with zero microphone capture.
+                // the default device.
                 throw e;
             }
         }
@@ -136,13 +135,11 @@ export class MicrophoneCapture extends EventEmitter {
     /**
      * Stop capturing.
      *
-     * PERF: The native `monitor.stop()` blocks waiting for the DSP thread join
-     * AND CPAL stream drop (which itself waits for the platform audio thread —
-     * CoreAudio / WASAPI / ALSA — to release the device). On macOS that's
-     * 30–80ms; on Windows 100–300ms; on flaky USB devices, longer. We flip
+     * The native `monitor.stop()` signals cancellation to the background
+     * worker thread and returns instantly (it NEVER joins). The worker
+     * exits cleanly on its next cancellation check. We flip
      * `isRecording = false` synchronously so external observers (and our own
-     * data-callback guard) see the stopped state immediately, then defer the
-     * native teardown so the Electron IPC handler returns without waiting.
+     * data-callback guard) see the stopped state immediately.
      */
     public stop(): Promise<void> {
         // Idempotent: a concurrent stop() (e.g. endMeeting racing an audio
