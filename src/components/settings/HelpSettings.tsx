@@ -6,7 +6,7 @@ import {
     RefreshCw, Trash2, Check, ExternalLink, Volume2, Globe, Brain, Cpu, Calendar, Star, CreditCard, X, Pencil, Lightbulb,
     SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid, Smartphone, Wifi, Lock, Code
 } from 'lucide-react';
-import { SiOpenai, SiGoogle } from 'react-icons/si';
+import { SiOpenid, SiGoogle } from 'react-icons/si';
 import { useShortcuts } from '../../hooks/useShortcuts';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { isMac, getModifierSymbol } from '../../utils/platformUtils';
@@ -1061,7 +1061,7 @@ export const HelpSettings: React.FC = () => {
                             <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
                                     <span className="flex items-center gap-2">
-                                        <SiOpenai className={`w-3.5 h-3.5 ${isLight ? 'text-black' : 'text-white'}`} /> OpenAI
+                                        <SiOpenid className={`w-3.5 h-3.5 ${isLight ? 'text-black' : 'text-white'}`} /> OpenAI
                                     </span>
                                     <button onClick={() => { (window as any).electronAPI?.openExternal('https://platform.openai.com/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
                                 </h5>
