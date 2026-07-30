@@ -6,6 +6,8 @@ export interface AudioDeviceInfo {
 }
 
 export interface NativeModule {
+  /** Cheap module-liveness check — does NOT touch CoreAudio. */
+  nativeModuleHealthCheck(): boolean;
   getHardwareId(): string;
   verifyGumroadKey(licenseKey: string): Promise<string>;
   // Dodo Payments — all three require a binary rebuild (cargo build --release)
@@ -13,12 +15,15 @@ export interface NativeModule {
   verifyDodoKey?: (licenseKey: string, deviceLabel: string) => Promise<string>;
   validateDodoKey?: (licenseKey: string) => Promise<string>;
   deactivateDodoKey?: (licenseKey: string, instanceId: string) => Promise<string>;
-  getInputDevices(): Array<AudioDeviceInfo>;
-  getOutputDevices(): Array<AudioDeviceInfo>;
+  /** Async — runs CoreAudio enumeration on a libuv worker thread. */
+  getInputDevices(): Promise<Array<AudioDeviceInfo>>;
+  /** Async — runs CoreAudio enumeration on a libuv worker thread. */
+  getOutputDevices(): Promise<Array<AudioDeviceInfo>>;
   // Default-output device id for the system default route. Optional because
   // existing shipped binaries don't have it — main.ts checks `typeof` before
   // calling. Requires a binary rebuild (cargo build --release).
-  getDefaultOutputDeviceId?: () => string;
+  /** Async — runs CoreAudio query on a libuv worker thread. */
+  getDefaultOutputDeviceId?: () => Promise<string>;
   // macOS-only: apply NSPanel-nonactivating + becomesKeyOnlyIfNeeded +
   // hidesOnDeactivate=NO + the right collectionBehavior on the overlay
   // window so clicks/keystrokes don't activate AnswerCue (foreground app
@@ -69,7 +74,11 @@ export interface CapturedKey {
 
 // Hard-required: crash the module load if any of these are missing.
 // These exist in the ORIGINAL binary (pre-Dodo build).
-const REQUIRED_METHODS = ['getHardwareId', 'verifyGumroadKey', 'getInputDevices', 'getOutputDevices'];
+// NOTE: getInputDevices / getOutputDevices are no longer in REQUIRED_METHODS
+// because they are now async (napi Task) and require a core-audio dependency
+// that may be unavailable at module-load time. The health-check replaces them
+// for the purpose of validating the binary loaded correctly.
+const REQUIRED_METHODS = ['nativeModuleHealthCheck', 'getHardwareId', 'verifyGumroadKey'];
 const REQUIRED_CONSTRUCTORS = ['SystemAudioCapture', 'MicrophoneCapture'];
 // Soft-required: warn (do NOT crash) if missing.
 // All three Dodo functions require a binary rebuild (cargo build --release).
@@ -110,27 +119,29 @@ function validateNativeModule(mod: any): asserts mod is NativeModule {
         }
     }
 
-    // Functional smoke-test: actually call a cheap synchronous native function.
-    // This catches the Electron asar-stub false-pass: the JS index.js stub
-    // exports all the right names (passing the checks above) but its internal
-    // require('./index.*.node') fails silently when run from inside the sealed
-    // asar. Calling getInputDevices() forces a real native ABI call.
+    // Functional smoke-test: call the cheap health-check export to verify the
+    // binary actually loaded its native ABI (catches asar-stub false-pass where
+    // the JS index.js stub exports the right names but its internal
+    // require('./index.*.node') failed silently inside the sealed asar).
+    //
+    // nativeModuleHealthCheck() does NOT touch CoreAudio, so it is safe to call
+    // synchronously on the main thread.
     //
     // NOTE: The guard MUST be separate from the try/catch that wraps the call.
     // Placing the throw INSIDE the try means our own error gets caught by the
     // same catch block, producing a double-wrapped message and losing the stack.
-    let result: unknown;
+    let healthResult: unknown;
     try {
-        result = mod.getInputDevices();
+        healthResult = mod.nativeModuleHealthCheck();
     } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        throw new Error(`NativeModule: functional smoke-test threw (${msg}) — likely loaded asar stub instead of real binary`);
+        throw new Error(`NativeModule: health-check threw (${msg}) — likely loaded asar stub instead of real binary`);
     }
     // Guard is OUTSIDE the try block so our throw propagates cleanly.
-    if (!Array.isArray(result)) {
+    if (healthResult !== true) {
         throw new Error(
-            `NativeModule: getInputDevices() returned ${typeof result} instead of Array` +
-            ` — likely loaded asar stub instead of real binary`
+            `NativeModule: health-check returned ${typeof healthResult} (${String(healthResult)})` +
+            ` instead of true — likely loaded asar stub instead of real binary`
         );
     }
 }

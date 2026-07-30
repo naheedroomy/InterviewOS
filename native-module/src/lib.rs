@@ -541,7 +541,19 @@ impl MicrophoneCapture {
 }
 
 // ============================================================================
-// DEVICE ENUMERATION
+// HEALTH CHECK — cheap non-CoreAudio smoke test for module-loader validation
+// ============================================================================
+
+/// Returns `true` if the native module loaded and its basic ABI is functional.
+/// Does NOT touch CoreAudio, CPAL, or any HAL resource — safe to call
+/// synchronously from the main thread during module-load validation.
+#[napi]
+pub fn native_module_health_check() -> bool {
+    true
+}
+
+// ============================================================================
+// DEVICE ENUMERATION — via napi `Task` (runs on libuv worker thread)
 // ============================================================================
 
 #[napi(object)]
@@ -550,31 +562,89 @@ pub struct AudioDeviceInfo {
     pub name: String,
 }
 
+// ── Input device enumeration task ─────────────────────────────────────────────
+
+pub struct AsyncInputDevices;
+
 #[napi]
-pub fn get_input_devices() -> Vec<AudioDeviceInfo> {
-    match microphone::list_input_devices() {
-        Ok(devs) => devs
-            .into_iter()
-            .map(|(id, name)| AudioDeviceInfo { id, name })
-            .collect(),
-        Err(e) => {
-            eprintln!("[get_input_devices] Error: {}", e);
-            Vec::new()
+impl Task for AsyncInputDevices {
+    type Output = Vec<AudioDeviceInfo>;
+    type JsValue = Vec<AudioDeviceInfo>;
+
+    fn compute(&mut self) -> napi::Result<Self::Output> {
+        match microphone::list_input_devices() {
+            Ok(devs) => Ok(devs
+                .into_iter()
+                .map(|(id, name)| AudioDeviceInfo { id, name })
+                .collect()),
+            Err(e) => {
+                eprintln!("[get_input_devices] Error: {}", e);
+                Ok(Vec::new())
+            }
         }
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> napi::Result<Self::JsValue> {
+        Ok(output)
     }
 }
 
+/// Enumerate audio input devices. Runs on a libuv worker thread so the
+/// CoreAudio HAL query cannot block the Node.js / Electron main thread.
 #[napi]
-pub fn get_output_devices() -> Vec<AudioDeviceInfo> {
-    match speaker::list_output_devices() {
-        Ok(devs) => devs
-            .into_iter()
-            .map(|(id, name)| AudioDeviceInfo { id, name })
-            .collect(),
-        Err(e) => {
-            eprintln!("[get_output_devices] Error: {}", e);
-            Vec::new()
+pub fn get_input_devices() -> AsyncTask<AsyncInputDevices> {
+    AsyncTask::new(AsyncInputDevices)
+}
+
+// ── Output device enumeration task ────────────────────────────────────────────
+
+pub struct AsyncOutputDevices;
+
+#[napi]
+impl Task for AsyncOutputDevices {
+    type Output = Vec<AudioDeviceInfo>;
+    type JsValue = Vec<AudioDeviceInfo>;
+
+    fn compute(&mut self) -> napi::Result<Self::Output> {
+        match speaker::list_output_devices() {
+            Ok(devs) => Ok(devs
+                .into_iter()
+                .map(|(id, name)| AudioDeviceInfo { id, name })
+                .collect()),
+            Err(e) => {
+                eprintln!("[get_output_devices] Error: {}", e);
+                Ok(Vec::new())
+            }
         }
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> napi::Result<Self::JsValue> {
+        Ok(output)
+    }
+}
+
+/// Enumerate audio output devices. Runs on a libuv worker thread so the
+/// CoreAudio HAL query cannot block the Node.js / Electron main thread.
+#[napi]
+pub fn get_output_devices() -> AsyncTask<AsyncOutputDevices> {
+    AsyncTask::new(AsyncOutputDevices)
+}
+
+// ── Default-output-device-ID task ─────────────────────────────────────────────
+
+pub struct AsyncDefaultOutputDeviceId;
+
+#[napi]
+impl Task for AsyncDefaultOutputDeviceId {
+    type Output = String;
+    type JsValue = String;
+
+    fn compute(&mut self) -> napi::Result<Self::Output> {
+        Ok(speaker::default_output_device_uid())
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> napi::Result<Self::JsValue> {
+        Ok(output)
     }
 }
 
@@ -582,12 +652,15 @@ pub fn get_output_devices() -> Vec<AudioDeviceInfo> {
 /// macOS: CoreAudio device UID. Windows: WASAPI device id (eMultimedia/eConsole role).
 /// Empty string on error or unsupported platform.
 ///
+/// Runs on a libuv worker thread so the CoreAudio HAL query cannot block the
+/// Node.js main thread.
+///
 /// JS polls this every few seconds during an active meeting; when the value
 /// changes, main.ts recreates SystemAudioCapture so the CoreAudio Tap follows
 /// the new output route. Without this, switching output devices mid-meeting
 /// (plug in headphones, swap AirPods, route to virtual cable) leaves the tap
 /// bound to the original device, capturing silence.
 #[napi]
-pub fn get_default_output_device_id() -> String {
-    speaker::default_output_device_uid()
+pub fn get_default_output_device_id() -> AsyncTask<AsyncDefaultOutputDeviceId> {
+    AsyncTask::new(AsyncDefaultOutputDeviceId)
 }

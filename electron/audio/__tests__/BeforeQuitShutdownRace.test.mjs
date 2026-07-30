@@ -42,8 +42,8 @@ test('DefaultOutputWatcher interval body bails immediately when this._isQuitting
   // INVOCATION (not a comment that just mentions the name). Anchor on the actual
   // assignment pattern.
   const quittingIdx = intervalBlock.search(/if\s*\(\s*this\._isQuitting\s*\)\s*return/);
-  const nativeIdx = intervalBlock.search(/currentId\s*=\s*NativeModule\.getDefaultOutputDeviceId\s*\(/);
-  assert.ok(nativeIdx >= 0, 'sanity: interval should assign currentId = NativeModule.getDefaultOutputDeviceId()');
+  const nativeIdx = intervalBlock.search(/currentId\s*=\s*(?:await\s+)?NativeModule\.getDefaultOutputDeviceId\s*\(/);
+  assert.ok(nativeIdx >= 0, 'sanity: interval should assign currentId = await NativeModule.getDefaultOutputDeviceId()');
   assert.ok(
     quittingIdx < nativeIdx,
     'BUG: the _isQuitting guard must be BEFORE the NativeModule call so the native module is never invoked during teardown.',

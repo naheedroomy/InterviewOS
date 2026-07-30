@@ -125,13 +125,16 @@ export declare function deactivateDodoKey(licenseKey: string, instanceId: string
  * macOS: CoreAudio device UID. Windows: WASAPI device id (eMultimedia/eConsole role).
  * Empty string on error or unsupported platform.
  *
+ * Runs on a libuv worker thread so the CoreAudio HAL query cannot block the
+ * Node.js main thread.
+ *
  * JS polls this every few seconds during an active meeting; when the value
  * changes, main.ts recreates SystemAudioCapture so the CoreAudio Tap follows
  * the new output route. Without this, switching output devices mid-meeting
  * (plug in headphones, swap AirPods, route to virtual cable) leaves the tap
  * bound to the original device, capturing silence.
  */
-export declare function getDefaultOutputDeviceId(): string
+export declare function getDefaultOutputDeviceId(): Promise<string>
 
 /**
  * Returns a deterministic hardware fingerprint (SHA-256 hash of the machine UID).
@@ -139,15 +142,30 @@ export declare function getDefaultOutputDeviceId(): string
  */
 export declare function getHardwareId(): string
 
-export declare function getInputDevices(): Array<AudioDeviceInfo>
+/**
+ * Enumerate audio input devices. Runs on a libuv worker thread so the
+ * CoreAudio HAL query cannot block the Node.js / Electron main thread.
+ */
+export declare function getInputDevices(): Promise<Array<AudioDeviceInfo>>
 
-export declare function getOutputDevices(): Array<AudioDeviceInfo>
+/**
+ * Enumerate audio output devices. Runs on a libuv worker thread so the
+ * CoreAudio HAL query cannot block the Node.js / Electron main thread.
+ */
+export declare function getOutputDevices(): Promise<Array<AudioDeviceInfo>>
 
 /**
  * True if this process has Accessibility trust (required for CGEventTap).
  * Cheap; safe to poll from JS to drive UI state.
  */
 export declare function isAccessibilityGranted(): boolean
+
+/**
+ * Returns `true` if the native module loaded and its basic ABI is functional.
+ * Does NOT touch CoreAudio, CPAL, or any HAL resource — safe to call
+ * synchronously from the main thread during module-load validation.
+ */
+export declare function nativeModuleHealthCheck(): boolean
 
 export interface OverlayBoundsInput {
   x: number

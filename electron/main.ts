@@ -1626,8 +1626,12 @@ export class AppState {
     const STUCK_WATCHDOG_MS = 12000;
     let stuckTimer: NodeJS.Timeout | null = null;
     const armStuckWatchdog = () => {
+      // B13: setTimeout callback is async so we can await the
+      // detectSameInputOutputDevice call (which now runs CoreAudio
+      // enumeration on a libuv worker via AsyncTask). The returned
+      // Promise is deliberately discarded.
       if (stuckTimer) clearTimeout(stuckTimer);
-      stuckTimer = setTimeout(() => {
+      stuckTimer = setTimeout(async () => {
         if (this.systemAudioCapture !== capture) return; // capture was replaced
         if (chunkCount > 0) return;                       // already producing
         if (!this.isMeetingActive) return;                // meeting ended
@@ -1644,7 +1648,7 @@ export class AppState {
         // constraint — only relevant on macOS. detectSameInputOutputDevice
         // is itself macOS-specific; skip the check on other platforms.
         const sameDeviceName = process.platform === 'darwin'
-          ? this.detectSameInputOutputDevice()
+          ? await this.detectSameInputOutputDevice()
           : null;
         if (sameDeviceName) {
           const msg = formatPermissionMessage('mac-same-device-input-output', { device: sameDeviceName });
@@ -1666,7 +1670,7 @@ export class AppState {
             const NativeModule: any = loadNativeModule();
             const getDefaultOutputDeviceId = NativeModule?.getDefaultOutputDeviceId;
             const defaultOutputId = typeof getDefaultOutputDeviceId === 'function'
-              ? String(getDefaultOutputDeviceId() || '')
+              ? String(await getDefaultOutputDeviceId() || '')
               : '';
             const requested = this._lastRequestedOutputDeviceId;
             if (defaultOutputId && defaultOutputId.toLowerCase() !== requested.toLowerCase()) {
@@ -2306,7 +2310,7 @@ export class AppState {
    * insensitive). Returns the friendly name when a same-device conflict is
    * detected, undefined otherwise.
    */
-  private detectSameInputOutputDevice(): string | undefined {
+  private async detectSameInputOutputDevice(): Promise<string | undefined> {
     return this.checkSameInputOutputDevice(this._lastRequestedInputDeviceId, this._lastRequestedOutputDeviceId);
   }
 
@@ -2317,7 +2321,7 @@ export class AppState {
    * is mutated, which would otherwise interact badly with the skip-if-
    * unchanged early-exit.
    */
-  private checkSameInputOutputDevice(inputId?: string, outputId?: string): string | undefined {
+  private async checkSameInputOutputDevice(inputId?: string, outputId?: string): Promise<string | undefined> {
     if (!inputId || !outputId) return undefined;
 
     // Strip the macOS CoreAudio :input/:output suffix before any comparison —
@@ -2332,7 +2336,7 @@ export class AppState {
     // Resolve the output UID to its friendly name and compare to the input
     // name (input IDs from cpal ARE the device name, e.g. "Evin's AirPods Pro").
     try {
-      const outputs = AudioDevices.getOutputDevices();
+      const outputs = await AudioDevices.getOutputDevices();
       const outputMatch = outputs.find(d => stripSuffix(d.id).toLowerCase() === outputBase);
       if (outputMatch && outputMatch.name) {
         if (outputMatch.name.toLowerCase() === inputId.toLowerCase()) {
@@ -2353,9 +2357,9 @@ export class AppState {
    * tap. Falls back to any other input that isn't the conflicting device.
    * Returns undefined if nothing else is plugged in.
    */
-  private pickFallbackInputDevice(conflictingName: string): { id: string; name: string } | undefined {
+  private async pickFallbackInputDevice(conflictingName: string): Promise<{ id: string; name: string } | undefined> {
     try {
-      const inputs = AudioDevices.getInputDevices();
+      const inputs = await AudioDevices.getInputDevices();
       if (!inputs?.length) return undefined;
 
       const stripSuffix = (s: string) => s.replace(/:(input|output)$/i, '');
@@ -2400,9 +2404,9 @@ export class AppState {
     // request could short-circuit a needed re-resolution (e.g., user
     // unplugged the built-in fallback after the first reconfigure).
     if (wantedInput && wantedOutput) {
-      const conflict = this.checkSameInputOutputDevice(wantedInput, wantedOutput);
+      const conflict = await this.checkSameInputOutputDevice(wantedInput, wantedOutput);
       if (conflict) {
-        const fallback = this.pickFallbackInputDevice(conflict);
+        const fallback = await this.pickFallbackInputDevice(conflict);
         if (fallback) {
           console.warn(`[Main] I/O conflict detected (${conflict} on both sides). Auto-switching mic to "${fallback.name}".`);
           wantedInput = this.normalizeDeviceId(fallback.id);
@@ -2539,7 +2543,8 @@ export class AppState {
           wantedInput ?? '',
           'default',
         ].filter(Boolean));
-        const candidates = AudioDevices.getInputDevices()
+        const allInputs = await AudioDevices.getInputDevices();
+        const candidates = allInputs
           .map((d) => d.id)
           .filter((id) => id && !tried.has(id));
         let success = false;
@@ -2796,7 +2801,7 @@ export class AppState {
   private _lastObservedDefaultOutputId: string | null = null;
   private _defaultOutputSwitchInProgress = false;
 
-  private startDefaultOutputWatcher(): void {
+  private async startDefaultOutputWatcher(): Promise<void> {
     if (this._defaultOutputWatcherInterval) return; // already running
     const NativeModule: any = loadNativeModule();
     if (!NativeModule || typeof NativeModule.getDefaultOutputDeviceId !== 'function') {
@@ -2806,13 +2811,13 @@ export class AppState {
       return;
     }
     try {
-      this._lastObservedDefaultOutputId = NativeModule.getDefaultOutputDeviceId() || '';
+      this._lastObservedDefaultOutputId = await NativeModule.getDefaultOutputDeviceId() || '';
     } catch {
       this._lastObservedDefaultOutputId = '';
     }
     console.log(`[DefaultOutputWatcher] Started. Initial default output: ${this._lastObservedDefaultOutputId || '(none)'}`);
 
-    this._defaultOutputWatcherInterval = setInterval(() => {
+    this._defaultOutputWatcherInterval = setInterval(async () => {
       if (this._isQuitting) return;
       if (!this.isMeetingActive) return;
       // Only watch when we're on the default route. If the user explicitly
@@ -2823,7 +2828,7 @@ export class AppState {
 
       let currentId = '';
       try {
-        currentId = NativeModule.getDefaultOutputDeviceId() || '';
+        currentId = await NativeModule.getDefaultOutputDeviceId() || '';
       } catch (err) {
         // CoreAudio momentarily unavailable during route change — skip this tick.
         return;
@@ -3161,14 +3166,14 @@ export class AppState {
     // the entire probe = TCC silently denied even though SCK started).
     const attachSystemTestListeners = (capture: SystemAudioCapture) => {
       let systemProbeChunkCount = 0;
-      let noSystemAudioTimer: NodeJS.Timeout | null = setTimeout(() => {
+      let noSystemAudioTimer: NodeJS.Timeout | null = setTimeout(async () => {
         if (!isCurrentTest() || systemProbeChunkCount > 0) return;
         let message = 'No system audio detected on the selected output. Play audio through the same speakers Zoom uses, then try the test again.';
         if (process.platform === 'win32' && wantedOutputDeviceId) {
           try {
             const NativeModule: any = loadNativeModule();
             const defaultOutputId = typeof NativeModule?.getDefaultOutputDeviceId === 'function'
-              ? String(NativeModule.getDefaultOutputDeviceId() || '')
+              ? String(await NativeModule.getDefaultOutputDeviceId() || '')
               : '';
             if (defaultOutputId && defaultOutputId.toLowerCase() !== wantedOutputDeviceId.toLowerCase()) {
               message = 'No system audio detected on the selected output. Windows reports a different default output endpoint, so Zoom may still be playing through another route even if the device names look similar.';
