@@ -27,6 +27,21 @@ export class GoogleSTT extends EventEmitter {
     //   16 = UNAUTHENTICATED (bad/expired credentials)
     private static readonly PERMANENT_GRPC_CODES = new Set([3, 7, 16]);
 
+    /**
+     * Force credential parsing and token/project resolution before a meeting is
+     * made active. Speech API/IAM failures can still arrive from the streaming
+     * RPC, but malformed or unusable credentials fail here synchronously.
+     */
+    public static async validateCredentials(keyFilePath: string): Promise<void> {
+        const client = new SpeechClient({ keyFilename: keyFilePath });
+        try {
+            await client.initialize();
+            await client.getProjectId();
+        } finally {
+            await client.close().catch((): void => undefined);
+        }
+    }
+
     // Config
     private encoding = 'LINEAR16' as const;
     private sampleRateHertz = 16000;
@@ -183,16 +198,54 @@ export class GoogleSTT extends EventEmitter {
         }
     }
 
-    public finalize(): void {
-        if (!this.isActive || !this.stream) return;
+    public finalize(timeoutMs: number = 2000): Promise<void> {
+        if (!this.isActive || !this.stream) return Promise.resolve();
         console.log(`[GoogleSTT/${this.label}] Finalize — ending gRPC stream to flush final transcript`);
-        try {
-            this.stream.end();
-        } catch (err) {
-            console.error(`[GoogleSTT/${this.label}] Finalize end() failed:`, err);
-        }
+        const stream = this.stream;
         this.isStreaming = false;
-        this.stream = null;
+        if (this.proactiveRestartTimer) {
+            clearTimeout(this.proactiveRestartTimer);
+            this.proactiveRestartTimer = null;
+        }
+
+        return new Promise<void>((resolve) => {
+            let settled = false;
+            let timer: NodeJS.Timeout;
+
+            const finish = (reason: 'end' | 'error' | 'close' | 'timeout') => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                stream.off('end', onEnd);
+                stream.off('error', onError);
+                stream.off('close', onClose);
+                if (this.stream === stream) this.stream = null;
+                if (reason !== 'end') {
+                    console.warn(`[GoogleSTT/${this.label}] Finalize completed via ${reason}`);
+                }
+                resolve();
+            };
+
+            const onEnd = () => finish('end');
+            const onError = () => finish('error');
+            const onClose = () => finish('close');
+
+            stream.once('end', onEnd);
+            stream.once('error', onError);
+            stream.once('close', onClose);
+            timer = setTimeout(() => {
+                try { stream.destroy(); } catch { /* best-effort bounded shutdown */ }
+                finish('timeout');
+            }, timeoutMs);
+
+            try {
+                // Half-close the writable side but keep reading trailing finals.
+                stream.end();
+            } catch (err) {
+                console.error(`[GoogleSTT/${this.label}] Finalize end() failed:`, err);
+                finish('error');
+            }
+        });
     }
 
     private buffer: Buffer[] = [];

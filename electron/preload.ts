@@ -203,7 +203,7 @@ interface ElectronAPI {
     recommendation: string;
     recommendedModel: string;
   }>;
-  getSttProvider: () => Promise<string>;
+  getSttProvider: () => Promise<'local-whisper' | 'google'>;
   setGroqSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setOpenAiSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setOpenAiSttBaseUrl: (url: string) => Promise<{ success: boolean; error?: string }>;
@@ -771,6 +771,9 @@ interface ElectronAPI {
   // Arch
   getArch: () => Promise<string>;
   getOsVersion: () => Promise<string>;
+
+  // File System
+  fileExists: (filePath: string) => Promise<boolean>;
 
   // Cropper API
   cropperConfirmed: (bounds: Electron.Rectangle) => void;
@@ -2091,6 +2094,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Arch
   getArch: () => ipcRenderer.invoke('get-arch'),
   getOsVersion: () => ipcRenderer.invoke('get-os-version'),
+
+  // File System
+  fileExists: (filePath: string) => ipcRenderer.invoke('file-exists', filePath),
 
   // Cropper API
   cropperConfirmed: (bounds: Electron.Rectangle) => ipcRenderer.send('cropper-confirmed', bounds),

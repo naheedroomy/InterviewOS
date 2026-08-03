@@ -23,6 +23,10 @@ interface ProviderCardProps {
     keyPlaceholder: string;
     keyUrl: string;
     onPreferredModelChange?: (modelId: string) => void;
+    /** Called after a successful fetch with the full model list (for parent caching). */
+    onModelsFetched?: (models: { id: string; label: string }[]) => void;
+    /** Models pre-populated by parent (e.g. auto-discovery). Displayed when fetchedModels is empty. */
+    externalModels?: { id: string; label: string }[];
 }
 
 export const ProviderCard: React.FC<ProviderCardProps> = ({
@@ -42,6 +46,8 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     keyPlaceholder,
     keyUrl,
     onPreferredModelChange,
+    onModelsFetched,
+    externalModels,
 }) => {
     const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
     const [isFetching, setIsFetching] = useState(false);
@@ -49,6 +55,12 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     const [selectedModel, setSelectedModel] = useState<string>(preferredModel || '');
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+    // Gemini's parent cache is authoritative so a key change or successful
+    // empty discovery cannot leave old-key models visible in local state.
+    const displayModels: FetchedModel[] = providerId === 'gemini' && externalModels !== undefined
+        ? externalModels
+        : (fetchedModels.length > 0 ? fetchedModels : (externalModels || []));
 
     // Refs to avoid stale closures in the auto-save timer
     const savedRef = useRef(savedStatus);
@@ -100,11 +112,20 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
             if (result?.success && result.models) {
                 setFetchedModels(result.models);
-                // If we have a preferred model that exists in the list, keep it; otherwise auto-select first
+                // Notify parent of the full discovered list (for default-model selector caching)
+                if (onModelsFetched) {
+                    onModelsFetched(result.models);
+                }
+                // Reconcile stale preferred model: if current is absent and list non-empty,
+                // auto-select first, persist, and warn.  Do nothing on successful empty list.
                 if (result.models.length > 0) {
                     const existsInList = result.models.some((m: FetchedModel) => m.id === selectedModel);
                     if (!existsInList) {
                         const firstModel = result.models[0].id;
+                        console.warn(
+                            `[ProviderCard] Preferred model "${selectedModel}" not found in discovered ` +
+                            `${providerId} models. Auto-selecting first available: "${firstModel}".`
+                        );
                         setSelectedModel(firstModel);
                         // @ts-ignore
                         await window.electronAPI?.setProviderPreferredModel(providerId, firstModel);
@@ -137,7 +158,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         }
     };
 
-    const selectedOption = fetchedModels.find(m => m.id === selectedModel);
+    const selectedOption = displayModels.find(m => m.id === selectedModel);
 
     return (
         <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle">
@@ -205,21 +226,21 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                 </button>
 
                 {/* Inline Model Dropdown */}
-                {fetchedModels.length > 0 || preferredModel ? (
+                {displayModels.length > 0 || preferredModel ? (
                     <div className="relative flex-1 max-w-[200px] mx-4" ref={dropdownRef}>
                         <button
-                            onClick={() => fetchedModels.length > 0 && setIsDropdownOpen(!isDropdownOpen)}
-                            className={`w-full bg-bg-input border border-border-subtle rounded-md px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary flex items-center justify-between transition-colors ${fetchedModels.length > 0 ? 'hover:bg-bg-elevated' : 'opacity-80 cursor-default'}`}
+                            onClick={() => displayModels.length > 0 && setIsDropdownOpen(!isDropdownOpen)}
+                            className={`w-full bg-bg-input border border-border-subtle rounded-md px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary flex items-center justify-between transition-colors ${displayModels.length > 0 ? 'hover:bg-bg-elevated' : 'opacity-80 cursor-default'}`}
                             type="button"
                         >
                             <span className="truncate pr-2">{selectedOption ? selectedOption.label : (preferredModel || 'Select model')}</span>
-                            <ChevronDown size={14} className={`text-text-secondary transition-transform ${isDropdownOpen ? 'rotate-180' : ''} ${fetchedModels.length === 0 ? 'opacity-50' : ''}`} />
+                            <ChevronDown size={14} className={`text-text-secondary transition-transform ${isDropdownOpen ? 'rotate-180' : ''} ${displayModels.length === 0 ? 'opacity-50' : ''}`} />
                         </button>
 
-                        {isDropdownOpen && fetchedModels.length > 0 && (
+                        {isDropdownOpen && displayModels.length > 0 && (
                             <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-full min-w-[200px] bg-bg-elevated border border-border-subtle rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto animated fadeIn">
                                 <div className="p-1 space-y-0.5">
-                                    {fetchedModels.map((model) => (
+                                    {displayModels.map((model) => (
                                         <button
                                             key={model.id}
                                             onClick={() => handleSelectModel(model.id)}

@@ -58,9 +58,33 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                 }
                 for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
                     if (!cfg.hasKeyCheck(creds)) continue;
-                    cfg.ids.forEach((id, i) => cModels.push({ id, name: cfg.names[i], desc: cfg.descs[i], provider: prov }));
+
+                    if (prov === 'gemini') {
+                        // Gemini: fetch dynamically — include every discovered model via the IPC.
+                        // The IPC handler resolves the stored key when called with an empty string.
+                        try {
+                            const geminiResult = await window.electronAPI?.fetchProviderModels('gemini', '');
+                            if (geminiResult?.success && geminiResult.models) {
+                                for (const m of geminiResult.models) {
+                                    if (!cModels.some(cm => cm.id === m.id)) {
+                                        cModels.push({
+                                            id: m.id,
+                                            name: m.label || m.id,
+                                            desc: 'Google • Gemini',
+                                            provider: 'gemini',
+                                        });
+                                    }
+                                }
+                            }
+                        } catch (_geminiErr) {
+                            console.warn('Failed to fetch Gemini models for cloud selector');
+                        }
+                    } else {
+                        cfg.ids.forEach((id, i) => cModels.push({ id, name: cfg.names[i], desc: cfg.descs[i], provider: prov }));
+                    }
+
                     const pm = creds?.[cfg.pmKey];
-                    if (pm && !cfg.ids.includes(pm) && isAllowedStandardCloudModel(prov, pm)) {
+                    if (prov !== 'gemini' && pm && !cfg.ids.includes(pm) && isAllowedStandardCloudModel(prov, pm)) {
                         cModels.push({ id: pm, name: prettifyModelId(pm), desc: `${prov.charAt(0).toUpperCase() + prov.slice(1)} • Preferred`, provider: prov });
                     }
                 }

@@ -7,9 +7,9 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
 }> = {
     gemini: {
         hasKeyCheck: (creds) => !!creds?.hasGeminiKey,
-        ids: ['gemini-3.5-flash', 'gemini-3.1-flash-lite-preview', 'gemini-3.1-pro-preview'],
-        names: ['Gemini 3.5 Flash', 'Gemini 3.1 Flash', 'Gemini 3.1 Pro'],
-        descs: ['Fast • Multimodal', 'Fastest • Multimodal', 'Reasoning • High Quality'],
+        ids: [],
+        names: [],
+        descs: [],
         pmKey: 'geminiPreferredModel'
     },
     openai: {
@@ -45,6 +45,8 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
 export const isAllowedStandardCloudModel = (provider: string, modelId: string): boolean => {
     const config = STANDARD_CLOUD_MODELS[provider];
     if (!config) return true;
+    // Gemini uses dynamic discovery — any non-empty model ID is allowed.
+    if (provider === 'gemini') return !!modelId;
     return config.ids.includes(modelId);
 };
 

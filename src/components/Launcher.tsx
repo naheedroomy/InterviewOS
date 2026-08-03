@@ -151,16 +151,7 @@ const providerLabels: Record<string, string> = {
 };
 
 const sttProviderLabels: Record<string, string> = {
-    none: 'Not selected',
-    google: 'Google Speech',
-    groq: 'Groq Whisper',
-    openai: 'OpenAI Whisper',
-    deepgram: 'Deepgram',
-    elevenlabs: 'ElevenLabs',
-    azure: 'Azure Speech',
-    ibmwatson: 'IBM Watson',
-    soniox: 'Soniox',
-    natively: 'AnswerCue API',
+    google: 'Google Cloud Speech-to-Text',
     'local-whisper': 'Moonshine Base',
 };
 
@@ -204,14 +195,6 @@ const hasConfiguredStt = (creds: any) => {
     const provider = creds?.sttProvider || 'local-whisper';
     switch (provider) {
         case 'google': return !!creds?.googleServiceAccountPath;
-        case 'groq': return !!creds?.hasSttGroqKey;
-        case 'openai': return !!creds?.hasSttOpenaiKey;
-        case 'deepgram': return !!creds?.hasDeepgramKey;
-        case 'elevenlabs': return !!creds?.hasElevenLabsKey;
-        case 'azure': return !!creds?.hasAzureKey && !!creds?.azureRegion;
-        case 'ibmwatson': return !!creds?.hasIbmWatsonKey && !!creds?.ibmWatsonRegion;
-        case 'soniox': return !!creds?.hasSonioxKey;
-        case 'natively': return !!creds?.hasAnswerCueKey;
         case 'local-whisper': return true;
         default: return false;
     }
@@ -2018,6 +2001,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     const pendingOpenLatestInterviewRef = useRef(false);
     const selectedMeetingRef = useRef<Meeting | null>(null);
     const workspaceGenerationRef = useRef(0);
+    const readinessGenRef = useRef(0);
     const {
         appendToken: appendWorkspaceToken,
         getBufferedContent: getWorkspaceBufferedContent,
@@ -2434,6 +2418,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     const refreshReadiness = async () => {
         if (!window.electronAPI) return;
 
+        const gen = (readinessGenRef.current += 1);
         setReadiness(prev => ({ ...prev, loading: true }));
 
         const [
@@ -2450,6 +2435,9 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             window.electronAPI.localWhisperGetModels?.(),
         ]);
 
+        // Drop if a newer refresh started while we were awaiting
+        if (readinessGenRef.current !== gen) return;
+
         const llm = (llmResult.status === 'fulfilled' ? llmResult.value : null) as any;
         const creds = (credsResult.status === 'fulfilled' ? credsResult.value : null) as any;
         const audio = (audioResult.status === 'fulfilled' ? audioResult.value : null) as any;
@@ -2461,7 +2449,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             : null;
         const localModelStatus = (downloadedLocalSttModel?.status || 'missing') as LocalSttModelStatus;
         const localModelReady = localModelStatus === 'available';
-        const sttReady = hasConfiguredStt(creds) && (sttProvider !== 'local-whisper' || localModelReady);
         const model = llm?.model || 'answercue';
         const localModelHint = localModelStatus === 'available'
             ? 'Downloaded locally'
@@ -2470,6 +2457,42 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                 : localModelStatus === 'error'
                     ? downloadedLocalSttModel?.errorMessage || 'Download failed'
                     : 'Download required';
+
+        // Determine STT readiness.  local-whisper is always ready once the
+        // model is downloaded; google requires a service-account JSON whose
+        // file still exists on disk.
+        let sttReady: boolean;
+        let sttHint: string;
+
+        if (sttProvider === 'local-whisper') {
+            sttReady = localModelReady;
+            sttHint = localModelHint;
+        } else if (sttProvider === 'google') {
+            const path = creds?.googleServiceAccountPath;
+            const hasPath = typeof path === 'string' && path.length > 0;
+            if (!hasPath) {
+                sttReady = false;
+                sttHint = 'Select a service-account JSON in Settings';
+            } else {
+                try {
+                    const exists = await window.electronAPI?.fileExists?.(path);
+                    // Drop if a newer refresh started during the fileExists wait
+                    if (readinessGenRef.current !== gen) return;
+                    sttReady = !!exists;
+                    sttHint = exists ? 'Configured' : 'Select a service-account JSON in Settings';
+                } catch {
+                    if (readinessGenRef.current !== gen) return;
+                    sttReady = false;
+                    sttHint = 'Select a service-account JSON in Settings';
+                }
+            }
+        } else {
+            sttReady = false;
+            sttHint = 'Unavailable';
+        }
+
+        // Final generation check — drop if a newer refresh beat us
+        if (readinessGenRef.current !== gen) return;
 
         setLocalSttModel(prev => ({
             id: downloadedLocalSttModel?.id || prev.id,
@@ -2494,7 +2517,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             hasAnyProvider: hasAnyConfiguredAiProvider(llm?.provider, creds),
             sttProvider: sttProviderLabels[sttProvider] || sttProvider,
             sttReady,
-            sttHint: sttProvider === 'local-whisper' ? localModelHint : (sttReady ? 'Configured' : 'Unavailable'),
+            sttHint,
             audioReady: audio?.connected !== false,
             micPermission: (permissions?.microphone || 'unknown') as PermissionValue,
             screenPermission: (permissions?.screen || 'unknown') as PermissionValue,
@@ -3584,6 +3607,43 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         if (isMeetingActive) {
             window.electronAPI?.setWindowMode?.('overlay', true);
             analytics.trackCommandExecuted('resume_meeting_from_launcher');
+            return;
+        }
+
+        // Re-read credentials and validate Google path immediately before starting.
+        // If the service-account JSON is missing or stale, block the start.
+        try {
+            const creds = await window.electronAPI?.getStoredCredentials?.();
+            if (creds) {
+                const sttProvider = creds.sttProvider || 'local-whisper';
+                if (sttProvider === 'google') {
+                    const path = creds.googleServiceAccountPath;
+                    const hasPath = typeof path === 'string' && path.length > 0;
+                    let pathOk = hasPath;
+                    if (hasPath) {
+                        const exists = await window.electronAPI?.fileExists?.(path);
+                        pathOk = !!exists;
+                    }
+                    if (!pathOk) {
+                        setReadiness(prev => ({
+                            ...prev,
+                            sttProvider: sttProviderLabels['google'],
+                            sttReady: false,
+                            sttHint: 'Select a service-account JSON in Settings',
+                        }));
+                        setPreflightStep('model');
+                        return;
+                    }
+                }
+            }
+        } catch {
+            // If re-validation fails gracefully, block as unready
+            setReadiness(prev => ({
+                ...prev,
+                sttReady: false,
+                sttHint: 'Select a service-account JSON in Settings',
+            }));
+            setPreflightStep('model');
             return;
         }
 

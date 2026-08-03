@@ -52,8 +52,10 @@ export interface StoredCredentials {
     curlProviders?: CurlProvider[];
     defaultModel?: string;
     nativelyApiKey?: string;
-    // STT Provider settings
-    sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper';
+    // STT Provider settings — runtime normalization in init() is authoritative;
+    // the stored type is `string` because the JSON payload is untrusted and may
+    // contain legacy values from older versions.
+    sttProvider?: string;
     groqSttApiKey?: string;
     groqSttModel?: string;
     openAiSttApiKey?: string;
@@ -110,6 +112,16 @@ export class CredentialsManager {
         if (this.credentials.defaultModel !== beforeDefault) {
             this.saveCredentials();
         }
+
+        // Normalize STT provider: any non-canonical persisted value → local-whisper.
+        // This ensures forward-compatibility as old provider IDs are retired.
+        const stt = this.credentials.sttProvider;
+        if (stt !== 'local-whisper' && stt !== 'google') {
+            this.credentials.sttProvider = 'local-whisper';
+            this.saveCredentials();
+            console.log(`[CredentialsManager] Normalized STT provider: ${stt || '(none)'} → local-whisper`);
+        }
+
         console.log('[CredentialsManager] Initialized');
     }
 
@@ -145,14 +157,10 @@ export class CredentialsManager {
         return this.credentials.customProviders || [];
     }
 
-    public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper' {
-        const provider = this.credentials.sttProvider || 'none';
-        if (provider !== 'local-whisper') {
-            this.credentials.sttProvider = 'local-whisper';
-            this.saveCredentials();
-            console.log(`[CredentialsManager] Forced STT provider ${provider}→local-whisper (Moonshine Base)`);
-        }
-        return 'local-whisper';
+    public getSttProvider(): 'local-whisper' | 'google' {
+        // Persisted JSON is untrusted and remains typed as string. Narrow on every
+        // read without mutating; init() performs the one-time persisted migration.
+        return this.credentials.sttProvider === 'google' ? 'google' : 'local-whisper';
     }
 
     public getDeepgramApiKey(): string | undefined {
@@ -377,10 +385,14 @@ export class CredentialsManager {
         console.log('[CredentialsManager] Google Service Account path updated');
     }
 
-    public setSttProvider(_provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper'): void {
-        this.credentials.sttProvider = 'local-whisper';
+    public setSttProvider(provider: 'local-whisper' | 'google'): void {
+        if (provider !== 'local-whisper' && provider !== 'google') {
+            console.warn(`[CredentialsManager] Invalid STT provider: ${provider} — rejecting, not persisted.`);
+            return;
+        }
+        this.credentials.sttProvider = provider;
         this.saveCredentials();
-        console.log('[CredentialsManager] STT Provider set to: local-whisper (Moonshine Base)');
+        console.log(`[CredentialsManager] STT Provider set to: ${provider}`);
     }
 
     public setDeepgramApiKey(key: string): void {
@@ -495,21 +507,12 @@ export class CredentialsManager {
                 console.log('[CredentialsManager] Auto-set default model to natively');
             }
 
-            // STT is local-only: keep Moonshine Base selected regardless of API keys.
-            if (this.credentials.sttProvider !== 'local-whisper') {
-                this.credentials.sttProvider = 'local-whisper';
-                console.log('[CredentialsManager] Auto-set STT provider to local-whisper');
-            }
         } else {
             // Key cleared — revert natively-auto-set defaults back to the next configured provider.
             if (this.credentials.defaultModel === 'natively') {
                 const nextDefault = this.firstConfiguredDefaultModel() || FALLBACK_DEFAULT_MODEL;
                 this.credentials.defaultModel = nextDefault;
                 console.log(`[CredentialsManager] AnswerCue key cleared — reset default model to ${nextDefault}`);
-            }
-            if (this.credentials.sttProvider !== 'local-whisper') {
-                this.credentials.sttProvider = 'local-whisper';
-                console.log('[CredentialsManager] AnswerCue key cleared — kept local-whisper STT provider');
             }
         }
 

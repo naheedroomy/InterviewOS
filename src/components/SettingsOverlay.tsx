@@ -227,9 +227,10 @@ interface ProviderSelectProps {
     value: string;
     options: ProviderOption[];
     onChange: (value: string) => void;
+    disabled?: boolean;
 }
 
-const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChange }) => {
+const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChange, disabled = false }) => {
     const isLight = useResolvedTheme() === 'light';
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = React.useRef<HTMLDivElement>(null);
@@ -277,8 +278,9 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
     return (
         <div ref={containerRef} className="relative z-20 font-sans">
             <button
-                onClick={() => setIsOpen(!isOpen)}
-                className={`w-full group bg-bg-input border border-border-subtle hover:border-border-muted shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-all duration-200 outline-none focus:ring-2 focus:ring-[var(--accent-ring)] ${isOpen ? 'ring-2 ring-[var(--accent-ring)] border-[var(--accent-border)]' : 'hover:shadow-md'}`}
+                onClick={() => { if (!disabled) setIsOpen(!isOpen); }}
+                disabled={disabled}
+                className={`w-full group bg-bg-input border border-border-subtle hover:border-border-muted shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-all duration-200 outline-none focus:ring-2 focus:ring-[var(--accent-ring)] ${isOpen ? 'ring-2 ring-[var(--accent-ring)] border-[var(--accent-border)]' : 'hover:shadow-md'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
                 {selected ? (
                     <div className="flex items-center gap-3 overflow-hidden">
@@ -370,23 +372,15 @@ const normalizeSettingsTab = (tab?: string) => {
     return tab && settingsTabs.has(tab) ? tab : 'general';
 };
 
-type VisibleSttProvider = 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'local-whisper';
+type VisibleSttProvider = 'local-whisper' | 'google';
 
 const visibleSttProviders = new Set<string>([
-    'none',
-    'google',
-    'groq',
-    'openai',
-    'deepgram',
-    'elevenlabs',
-    'azure',
-    'ibmwatson',
-    'soniox',
     'local-whisper',
+    'google',
 ]);
 
 const normalizeSttProvider = (provider?: string): VisibleSttProvider => {
-    return provider && visibleSttProviders.has(provider) ? provider as VisibleSttProvider : 'none';
+    return provider && visibleSttProviders.has(provider) ? provider as VisibleSttProvider : 'local-whisper';
 };
 
 const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, initialTab = 'general' }) => {
@@ -416,6 +410,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [meetingInterfaceTheme, setMeetingInterfaceThemeState] = useState<MeetingInterfaceTheme>(getMeetingInterfaceTheme);
     const [isInterfaceThemeDropdownOpen, setIsInterfaceThemeDropdownOpen] = useState(false);
     const interfaceThemeDropdownRef = React.useRef<HTMLDivElement>(null);
+    const isOpenRef = React.useRef(isOpen);
+
+    // Keep isOpenRef current so credentials-changed listener never reads a stale closure
+    useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
 
 
     const [verboseLogging, setVerboseLogging] = useState(false);
@@ -436,6 +434,19 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             window.electronAPI?.getVerboseLogging?.().then(setVerboseLogging).catch(() => { });
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
         }
+    }, [isOpen]);
+
+    // Listen for meeting state changes so the STT provider picker can be
+    // disabled during an active interview (pre-interview-only setting).
+    useEffect(() => {
+        if (isOpen && window.electronAPI?.getMeetingActive) {
+            window.electronAPI.getMeetingActive().then(setIsMeetingActive).catch(() => {});
+        }
+        if (!window.electronAPI?.onMeetingStateChanged) return;
+        const unsubscribe = window.electronAPI.onMeetingStateChanged(({ isActive }) => {
+            setIsMeetingActive(isActive);
+        });
+        return () => unsubscribe();
     }, [isOpen]);
 
     useEffect(() => {
@@ -876,7 +887,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     } | null>(null);
 
     // STT Provider settings
-    const [sttProvider, setSttProvider] = useState<VisibleSttProvider>('none');
+    const [sttProvider, setSttProvider] = useState<VisibleSttProvider>('local-whisper');
     const [groqSttModel, setGroqSttModel] = useState('whisper-large-v3-turbo');
     const [sttGroqKey, setSttGroqKey] = useState('');
     const [sttOpenaiKey, setSttOpenaiKey] = useState('');
@@ -902,6 +913,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [isSttDropdownOpen, setIsSttDropdownOpen] = useState(false);
     const sttDropdownRef = React.useRef<HTMLDivElement>(null);
 
+    // Track whether a meeting is currently active to gate pre-interview-only settings
+    const [isMeetingActive, setIsMeetingActive] = useState(false);
+
     // Close STT dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -924,10 +938,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 if (creds) {
                     const provider = normalizeSttProvider(creds.sttProvider);
                     setSttProvider(provider);
-                    if (creds.sttProvider === 'natively') {
-                        // @ts-ignore
-                        window.electronAPI?.setSttProvider?.('none').catch(console.error);
-                    }
                     if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
                     setGoogleServiceAccountPath(creds.googleServiceAccountPath);
                     setHasStoredSttGroqKey(creds.hasSttGroqKey);
@@ -961,40 +971,54 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     useEffect(() => {
         if (!window.electronAPI?.onCredentialsChanged) return;
         const unsubscribe = window.electronAPI.onCredentialsChanged(() => {
-            if (isOpen) {
-                // Re-fetch credentials silently — purely additive, no state reset
-                window.electronAPI?.getStoredCredentials?.().then((creds: any) => {
-                    if (!creds) return;
-                    const provider = normalizeSttProvider(creds.sttProvider);
-                    setSttProvider(provider);
-                    if (creds.sttProvider === 'natively') {
-                        window.electronAPI?.setSttProvider?.('none').catch(console.error);
-                    }
-                    if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
-                    setHasStoredSttGroqKey(creds.hasSttGroqKey);
-                    setHasStoredSttOpenaiKey(creds.hasSttOpenaiKey);
-                    setHasStoredDeepgramKey(creds.hasDeepgramKey);
-                    setHasStoredElevenLabsKey(creds.hasElevenLabsKey);
-                    setHasStoredAzureKey(creds.hasAzureKey);
-                    setHasStoredIbmWatsonKey(creds.hasIbmWatsonKey);
-                    setHasStoredSonioxKey(creds.hasSonioxKey || false);
-                }).catch(() => { /* silently ignore */ });
-            }
+            if (!isOpenRef.current) return;
+            // Re-fetch credentials — refresh canonical provider, service-account path, and stored flags
+            window.electronAPI?.getStoredCredentials?.().then((creds: any) => {
+                if (!creds) return;
+                const provider = normalizeSttProvider(creds.sttProvider);
+                setSttProvider(provider);
+                setGoogleServiceAccountPath(creds.googleServiceAccountPath ?? null);
+                if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
+                setHasStoredSttGroqKey(creds.hasSttGroqKey);
+                setHasStoredSttOpenaiKey(creds.hasSttOpenaiKey);
+                setHasStoredDeepgramKey(creds.hasDeepgramKey);
+                setHasStoredElevenLabsKey(creds.hasElevenLabsKey);
+                setHasStoredAzureKey(creds.hasAzureKey);
+                setHasStoredIbmWatsonKey(creds.hasIbmWatsonKey);
+                setHasStoredSonioxKey(creds.hasSonioxKey || false);
+            }).catch(() => { /* silently ignore */ });
         });
         return () => unsubscribe();
-    }, []); // mount-once: isOpen is checked inside the callback
+    }, []); // mount-once: isOpen read from isOpenRef in callback
 
     const handleSttProviderChange = async (provider: VisibleSttProvider) => {
+        const previous = sttProvider;
         setSttProvider(provider);
         setIsSttDropdownOpen(false);
         setSttTestStatus('idle');
         setSttTestError('');
         try {
             // @ts-ignore
-            await window.electronAPI?.setSttProvider?.(provider);
+            const result = await window.electronAPI?.setSttProvider?.(provider);
+            if (result && !result.success) {
+                // Backend rejected (e.g. active meeting); roll back UI and reload canonical
+                setSttProvider(previous);
+                reloadCanonicalSttProvider();
+            }
         } catch (e) {
             console.error('Failed to set STT provider:', e);
+            setSttProvider(previous);
+            reloadCanonicalSttProvider();
         }
+    };
+
+    const reloadCanonicalSttProvider = () => {
+        window.electronAPI?.getStoredCredentials?.().then((creds: any) => {
+            if (creds) {
+                setSttProvider(normalizeSttProvider(creds.sttProvider));
+                setGoogleServiceAccountPath(creds.googleServiceAccountPath ?? null);
+            }
+        }).catch(() => { /* silently ignore */ });
     };
 
     const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox', key: string) => {
@@ -1123,7 +1147,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     };
 
     const handleTestSttConnection = async () => {
-        if (sttProvider === 'none' || sttProvider === 'google' || sttProvider === 'local-whisper') return;
+        // Dormant providers removed from UI — this function is now unreachable.
+        // The type gate below exists solely to satisfy the narrowed VisibleSttProvider type.
+        if (true) return;
         const keyMap: Record<string, string> = {
             groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
             elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
@@ -1139,11 +1165,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         setSttTestStatus('testing');
         setSttTestError('');
         try {
-            // @ts-ignore
-            const result = await window.electronAPI?.testSttConnection?.(
+            // Dormant provider code — unreachable after provider type narrowing
+            const result = await (window.electronAPI as any)?.testSttConnection?.(
                 sttProvider,
                 keyToTest.trim(),
-                sttProvider === 'azure' ? sttAzureRegion : undefined
+                (sttProvider as string) === 'azure' ? sttAzureRegion : undefined
             );
             if (result?.success) {
                 setSttTestStatus('success');
@@ -2291,86 +2317,32 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                             {activeTab === 'audio' && (
                                 <div className="space-y-6 animated fadeIn">
-                                    {/* ── Local Transcription Section ── */}
-                                    <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
-                                        <div className="flex items-start gap-3">
-                                            <div className="h-9 w-9 rounded-lg bg-green-500/10 text-green-400 flex items-center justify-center shrink-0">
-                                                <Cpu size={18} />
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <h3 className="text-lg font-bold text-text-primary">Local Transcription</h3>
-                                                    <span className="rounded-full bg-green-500/10 border border-green-500/20 px-2 py-0.5 text-[11px] font-medium text-green-300">
-                                                        Moonshine Base
-                                                    </span>
-                                                </div>
-                                                <p className="text-xs text-text-secondary leading-relaxed">
-                                                    Audio transcription runs locally with the Moonshine Base model downloaded during setup. There are no cloud speech providers or transcription model choices to configure.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {false && (
+                                    {/* ── Speech to Text Section ── */}
                                     <div>
-                                        <h3 className="text-lg font-bold text-text-primary mb-1">Speech Provider</h3>
+                                        <h3 className="text-lg font-bold text-text-primary mb-1">Speech to Text</h3>
                                         <p className="text-xs text-text-secondary mb-5">Choose the engine that transcribes audio to text.</p>
 
                                         <div className="space-y-4">
                                             <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
                                                 <label className="text-xs font-medium text-text-secondary block">Speech Provider</label>
+                                                {isMeetingActive && (
+                                                    <p className="text-[11px] text-amber-400/80 flex items-center gap-1.5">
+                                                        <AlertCircle size={12} />
+                                                        Provider selection is locked during an active interview.
+                                                    </p>
+                                                )}
                                                 <div className="relative">
                                                     <ProviderSelect
                                                         value={sttProvider}
                                                         onChange={(val) => handleSttProviderChange(val as any)}
+                                                        disabled={isMeetingActive}
                                                         options={[
-                                                            { id: 'google', label: 'Google Cloud', badge: googleServiceAccountPath ? 'Saved' : null, recommended: true, desc: 'gRPC streaming via Service Account', color: 'blue', icon: <Mic size={14} /> },
-                                                            { id: 'groq', label: 'Groq Whisper', badge: hasStoredSttGroqKey ? 'Saved' : null, recommended: true, desc: 'Ultra-fast REST transcription', color: 'orange', icon: <Mic size={14} /> },
-                                                            { id: 'openai', label: 'OpenAI Whisper', badge: hasStoredSttOpenaiKey ? 'Saved' : null, desc: 'OpenAI-compatible Whisper API', color: 'green', icon: <Mic size={14} /> },
-                                                            { id: 'deepgram', label: 'Deepgram Nova-3', badge: hasStoredDeepgramKey ? 'Saved' : null, recommended: true, desc: 'High-accuracy REST transcription', color: 'purple', icon: <Mic size={14} /> },
-                                                            { id: 'elevenlabs', label: 'ElevenLabs Scribe', badge: hasStoredElevenLabsKey ? 'Saved' : null, desc: 'Scribe v2 Realtime API', color: 'teal', icon: <Mic size={14} /> },
-                                                            { id: 'azure', label: 'Azure Speech', badge: hasStoredAzureKey ? 'Saved' : null, desc: 'Microsoft Cognitive Services STT', color: 'cyan', icon: <Mic size={14} /> },
-                                                            { id: 'ibmwatson', label: 'IBM Watson', badge: hasStoredIbmWatsonKey ? 'Saved' : null, desc: 'IBM Watson cloud STT service', color: 'indigo', icon: <Mic size={14} /> },
-                                                            { id: 'soniox', label: 'Soniox', badge: hasStoredSonioxKey ? 'Saved' : null, recommended: true, desc: '60+ languages, multilingual, domain context', color: 'cyan', icon: <Mic size={14} /> },
-                                                            { id: 'local-whisper', label: 'Local Whisper', badge: null, desc: 'Privacy-first: runs 100% on your device', color: 'green', icon: <Cpu size={14} /> },
+                                                            { id: 'local-whisper', label: 'Moonshine Base', badge: null, desc: 'Privacy-first: runs locally on your device', color: 'green', icon: <Cpu size={14} /> },
+                                                            { id: 'google', label: 'Google Cloud Speech-to-Text', badge: googleServiceAccountPath ? 'Saved' : null, desc: 'gRPC streaming via Service Account', color: 'blue', icon: <Mic size={14} /> },
                                                         ]}
                                                     />
                                                 </div>
                                             </div>
-
-                                            {/* Groq Model Selector */}
-                                            {sttProvider === 'groq' && (
-                                                <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
-                                                    <label className="text-xs font-medium text-text-secondary mb-2.5 block">Whisper Model</label>
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        {[
-                                                            { id: 'whisper-large-v3-turbo', label: 'V3 Turbo', desc: 'Fastest' },
-                                                            { id: 'whisper-large-v3', label: 'V3', desc: 'Most Accurate' },
-                                                        ].map((m) => (
-                                                            <button
-                                                                key={m.id}
-                                                                onClick={async () => {
-                                                                    setGroqSttModel(m.id);
-                                                                    try {
-                                                                        // @ts-ignore
-                                                                        await window.electronAPI?.setGroqSttModel?.(m.id);
-                                                                    } catch (e) {
-                                                                        console.error('Failed to set Groq model:', e);
-                                                                    }
-                                                                }}
-                                                                className={`rounded-lg px-3 py-2.5 text-left transition-all duration-200 ease-in-out active:scale-[0.98] ${groqSttModel === m.id
-                                                                    ? 'bg-accent-primary text-white shadow-md'
-                                                                    : 'bg-bg-input hover:bg-bg-elevated text-text-primary'
-                                                                    }`}
-                                                            >
-                                                                <span className="text-sm font-medium block">{m.label}</span>
-                                                                <span className={`text-[11px] transition-colors ${groqSttModel === m.id ? 'text-white/70' : 'text-text-tertiary'
-                                                                    }`}>{m.desc}</span>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
 
                                             {/* Google Cloud Service Account */}
                                             {sttProvider === 'google' && (
@@ -2390,7 +2362,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                     setGoogleServiceAccountPath(result.path);
                                                                 }
                                                             }}
-                                                            className="px-3 py-2 bg-bg-input hover:bg-bg-elevated border border-border-subtle rounded-lg text-xs font-medium text-text-primary transition-colors flex items-center gap-2"
+                                                            disabled={isMeetingActive}
+                                                            className="px-3 py-2 bg-bg-input hover:bg-bg-elevated border border-border-subtle rounded-lg text-xs font-medium text-text-primary transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                                         >
                                                             <Upload size={14} /> Select File
                                                         </button>
@@ -2398,201 +2371,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     <p className="text-[10px] text-text-tertiary mt-2">
                                                         Required for Google Cloud Speech-to-Text.
                                                     </p>
-                                                </div>
-                                            )}
-
-                                            {/* API Key Input (non-Google providers) */}
-                                            {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'none' && (
-                                                <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
-                                                    <label className="text-xs font-medium text-text-secondary block">
-                                                        {sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : 'Deepgram'} API Key
-                                                    </label>
-                                                    {sttProvider === 'openai' && (
-                                                        <p className="text-[10px] text-text-tertiary mb-1.5">
-                                                            This key is separate from your main AI Provider key.
-                                                        </p>
-                                                    )}
-                                                    <div className="flex gap-2">
-                                                        <input
-                                                            type="password"
-                                                            value={
-                                                                sttProvider === 'groq' ? sttGroqKey
-                                                                    : sttProvider === 'openai' ? sttOpenaiKey
-                                                                        : sttProvider === 'elevenlabs' ? sttElevenLabsKey
-                                                                            : sttProvider === 'azure' ? sttAzureKey
-                                                                                : sttProvider === 'ibmwatson' ? sttIbmKey
-                                                                                    : sttProvider === 'soniox' ? sttSonioxKey
-                                                                                        : sttDeepgramKey
-                                                            }
-                                                            onChange={(e) => {
-                                                                if (sttProvider === 'groq') setSttGroqKey(e.target.value);
-                                                                else if (sttProvider === 'openai') setSttOpenaiKey(e.target.value);
-                                                                else if (sttProvider === 'elevenlabs') setSttElevenLabsKey(e.target.value);
-                                                                else if (sttProvider === 'azure') setSttAzureKey(e.target.value);
-                                                                else if (sttProvider === 'ibmwatson') setSttIbmKey(e.target.value);
-                                                                else if (sttProvider === 'soniox') setSttSonioxKey(e.target.value);
-                                                                else setSttDeepgramKey(e.target.value);
-                                                            }}
-                                                            placeholder={
-                                                                sttProvider === 'groq'
-                                                                    ? (hasStoredSttGroqKey ? '••••••••••••' : 'Enter Groq API key')
-                                                                    : sttProvider === 'openai'
-                                                                        ? (hasStoredSttOpenaiKey ? '••••••••••••' : 'Enter OpenAI STT API key')
-                                                                        : sttProvider === 'elevenlabs'
-                                                                            ? (hasStoredElevenLabsKey ? '••••••••••••' : 'Enter ElevenLabs API key')
-                                                                            : sttProvider === 'azure'
-                                                                                ? (hasStoredAzureKey ? '••••••••••••' : 'Enter Azure API key')
-                                                                                : sttProvider === 'ibmwatson'
-                                                                                    ? (hasStoredIbmWatsonKey ? '••••••••••••' : 'Enter IBM Watson API key')
-                                                                                    : sttProvider === 'soniox'
-                                                                                        ? (hasStoredSonioxKey ? '••••••••••••' : 'Enter Soniox API key')
-                                                                                        : (hasStoredDeepgramKey ? '••••••••••••' : 'Enter Deepgram API key')
-                                                            }
-                                                            className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
-                                                        />
-                                                        <button
-                                                            onClick={() => {
-                                                                const keyMap: Record<string, string> = {
-                                                                    groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
-                                                                    elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
-                                                                    soniox: sttSonioxKey,
-                                                                };
-                                                                handleSttKeySubmit(sttProvider as any, keyMap[sttProvider] || '');
-                                                            }}
-                                                            disabled={sttSaving || !(() => {
-                                                                const keyMap: Record<string, string> = {
-                                                                    groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
-                                                                    elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
-                                                                    soniox: sttSonioxKey,
-                                                                };
-                                                                return (keyMap[sttProvider] || '').trim();
-                                                            })()}
-                                                            className={`px-5 py-2.5 rounded-lg text-xs font-medium transition-colors ${sttSaved
-                                                                ? 'bg-green-500/20 text-green-400'
-                                                                : 'bg-bg-input hover:bg-bg-input/80 border border-border-subtle text-text-primary disabled:opacity-50'
-                                                                }`}
-                                                        >
-                                                            {sttSaving ? 'Saving...' : sttSaved ? 'Saved!' : 'Save'}
-                                                        </button>
-                                                        {(() => {
-                                                            const hasKeyMap: Record<string, boolean> = {
-                                                                groq: hasStoredSttGroqKey,
-                                                                openai: hasStoredSttOpenaiKey,
-                                                                deepgram: hasStoredDeepgramKey,
-                                                                elevenlabs: hasStoredElevenLabsKey,
-                                                                azure: hasStoredAzureKey,
-                                                                ibmwatson: hasStoredIbmWatsonKey,
-                                                                soniox: hasStoredSonioxKey,
-                                                            };
-                                                            return hasKeyMap[sttProvider] ? (
-                                                                <button
-                                                                    onClick={() => handleRemoveSttKey(sttProvider as any)}
-                                                                    className="px-2.5 py-2.5 rounded-lg text-xs font-medium text-text-tertiary hover:text-red-500 hover:bg-red-500/10 transition-all"
-                                                                    title="Remove API Key"
-                                                                >
-                                                                    <Trash2 size={16} strokeWidth={1.5} />
-                                                                </button>
-                                                            ) : null;
-                                                        })()}
-                                                    </div>
-
-                                                    {/* Azure Region Input */}
-                                                    {sttProvider === 'azure' && (
-                                                        <div className="space-y-1.5">
-                                                            <label className="text-xs font-medium text-text-secondary block">Region</label>
-                                                            <div className="flex gap-2">
-                                                                <input
-                                                                    type="text"
-                                                                    value={sttAzureRegion}
-                                                                    onChange={(e) => setSttAzureRegion(e.target.value)}
-                                                                    placeholder="e.g. eastus"
-                                                                    className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
-                                                                />
-                                                                <button
-                                                                    onClick={async () => {
-                                                                        if (!sttAzureRegion.trim()) return;
-                                                                        // @ts-ignore
-                                                                        await window.electronAPI?.setAzureRegion?.(sttAzureRegion.trim());
-                                                                        setSttSaved(true);
-                                                                        setTimeout(() => setSttSaved(false), 2000);
-                                                                    }}
-                                                                    disabled={!sttAzureRegion.trim()}
-                                                                    className="px-5 py-2.5 rounded-lg text-xs font-medium bg-bg-input hover:bg-bg-input/80 border border-border-subtle text-text-primary disabled:opacity-50 transition-colors"
-                                                                >
-                                                                    Save
-                                                                </button>
-                                                            </div>
-                                                            <p className="text-[10px] text-text-tertiary">e.g. eastus, westeurope, westus2</p>
-                                                        </div>
-                                                    )}
-
-                                                    {/* OpenAI Custom Base URL — for self-hosted OpenAI-compatible servers (e.g. Speaches).
-                                                        When set, the WebSocket Realtime path is skipped and REST is used against the custom host. */}
-                                                    {sttProvider === 'openai' && (
-                                                        <div className="space-y-1.5">
-                                                            <label className="text-xs font-medium text-text-secondary block">Custom Base URL <span className="text-text-tertiary">(optional)</span></label>
-                                                            <div className="flex gap-2">
-                                                                <input
-                                                                    type="text"
-                                                                    value={sttOpenaiBaseUrl}
-                                                                    onChange={(e) => setSttOpenaiBaseUrl(e.target.value)}
-                                                                    placeholder="https://api.openai.com (default)"
-                                                                    className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
-                                                                />
-                                                                <button
-                                                                    onClick={async () => {
-                                                                        // @ts-ignore
-                                                                        await window.electronAPI?.setOpenAiSttBaseUrl?.(sttOpenaiBaseUrl.trim());
-                                                                        setSttSaved(true);
-                                                                        setTimeout(() => setSttSaved(false), 2000);
-                                                                    }}
-                                                                    className="px-5 py-2.5 rounded-lg text-xs font-medium bg-bg-input hover:bg-bg-input/80 border border-border-subtle text-text-primary transition-colors"
-                                                                >
-                                                                    Save
-                                                                </button>
-                                                            </div>
-                                                            <p className="text-[10px] text-text-tertiary">Point at any OpenAI-compatible server (e.g. Speaches). Custom servers use REST only — Realtime WebSocket is skipped. Leave blank for default.</p>
-                                                        </div>
-                                                    )}
-
-                                                    <div className="flex items-center gap-3">
-                                                        <button
-                                                            onClick={handleTestSttConnection}
-                                                            disabled={sttTestStatus === 'testing'}
-                                                            className="text-xs bg-bg-input hover:bg-bg-elevated text-text-primary px-3 py-1.5 rounded-md transition-colors flex items-center gap-2 disabled:opacity-50"
-                                                        >
-                                                            {sttTestStatus === 'testing' ? (
-                                                                <><RefreshCw size={12} className="animate-spin" /> Testing...</>
-                                                            ) : sttTestStatus === 'success' ? (
-                                                                <><Check size={12} className="text-green-500" /> Connected</>
-                                                            ) : (
-                                                                <>Test Connection</>
-                                                            )}
-                                                        </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                const urls: Record<string, string> = {
-                                                                    groq: 'https://console.groq.com/keys',
-                                                                    openai: 'https://platform.openai.com/api-keys',
-                                                                    deepgram: 'https://console.deepgram.com',
-                                                                    elevenlabs: 'https://elevenlabs.io/app/settings/api-keys',
-                                                                    azure: 'https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeech',
-                                                                    ibmwatson: 'https://cloud.ibm.com/catalog/services/speech-to-text'
-                                                                };
-                                                                if (urls[sttProvider]) {
-                                                                    // @ts-ignore
-                                                                    window.electronAPI?.openExternal(urls[sttProvider]);
-                                                                }
-                                                            }}
-                                                            className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors ml-1"
-                                                            title="Get API Key"
-                                                        >
-                                                            <ExternalLink size={12} />
-                                                        </button>
-                                                        {sttTestStatus === 'error' && (
-                                                            <span className="text-xs text-red-400">{sttTestError}</span>
-                                                        )}
-                                                    </div>
                                                 </div>
                                             )}
 
@@ -2644,7 +2422,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             </div>
                                         </div>
                                     </div>
-                                    )}
 
                                     <div className="h-px bg-border-subtle" />
 

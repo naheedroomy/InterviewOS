@@ -178,7 +178,7 @@ export interface ElectronAPI {
   setAnswerCueApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   getAnswerCuePricing: () => Promise<{ ok: boolean; currency?: string; fetchedAt?: string; stale?: boolean; products?: Record<string, { id: string; dodoProductId: string; name: string; amount: number | null; currency: string; formattedPrice: string | null; interval: 'month' | 'year' | 'lifetime'; checkoutUrl: string; coupon: { code: string; eligible: boolean; discountPercent: number; reason?: string } }>; error?: string; status?: number }>
   getAnswerCueUsage: () => Promise<{ ok: boolean; error?: string; plan?: string; quota?: { transcription: { used: number; limit: number; remaining: number }; ai: { used: number; limit: number; remaining: number }; search: { used: number; limit: number; remaining: number }; resets_at: string }; member_since?: string }>
-  getStoredCredentials: () => Promise<{ hasAnswerCueKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
+  getStoredCredentials: () => Promise<{ hasAnswerCueKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; googleServiceAccountPath: string | null; sttProvider: 'local-whisper' | 'google'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
   // Permissions
   checkPermissions:     () => Promise<{ microphone: 'granted'|'denied'|'not-determined'|'restricted'; screen: 'granted'|'denied'|'not-determined'|'restricted'; accessibility?: 'granted'|'denied'|'not-determined'|'restricted'; platform: string }>
   requestMicPermission: () => Promise<boolean>
@@ -192,9 +192,9 @@ export interface ElectronAPI {
   wipeTrialProfileData: () => Promise<{ success: boolean; error?: string }>
   onTrialEnded:   (cb: (data: { choice: string }) => void) => () => void
 
-  // STT Provider Management
-  setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper') => Promise<{ success: boolean; error?: string }>
-  getSttProvider: () => Promise<string>
+  // STT Provider Management — canonical values only
+  setSttProvider: (provider: 'local-whisper' | 'google') => Promise<{ success: boolean; error?: string }>
+  getSttProvider: () => Promise<'local-whisper' | 'google'>
   localWhisperGetModels: () => Promise<{ models: Array<{ id: string; name: string; sizeMb: number; status: 'available' | 'missing' | 'downloading' | 'error'; errorMessage?: string }>; activeModelId: string }>
   localWhisperSetModel: (modelId: string) => Promise<{ success: boolean; error?: string }>
   localWhisperDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>
@@ -550,6 +550,9 @@ export interface ElectronAPI {
   // Arch
   getArch: () => Promise<string>;
   getOsVersion: () => Promise<string>;
+
+  // File System
+  fileExists: (filePath: string) => Promise<boolean>;
 
   // Cropper API
   cropperConfirmed: (bounds: { x: number; y: number; width: number; height: number }) => void;

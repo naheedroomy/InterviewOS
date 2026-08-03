@@ -9,13 +9,25 @@ const repoRoot = path.resolve(__dirname, '../../..');
 const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
 const importDist = rel => import(pathToFileURL(path.join(repoRoot, 'dist-electron/electron', rel)).href);
 
-test('standard cloud model list exposes the API-valid GPT 5.5 Instant and Gemini 3.5 Flash IDs', () => {
+test('standard cloud model list retains OpenAI/Claude/Groq/DeepSeek allowlists; Gemini uses empty dynamic arrays', () => {
   const src = read('src/utils/modelUtils.ts');
 
+  // Non-Gemini providers keep their allowlists
   assert.match(src, /ids:\s*\['chat-latest', 'gpt-5\.5', 'gpt-5\.5-thinking-low', 'gpt-5\.4'\]/);
   assert.match(src, /names:\s*\['GPT 5\.5 Instant', 'GPT 5\.5', 'GPT 5\.5 Thinking', 'GPT 5\.4'\]/);
-  assert.match(src, /ids:\s*\['gemini-3.5-flash', 'gemini-3\.1-flash-lite-preview', 'gemini-3\.1-pro-preview'\]/);
-  assert.match(src, /names:\s*\['Gemini 3\.5 Flash', 'Gemini 3\.1 Flash', 'Gemini 3\.1 Pro'\]/);
+
+  // Gemini ids/names/descs are empty — dynamic discovery has replaced the hardcoded list
+  const geminiBlock = src.match(/gemini:\s*\{[^}]*\}/s);
+  assert.ok(geminiBlock, 'Gemini config block must exist');
+  assert.ok(geminiBlock[0].includes('ids: []'), 'Gemini ids must be empty');
+  assert.ok(geminiBlock[0].includes('names: []'), 'Gemini names must be empty');
+  assert.ok(geminiBlock[0].includes('descs: []'), 'Gemini descs must be empty');
+  // The three old curated IDs must NOT appear in modelUtils
+  assert.ok(!geminiBlock[0].includes('gemini-3.5-flash'), 'gemini-3.5-flash must NOT be in modelUtils');
+
+  // isAllowedStandardCloudModel accepts arbitrary Gemini model IDs
+  assert.ok(src.includes("provider === 'gemini'") && src.includes('!!modelId'),
+    'isAllowedStandardCloudModel must short-circuit true for Gemini');
 });
 
 test('OpenAI and Gemini defaults stay aligned across runtime constants and connection tests', () => {

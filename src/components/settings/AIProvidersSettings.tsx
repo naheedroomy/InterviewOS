@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { isAllowedStandardCloudModel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { ProviderCard } from './ProviderCard';
@@ -47,6 +47,9 @@ const PROVIDER_KEY_URLS: Record<ProviderId, string> = {
     gemini: 'https://aistudio.google.com/app/apikey',
     claude: 'https://console.anthropic.com/settings/keys',
 };
+
+const isGeminiModelId = (modelId?: string): boolean =>
+    Boolean(modelId && (modelId.startsWith('models/') || modelId.startsWith('gemini-')));
 
 const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, placeholder = 'Select model', className = '' }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -121,6 +124,65 @@ export const AIProvidersSettings: React.FC = () => {
     const [testError, setTestError] = useState<Record<string, string>>({});
     const [providerDataScopes, setProviderDataScopes] = useState<ProviderDataScopes>({});
 
+    // ── Gemini dynamic discovery (auto-fetched, shared with ProviderCard) ─────
+    const [geminiDiscoveredModels, setGeminiDiscoveredModels] = useState<ModelOption[]>([]);
+    const [geminiDiscoveryLoading, setGeminiDiscoveryLoading] = useState(false);
+    const [geminiDiscoverySettled, setGeminiDiscoverySettled] = useState(false);
+    const geminiDiscoveryGenerationRef = useRef(0);
+
+    /** Shared callback: models fetched/refreshed from any source update this cache. */
+    const handleGeminiModelsFetched = useCallback((models: { id: string; label: string }[]) => {
+        geminiDiscoveryGenerationRef.current += 1;
+        const mapped: ModelOption[] = models.map(m => ({ id: m.id, name: m.label }));
+        setGeminiDiscoveredModels(mapped);
+        setGeminiDiscoveryLoading(false);
+        setGeminiDiscoverySettled(true);
+    }, []);
+
+    /** Auto-discover Gemini models once after credentials load when a key is stored. */
+    useEffect(() => {
+        if (!credentialsLoaded || !hasStoredKey.gemini || geminiDiscoverySettled) return;
+
+        const discover = async () => {
+            const generation = ++geminiDiscoveryGenerationRef.current;
+            setGeminiDiscoveryLoading(true);
+            try {
+                // Empty string → IPC resolves the stored Gemini key
+                const result = await window.electronAPI?.fetchProviderModels('gemini', '');
+                if (generation !== geminiDiscoveryGenerationRef.current) return;
+                if (result?.success && result.models) {
+                    const mapped: ModelOption[] = result.models.map((m: any) => ({ id: m.id, name: m.label }));
+                    setGeminiDiscoveredModels(mapped);
+
+                    // Reconcile the saved Gemini-preferred model if stale
+                    const currentPreferred = preferredModels.gemini;
+                    if (mapped.length > 0 && !mapped.some(m => m.id === currentPreferred)) {
+                        const firstId = mapped[0].id;
+                        console.warn(
+                            `[AIProvidersSettings] Saved Gemini preferred model "${currentPreferred || '(none)'}" ` +
+                            `no longer available. Auto-selecting first discovered: "${firstId}".`
+                        );
+                        setPreferredModels(prev => ({ ...prev, gemini: firstId }));
+                        window.electronAPI?.setProviderPreferredModel?.('gemini', firstId);
+                    }
+                }
+                // Successful empty list: do not reconcile, do not overwrite default
+            } catch (e) {
+                if (generation !== geminiDiscoveryGenerationRef.current) return;
+                console.error('Gemini auto-discovery failed:', e);
+                // Fetch failure — no action; ProviderCard manual fetch can retry
+            } finally {
+                if (generation === geminiDiscoveryGenerationRef.current) {
+                    setGeminiDiscoveryLoading(false);
+                    setGeminiDiscoverySettled(true);
+                }
+            }
+        };
+        discover();
+        // Intentionally run only once per credentials-load cycle; settled flag prevents re-runs
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [credentialsLoaded, hasStoredKey.gemini]);
+
     useEffect(() => {
         const loadCredentials = async () => {
             try {
@@ -168,27 +230,61 @@ export const AIProvidersSettings: React.FC = () => {
             const config = STANDARD_CLOUD_MODELS[provider];
             if (!config || !hasStoredKey[provider]) continue;
 
-            config.ids.forEach((id, index) => {
-                options.push({ id, name: config.names[index] || prettifyModelId(id) });
-            });
+            if (provider === 'gemini') {
+                // Gemini uses dynamically discovered models (cached from ProviderCard fetch).
+                for (const m of geminiDiscoveredModels) {
+                    if (!options.some(o => o.id === m.id)) {
+                        options.push(m);
+                    }
+                }
+            } else {
+                // Other providers use their hardcoded allowlist.
+                config.ids.forEach((id, index) => {
+                    options.push({ id, name: config.names[index] || prettifyModelId(id) });
+                });
+            }
 
             const preferredModel = preferredModels[provider];
-            if (preferredModel && !config.ids.includes(preferredModel) && isAllowedStandardCloudModel(provider, preferredModel)) {
+            if (provider !== 'gemini' && preferredModel && !config.ids.includes(preferredModel) && isAllowedStandardCloudModel(provider, preferredModel)) {
                 options.push({ id: preferredModel, name: prettifyModelId(preferredModel) });
             }
         }
 
         return options;
-    }, [hasStoredKey, preferredModels]);
+    }, [hasStoredKey, preferredModels, geminiDiscoveredModels]);
 
     useEffect(() => {
-        if (!credentialsLoaded || defaultModelOptions.length === 0) return;
+        // Wait for credentials and Gemini discovery (if a Gemini key is stored) to settle
+        // before reconciling a stale default model.
+        if (!credentialsLoaded) return;
+        if (hasStoredKey.gemini && !geminiDiscoverySettled) return;
+
+        if (hasStoredKey.gemini && isGeminiModelId(defaultModel)) {
+            if (geminiDiscoveredModels.length === 0) return;
+            if (geminiDiscoveredModels.some(option => option.id === defaultModel)) return;
+
+            const nextModel = geminiDiscoveredModels[0].id;
+            console.warn(
+                `[AIProvidersSettings] Saved default model "${defaultModel}" no longer available in Gemini. ` +
+                `Auto-selecting first discovered Gemini: "${nextModel}".`
+            );
+            setDefaultModel(nextModel);
+            window.electronAPI?.setDefaultModel?.(nextModel).catch(console.error);
+            return;
+        }
+
+        if (defaultModelOptions.length === 0) return;
         if (defaultModel && defaultModelOptions.some(option => option.id === defaultModel)) return;
 
+        const oldModel = defaultModel || '(none)';
         const nextModel = defaultModelOptions[0].id;
+        console.warn(
+            `[AIProvidersSettings] Saved default model "${oldModel}" no longer available. ` +
+            `Auto-selecting first available: "${nextModel}".`
+        );
         setDefaultModel(nextModel);
         window.electronAPI?.setDefaultModel?.(nextModel).catch(console.error);
-    }, [credentialsLoaded, defaultModel, defaultModelOptions]);
+    }, [credentialsLoaded, defaultModel, defaultModelOptions, hasStoredKey, geminiDiscoverySettled, geminiDiscoveredModels]);
 
     const setProviderKey = (provider: ProviderId, value: string) => {
         setApiKeys(prev => ({ ...prev, [provider]: value }));
@@ -206,6 +302,11 @@ export const AIProvidersSettings: React.FC = () => {
             if (provider === 'claude') result = await window.electronAPI?.setClaudeApiKey?.(key);
 
             if (result?.success) {
+                if (provider === 'gemini') {
+                    geminiDiscoveryGenerationRef.current += 1;
+                    setGeminiDiscoveredModels([]);
+                    setGeminiDiscoverySettled(false);
+                }
                 setSavedStatus(prev => ({ ...prev, [provider]: true }));
                 setHasStoredKey(prev => ({ ...prev, [provider]: true }));
                 setProviderKey(provider, '');
@@ -228,6 +329,12 @@ export const AIProvidersSettings: React.FC = () => {
             if (provider === 'claude') result = await window.electronAPI?.setClaudeApiKey?.('');
 
             if (result?.success) {
+                if (provider === 'gemini') {
+                    geminiDiscoveryGenerationRef.current += 1;
+                    setGeminiDiscoveredModels([]);
+                    setGeminiDiscoveryLoading(false);
+                    setGeminiDiscoverySettled(false);
+                }
                 setHasStoredKey(prev => ({ ...prev, [provider]: false }));
                 setProviderKey(provider, '');
             }
@@ -319,6 +426,8 @@ export const AIProvidersSettings: React.FC = () => {
                             keyPlaceholder={PROVIDER_KEY_PLACEHOLDERS[provider]}
                             keyUrl={PROVIDER_KEY_URLS[provider]}
                             onPreferredModelChange={(model) => handlePreferredModelChange(provider, model)}
+                            onModelsFetched={provider === 'gemini' ? handleGeminiModelsFetched : undefined}
+                            externalModels={provider === 'gemini' ? geminiDiscoveredModels.map(m => ({ id: m.id, label: m.name })) : undefined}
                         />
                     ))}
                 </div>

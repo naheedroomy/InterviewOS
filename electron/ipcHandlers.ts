@@ -1166,6 +1166,22 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  /**
+   * fileExists — check whether a file (not a directory) exists at the given path.
+   * Fail-closed: returns false for any error, missing file, empty path, or
+   * relative path. Never throws into the renderer.
+   */
+  safeHandle('file-exists', async (_, filePath: string) => {
+    try {
+      if (typeof filePath !== 'string' || !filePath.trim()) return false;
+      if (!path.isAbsolute(filePath)) return false;
+      const stat = fs.statSync(filePath);
+      return stat.isFile();
+    } catch {
+      return false;
+    }
+  });
+
   // Fire-and-forget: renderer forwards its console output to the main-process log file.
   // Only written when verbose logging is enabled. Hardened against log injection
   // (CWE-117) and rotation thrash by validating types, capping length, stripping
@@ -2070,7 +2086,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasDeepseekKey: hasKey(creds.deepseekApiKey),
         hasAnswerCueKey: hasKey(creds.nativelyApiKey),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
-        sttProvider: 'local-whisper',
+        sttProvider: CredentialsManager.getInstance().getSttProvider(),
         groqSttModel: creds.groqSttModel || 'whisper-large-v3-turbo',
         hasSttGroqKey: hasKey(creds.groqSttApiKey),
         hasSttOpenaiKey: hasKey(creds.openAiSttApiKey),
@@ -2110,7 +2126,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasDeepseekKey: false,
         hasAnswerCueKey: false,
         googleServiceAccountPath: null,
-        sttProvider: 'local-whisper',
+        sttProvider: 'local-whisper' as const,
         groqSttModel: 'whisper-large-v3-turbo',
         hasSttGroqKey: false,
         hasSttOpenaiKey: false,
@@ -2189,22 +2205,35 @@ export function initializeIpcHandlers(appState: AppState): void {
     'set-stt-provider',
     async (
       _,
-      provider:
-        | 'none'
-        | 'google'
-        | 'groq'
-        | 'openai'
-        | 'deepgram'
-        | 'elevenlabs'
-        | 'azure'
-        | 'ibmwatson'
-        | 'soniox'
-        | 'local-whisper'
-        | 'natively',
+      provider: 'local-whisper' | 'google',
     ) => {
       try {
+        // Runtime guard against unexpected values from the renderer.
+        if (provider !== 'local-whisper' && provider !== 'google') {
+          console.warn(`[IPC] set-stt-provider: invalid provider "${provider}" rejected.`);
+          return { success: false, error: 'Invalid STT provider. Must be "local-whisper" or "google".' };
+        }
+        // Reject changes while a meeting is active to prevent audio pipeline disruption.
+        if (appState.getIsMeetingActive()) {
+          console.warn('[IPC] set-stt-provider: rejected — meeting is active.');
+          return { success: false, error: 'Cannot change STT provider while a meeting is active' };
+        }
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setSttProvider(provider);
+
+        if (provider === 'local-whisper') {
+          try {
+            const { DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID, isModelCached } = require('./audio/whisper/modelManager');
+            const { modelPreloader } = require('./audio/whisper/modelPreloader');
+            const { resolveInferenceConfig } = require('./audio/whisper/inferenceConfig');
+            const { dtype } = resolveInferenceConfig();
+            if (isModelCached(DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID, dtype)) {
+              modelPreloader.preload(DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID);
+            }
+          } catch (error) {
+            console.warn('[IPC] Local Moonshine preload after provider selection failed:', error);
+          }
+        }
 
         // Reconfigure the audio pipeline to use the new STT provider
         await appState.reconfigureSttProvider();
@@ -2227,7 +2256,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { CredentialsManager } = require('./services/CredentialsManager');
       return CredentialsManager.getInstance().getSttProvider();
     } catch (error: any) {
-      return 'none';
+      return 'local-whisper';
     }
   });
 
@@ -3974,6 +4003,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Persist the path for future sessions
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setGoogleServiceAccountPath(filePath);
+
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
+      });
 
       return { success: true, path: filePath };
     } catch (error: any) {

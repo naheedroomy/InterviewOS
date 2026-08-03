@@ -418,7 +418,7 @@ import { warmupIntentClassifier } from "./llm"
 
 /** Unified type for all STT providers with optional extended capabilities */
 type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | AnswerCueProSTT) & {
-  finalize?: () => void;
+  finalize?: () => void | Promise<void>;
   setAudioChannelCount?: (count: number) => void;
   notifySpeechEnded?: () => void;
 };
@@ -1358,13 +1358,26 @@ export class AppState {
     const sttProvider = CredentialsManager.getInstance().getSttProvider();
     const sttLanguage = CredentialsManager.getInstance().getSttLanguage();
 
-    const { LocalWhisperSTT } = require('./audio/LocalWhisperSTT');
-    const { DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID } = require('./audio/whisper/modelManager');
-    console.log(`[Main] Using local Moonshine Base STT for ${speaker}, model: ${DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID}`);
-    const lws = new LocalWhisperSTT(DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID);
-    // Channel label disambiguates the two concurrent instances in latency logs.
-    lws.setChannel(speaker === 'interviewer' ? 'system' : 'mic');
-    const stt = lws as any;
+    let stt: any;
+
+    if (sttProvider === 'google') {
+      const { GoogleSTT } = require('./audio/GoogleSTT');
+      console.log(`[Main] Using GoogleSTT for ${speaker}`);
+      stt = new GoogleSTT(speaker);
+      const serviceAccountPath = CredentialsManager.getInstance().getGoogleServiceAccountPath();
+      if (serviceAccountPath) {
+        stt.setCredentials(serviceAccountPath);
+      }
+    } else {
+      // Default to local-whisper
+      const { LocalWhisperSTT } = require('./audio/LocalWhisperSTT');
+      const { DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID } = require('./audio/whisper/modelManager');
+      console.log(`[Main] Using local Moonshine Base STT for ${speaker}, model: ${DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID}`);
+      const lws = new LocalWhisperSTT(DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID);
+      // Channel label disambiguates the two concurrent instances in latency logs.
+      lws.setChannel(speaker === 'interviewer' ? 'system' : 'mic');
+      stt = lws;
+    }
 
     stt.setRecognitionLanguage(sttLanguage);
 
@@ -1465,6 +1478,7 @@ export class AppState {
       }
 
       // Immediately fatal: auth/account problems — no amount of retrying helps
+      const isPermanentGrpcError = typeof grpcCode === 'number' && [3, 7, 16].includes(grpcCode);
       const isAuthError = httpStatus === 401
         || err.message.toLowerCase().includes('auth_timeout')
         || err.message.toLowerCase().includes('invalid_key')
@@ -1474,7 +1488,7 @@ export class AppState {
       const isQuotaError = err.message.toLowerCase().includes('transcription_quota_exceeded')
         || err.message.toLowerCase().includes('quota');
 
-      if (isAuthError) {
+      if (isAuthError || isPermanentGrpcError) {
         _consecutiveErrors = 0;
         _lastState = 'failed';
         this.sendSttStatus( {
@@ -1803,6 +1817,13 @@ export class AppState {
         }
       }
 
+      // Drop byte-exact all-zero PCM chunks (TCC-denied silence, device-mute).
+      // This is the fine-grained guard — distinct from the 12s peak-to-peak
+      // detector above which flags sustained silence for user-facing banners.
+      if (chunk.every(b => b === 0)) {
+        return;
+      }
+
       this.googleSTT?.write(chunk);
     });
     capture.on('sample_rate_changed', (rate: number) => {
@@ -1922,6 +1943,13 @@ export class AppState {
             stuck: true,
           });
         }
+      }
+
+      // Drop byte-exact all-zero PCM chunks (TCC-denied silence, device-mute).
+      // This is the fine-grained guard — distinct from the 12s peak-to-peak
+      // detector above which flags sustained silence for user-facing banners.
+      if (chunk.every(b => b === 0)) {
+        return;
       }
 
       this.googleSTT_User?.write(chunk);
@@ -3113,7 +3141,7 @@ export class AppState {
   private async _startAudioTestImpl(deviceId?: string, outputDeviceId?: string): Promise<void> {
     const wantedOutputDeviceId = this.normalizeDeviceId(outputDeviceId);
     console.log(`[Main] Starting Audio Test on device: ${deviceId || 'default'}, output: ${wantedOutputDeviceId || 'default'}`);
-    this.stopAudioTest(); // Stop any existing test (also bumps _audioTestEpoch)
+    await this.stopAudioTest(); // Stop any existing test (also bumps _audioTestEpoch)
     // UX4 hardening: snapshot epoch BEFORE the system-audio probe's awaited
     // permission probe. If stopAudioTest fires while we're awaiting, the
     // post-await check below catches it and skips system-capture construction.
@@ -3122,6 +3150,17 @@ export class AppState {
 
     if (!(await ensureMacMicrophoneAccess('audio test'))) {
       throw new Error(formatPermissionMessage('mic-denied'));
+    }
+    // Handoff epoch check: if a stopAudioTest (e.g. from startMeeting) fired
+    // during the permission await above, bail before constructing a mic test
+    // capture that would compete with the meeting's own MicrophoneCapture for
+    // the same HAL handle. Without this check, the stale capture starts and
+    // then stopAudioTest (called again by the handoff in startMeeting) tears
+    // it down after the meeting init is already constructing its own capture
+    // on the same device — producing the exact zero-fill race we're fixing.
+    if (!isCurrentTest()) {
+      console.log('[Main] Audio test was stopped during microphone permission probe — aborting.');
+      return;
     }
 
     const broadcastTargets = (): BrowserWindow[] =>
@@ -3273,29 +3312,49 @@ export class AppState {
     }
   }
 
-  public stopAudioTest(): void {
+  public async stopAudioTest(): Promise<void> {
     // UX4 hardening: bump epoch so any in-flight _startAudioTestImpl that's
     // awaiting resolveMacScreenCaptureCapability sees the change and skips
     // constructing the system capture (avoids orphaned-capture race).
+    // Also serves as a generation token for _startAudioTestImpl's post-await
+    // cancellation checks.
     this._audioTestEpoch++;
-    if (this.audioTestCapture) {
+
+    // Capture-ownership handoff: save local references BEFORE nulling instance
+    // fields so no other code path can grab these wrappers while we await
+    // their async teardown. This is critical for the startMeeting() handoff:
+    // stopAudioTest runs at the top of startMeeting, and the meeting's audio
+    // init may be scheduled on the same event-loop tick — nulling synchronously
+    // prevents the meeting init from seeing stale test captures.
+    const micCapture = this.audioTestCapture;
+    const sysCapture = this.audioTestSystemCapture;
+    this.audioTestCapture = null;
+    this.audioTestSystemCapture = null;
+
+    if (micCapture) {
       console.log('[Main] Stopping Audio Test');
       // Audio tests are disposable probes. Re-warming the same mic wrapper
       // after closing the test can block the Electron main thread inside
       // CoreAudio HAL startup, freezing the UI before the user even starts a
       // meeting. Meeting captures still keep their normal pre-warm path.
-      this.audioTestCapture.disablePreWarm();
-      this.audioTestCapture.stop();
-      this.audioTestCapture = null;
-    }
-    // UX4: also stop the parallel system probe.
-    if (this.audioTestSystemCapture) {
+      micCapture.disablePreWarm();
+      // Await stop() so the native CoreAudio/cpal stream is genuinely released
+      // before a caller (like startMeeting) opens a new stream on the same
+      // device. Failure-isolated: a stuck native stop() must not propagate.
       try {
-        this.audioTestSystemCapture.stop();
+        await micCapture.stop();
+      } catch (e) {
+        console.warn('[Main] Stopping audio test mic capture threw:', e);
+      }
+    }
+
+    // UX4: also stop the parallel system probe.
+    if (sysCapture) {
+      try {
+        await sysCapture.stop();
       } catch (e) {
         console.warn('[Main] Stopping system audio test threw:', e);
       }
-      this.audioTestSystemCapture = null;
     }
   }
 
@@ -3322,6 +3381,52 @@ export class AppState {
         // teardown already logs; safe to swallow here
       }
       this._pendingTeardown = null;
+    }
+
+    const credentialsManager = CredentialsManager.getInstance();
+    if (credentialsManager.getSttProvider() === 'google') {
+      const keyPath = credentialsManager.getGoogleServiceAccountPath();
+      if (!keyPath || !path.isAbsolute(keyPath) || !fs.existsSync(keyPath) || !fs.statSync(keyPath).isFile()) {
+        const message = 'Select a valid Google service-account JSON in Settings before starting.';
+        this.broadcast('meeting-audio-error', message);
+        throw new Error(message);
+      }
+      try {
+        await GoogleSTT.validateCredentials(keyPath);
+      } catch (error: any) {
+        const message = `Google Cloud Speech-to-Text credentials failed: ${error?.message || String(error)}`;
+        this.broadcast('meeting-audio-error', message);
+        throw new Error(message);
+      }
+    }
+
+    // ─── AUDIO TEST HANDOFF (before meeting state / window swap) ──────────
+    // Stop any audio test that is still active (Settings meter or system-
+    // audio probe). The test's MicrophoneCapture holds the same Bluetooth HFP
+    // device that the meeting's microphoneCapture will open; if the test is
+    // still streaming when setupSystemAudioPipeline / reconfigureAudio creates
+    // the meeting capture, the second native stream silently degrades (cpal
+    // exclusive mode on Windows) or competes for the same HAL handle (macOS),
+    // producing zero-filled chunks in the meeting transcript while the Settings
+    // meter showed live levels.
+    //
+    // We detect whether a test was active BEFORE the await so the teardown
+    // yield is bounded — the common case (no test active) adds zero events.
+    const hadActiveTest = !!(this.audioTestCapture || this.audioTestSystemCapture);
+    if (hadActiveTest) {
+      console.log('[Main] Audio test in progress — stopping before meeting capture setup.');
+    }
+    await this.stopAudioTest();
+    // Short bounded CoreAudio quiescence delay only when a test was active.
+    // After stopAudioTest's await resolves, the native Rust worker has been
+    // signalled but may still hold the HAL device handle for one more
+    // CoreAudio cycle (~10-20ms on macOS). A 150ms pause gives the OS time
+    // to release the exclusive stream before the meeting capture opens the
+    // same device. This is non-blocking (setTimeout) and skipped when no
+    // test was running so the common startMeeting path sees zero added latency.
+    if (hadActiveTest) {
+      await new Promise(resolve => setTimeout(resolve, 150));
+      console.log('[Main] Audio test quiescence complete — proceeding with meeting capture setup.');
     }
 
     // PR #173: Reset audio recovery state for fresh session
@@ -3654,8 +3759,13 @@ export class AppState {
 
     // Tell STT to mark the audio stream as ended; trailing finals will arrive
     // over the next ~150ms while we're already returning to the renderer.
-    this.googleSTT?.finalize?.();
-    this.googleSTT_User?.finalize?.();
+    const sttDrainPromises = [this.googleSTT, this.googleSTT_User].map((provider) => {
+      try {
+        return Promise.resolve(provider?.finalize?.());
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    });
 
     // ─── BACKGROUND: STT drain + meeting save + RAG embed ────────────────
     // Note: `isMeetingActive` was already flipped to false synchronously above
@@ -3687,8 +3797,10 @@ export class AppState {
           console.error('[Main] Failed to revert model:', e);
         }
 
-        // 1. Grace window for STT trailing finals (Google/Soniox/Deepgram all
-        //    reply to finalize() within 100–200ms). 250ms is conservative.
+        // 1. Await providers that expose drain completion (Google resolves on
+        //    readable `end`, with its own bounded timeout), then retain the
+        //    existing grace window for synchronous/local providers.
+        await Promise.allSettled(sttDrainPromises);
         await new Promise(resolve => setTimeout(resolve, 250));
 
         // 2. Tear down STT sockets now that finals have arrived.

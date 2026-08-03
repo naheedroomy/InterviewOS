@@ -78,11 +78,29 @@ const ModelSelectorWindow = () => {
                 // Cloud Models — standard models + unique preferred models
                 for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
                     if (!cfg.hasKeyCheck(creds)) continue;
-                    cfg.ids.forEach((id, i) => {
-                        models.push({ id, name: cfg.names[i], type: 'cloud', provider: prov });
-                    });
+
+                    if (prov === 'gemini') {
+                        // Gemini: fetch dynamically — include every discovered model via the IPC.
+                        try {
+                            const geminiResult = await window.electronAPI?.fetchProviderModels('gemini', '');
+                            if (geminiResult?.success && geminiResult.models) {
+                                for (const m of geminiResult.models) {
+                                    if (!models.some(ex => ex.id === m.id)) {
+                                        models.push({ id: m.id, name: m.label || m.id, type: 'cloud', provider: 'gemini' });
+                                    }
+                                }
+                            }
+                        } catch (_geminiErr) {
+                            console.warn('Failed to fetch Gemini models for overlay selector');
+                        }
+                    } else {
+                        cfg.ids.forEach((id, i) => {
+                            models.push({ id, name: cfg.names[i], type: 'cloud', provider: prov });
+                        });
+                    }
+
                     const pm = creds?.[cfg.pmKey];
-                    if (pm && !cfg.ids.includes(pm) && isAllowedStandardCloudModel(prov, pm)) {
+                    if (prov !== 'gemini' && pm && !cfg.ids.includes(pm) && isAllowedStandardCloudModel(prov, pm)) {
                         models.push({ id: pm, name: prettifyModelId(pm), type: 'cloud', provider: prov });
                     }
                 }

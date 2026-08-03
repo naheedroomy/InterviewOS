@@ -5,6 +5,12 @@
 
 import axios from 'axios';
 
+/**
+ * Low-level HTTP GET signature injectable for pagination tests.
+ * Production uses axios.get; tests supply a mock.
+ */
+export type HttpGet = (url: string, options?: { timeout?: number }) => Promise<{ data: any }>;
+
 export interface ProviderModel {
     id: string;
     label: string;
@@ -172,40 +178,119 @@ async function fetchDeepSeekModels(apiKey: string): Promise<ProviderModel[]> {
 
 // ─── Gemini ──────────────────────────────────────────────────────────────────
 
-async function fetchGeminiModels(apiKey: string): Promise<ProviderModel[]> {
-    const response = await axios.get(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
-        {
-            timeout: 15000,
-        }
-    );
+/**
+ * Curated Gemini model IDs used exclusively when the paginated API request
+ * sequence throws/fails.  Not merged with partial results — a successful but
+ * empty fetch returns [].
+ */
+export const FALLBACK_GEMINI_MODELS: ProviderModel[] = [
+    { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+    { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite Preview' },
+    { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
+];
 
-    const models: any[] = response.data?.models || [];
+/**
+ * Pure filtering/transformation helper (no network I/O).
+ *
+ * 1. Keep only models whose supportedGenerationMethods includes 'generateContent'.
+ * 2. Preserve the exact API m.name as id, including the "models/" prefix.
+ * 3. label = m.displayName || m.name.
+ * 4. Deduplicate by exact id (first occurrence wins).
+ * 5. Stable sort: canonical id localeCompare, then label as a tie-breaker.
+ */
+export function processGeminiModels(rawModels: any[]): ProviderModel[] {
+    const seen = new Set<string>();
+    const result: ProviderModel[] = [];
 
-    // Only include Gemini 2.5+ models (gemini-2.5-*, gemini-3-*, etc.)
-    // Must support generateContent
-    const excludePatterns = ['nano', 'custom', 'computer-use', 'banana', 'tts', 'embedding', 'aqa', 'vision'];
+    for (const m of rawModels) {
+        // Gate: only chat-capable models
+        if (!m.supportedGenerationMethods?.includes('generateContent')) continue;
 
-    const filtered = models.filter((m: any) => {
-        const name = (m.name || '').toLowerCase();
-        const displayName = (m.displayName || '').toLowerCase();
-        const combined = name + ' ' + displayName;
+        const id: string = m.name || '';
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
 
-        // Must support generateContent
-        const supportsChat = m.supportedGenerationMethods?.includes('generateContent');
-        if (!supportsChat) return false;
+        result.push({ id, label: m.displayName || id });
+    }
 
-        // Must NOT match any exclude patterns
-        if (excludePatterns.some(p => combined.includes(p))) return false;
-
-        // Match gemini-2.5, gemini-3, gemini-4, etc. (version 2.5 and above)
-        return /gemini-([3-9]|2\.5)/.test(combined);
+    // Deterministic sort: id first (unique after dedup), label tie-break
+    result.sort((a, b) => {
+        const cmp = a.id.localeCompare(b.id);
+        if (cmp !== 0) return cmp;
+        return a.label.localeCompare(b.label);
     });
 
-    return filtered
-        .map((m: any) => {
-            const id = (m.name || '').replace(/^models\//, '');
-            return { id, label: m.displayName || id };
-        })
-        .sort((a, b) => a.label.localeCompare(b.label));
+    return result;
+}
+
+/**
+ * Paginated Gemini model fetcher — injectable HTTP GET.
+ *
+ * Pagination contract:
+ * - pageSize=100 (max allowed by the API)
+ * - encoded nextPageToken appended as &pageToken=...
+ * - Capped at 10 pages (safety stop)
+ *
+ * Successful HTTP + zero results after filtering returns an empty list.
+ * Request failures reject so the fallback wrapper can discard partial pages.
+ */
+export async function fetchGeminiModelsPaginated(
+    apiKey: string,
+    httpGet: HttpGet
+): Promise<ProviderModel[]> {
+    const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+    const MAX_PAGES = 10;
+    const PAGE_SIZE = 100;
+
+    const allModels: any[] = [];
+    let nextPageToken: string | undefined;
+    let pageCount = 0;
+
+    do {
+        const params = new URLSearchParams({ key: apiKey, pageSize: String(PAGE_SIZE) });
+        if (nextPageToken) {
+            params.set('pageToken', nextPageToken);
+        }
+        const url = `${BASE_URL}?${params.toString()}`;
+        // eslint-disable-next-line no-await-in-loop
+        const response = await httpGet(url, { timeout: 15000 });
+        const data = response?.data;
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
+            throw new Error('Gemini models endpoint returned a non-JSON response');
+        }
+        if (data.models !== undefined && !Array.isArray(data.models)) {
+            throw new Error('Gemini models endpoint returned an invalid models payload');
+        }
+        if (data.nextPageToken !== undefined && typeof data.nextPageToken !== 'string') {
+            throw new Error('Gemini models endpoint returned an invalid nextPageToken');
+        }
+
+        const pageModels: any[] = data.models || [];
+        allModels.push(...pageModels);
+
+        nextPageToken = data.nextPageToken || undefined;
+        pageCount++;
+    } while (nextPageToken && pageCount < MAX_PAGES);
+
+    return processGeminiModels(allModels);
+}
+
+/**
+ * Apply the standalone curated fallback to a failed paginated request sequence.
+ * Kept injectable so failure and partial-page behavior can be tested directly.
+ */
+export async function fetchGeminiModelsWithFallback(
+    apiKey: string,
+    httpGet: HttpGet
+): Promise<ProviderModel[]> {
+    try {
+        return await fetchGeminiModelsPaginated(apiKey, httpGet);
+    } catch (_error: any) {
+        return FALLBACK_GEMINI_MODELS;
+    }
+}
+
+/** Production entry-point for Gemini model discovery. */
+async function fetchGeminiModels(apiKey: string): Promise<ProviderModel[]> {
+    return fetchGeminiModelsWithFallback(apiKey, (url, opts) => axios.get(url, opts));
 }
