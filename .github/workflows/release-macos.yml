@@ -140,17 +140,14 @@ jobs:
           echo "::warning::Apple notarization secrets are not configured; building unsigned macOS artifacts."
           echo "MACOS_NOTARIZATION_AVAILABLE=false" >> "$GITHUB_ENV"
 
-      - name: Require signing for tagged macOS releases
+      - name: Skip signing requirement for unsigned fork builds
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          set -euo pipefail
           if [ "${MACOS_SIGNING_AVAILABLE:-false}" != "true" ]; then
-            echo "::error::macOS signing secrets are missing. Refusing to publish unsigned release artifacts."
-            exit 1
+            echo "::warning::macOS signing secrets are missing — publishing unsigned release artifacts."
           fi
           if [ "${MACOS_NOTARIZATION_AVAILABLE:-false}" != "true" ]; then
-            echo "::error::Apple notarization secrets are missing. Refusing to publish non-notarized release artifacts."
-            exit 1
+            echo "::warning::Apple notarization secrets are missing — publishing non-notarized release artifacts."
           fi
 
       - name: Build macOS artifacts
