@@ -10,9 +10,9 @@ AnswerCue is designed to keep interview data on your device by default.
 
 - Prep chat, selected document Markdown, transcripts, AI responses, post-interview chat, settings, and interview history are stored locally.
 - Uploaded documents are ingested locally into Markdown.
-- Transcription uses the packaged local Moonshine Base model.
+- Transcription uses the local Moonshine Base model by default. Google Cloud Speech-to-Text is selectable in Settings and sends interview audio to Google when selected.
 - LLM prompts are sent to the AI provider the user configures and selects: OpenAI, Google Gemini, or Anthropic Claude.
-- AnswerCue does not need a separate cloud speech provider.
+- A cloud speech provider is used only when you select Google Cloud Speech-to-Text in Settings.
 - AnswerCue does not sell user data.
 
 ## Data Stored Locally
@@ -46,13 +46,14 @@ That context can include:
 - Selected document Markdown.
 - Live transcript.
 - AI responses already generated.
+- Relevant screenshots attached to a request.
 - The current user request.
 
 Review the privacy terms of the provider you configure. AnswerCue cannot control provider-side retention or training policies.
 
 ## Transcription
 
-Speech transcription uses the packaged local Moonshine Base model. Interview audio should not be sent to a cloud speech provider through the normal current UI.
+Speech transcription uses the local Moonshine Base model by default. The model weights download during local-STT setup/preflight and are cached locally, so interview audio stays on your device on the local path. If you select Google Cloud Speech-to-Text in Settings, interview audio is streamed to Google for transcription. Review Google's privacy terms for the speech service you configure; AnswerCue cannot control provider-side retention or training policies.
 
 ## Documents
 

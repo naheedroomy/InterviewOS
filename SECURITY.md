@@ -60,6 +60,6 @@ The following are normally out of scope unless they expose user data or enable l
 
 ## Privacy Boundary
 
-AnswerCue should keep local data local unless the user explicitly uses a feature that sends prompt text to the selected LLM provider. The currently supported LLM provider keys are OpenAI, Google Gemini, and Anthropic Claude. Transcription uses the packaged local Moonshine Base model.
+AnswerCue should keep local data local unless the user explicitly selects a feature that sends data externally: prompt text (and any included transcripts, documents, or screenshots) to the selected LLM provider, or interview audio to the selected cloud STT provider. The currently supported LLM provider keys are OpenAI, Google Gemini, and Anthropic Claude. Transcription uses the local Moonshine Base model by default; Google Cloud Speech-to-Text is selectable in Settings and sends interview audio to Google when selected.
 
 If you find a path where transcript, document Markdown, screenshots, custom instructions, provider keys, or interview history are sent somewhere unexpected, report it as security-sensitive.

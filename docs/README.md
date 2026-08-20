@@ -1,6 +1,6 @@
 # AnswerCue Documentation
 
-AnswerCue is an open-source desktop interview assistant for preparing interview context, transcribing live interviews, generating real-time answer support, and continuing the conversation afterward with the full interview history available as context. It runs on macOS 12+ (Apple Silicon or Intel) and Windows 10/11 (Intel/AMD 64-bit), supports OpenAI, Google Gemini, and Anthropic Claude provider keys from Settings, and uses the packaged local Moonshine Base model for live transcription.
+AnswerCue is an open-source desktop interview assistant for preparing interview context, transcribing live interviews, generating real-time answer support, and continuing the conversation afterward with relevant history available as context, subject to retrieval and context limits. It runs on macOS 12+ (Apple Silicon or Intel) and Windows 10/11 (Intel/AMD 64-bit), supports OpenAI, Google Gemini, and Anthropic Claude provider keys from Settings, and uses the local Moonshine Base model for live transcription by default, with Google Cloud Speech-to-Text selectable in Settings.
 
 ## Source of truth
 
@@ -16,7 +16,7 @@ _Review date: 2026-08-20_
 
 - Electron desktop app with preflight setup, prep chat, document context, live interview, and post-interview chat.
 - LLM provider routing for OpenAI, Google Gemini, and Anthropic Claude.
-- Local transcription support through the packaged Moonshine Base model.
+- Local transcription support through the Moonshine Base model (downloaded during local-STT setup/preflight and cached locally), with Google Cloud Speech-to-Text selectable in Settings.
 - Audio capture, document ingestion, RAG/interview persistence, screenshot context, custom modes, and post-interview workflows.
 
 **Unresolved gaps:**

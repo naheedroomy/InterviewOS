@@ -6,7 +6,7 @@ This document describes the current AnswerCue system boundaries, data/control fl
 
 ## Overview
 
-AnswerCue is an Electron desktop application for preparing interview context, transcribing live interviews, generating real-time answer support, and continuing the conversation afterward with the interview history available as context (subject to context token-budget limits). It runs on macOS 12+ (Apple Silicon or Intel) and Windows 10/11 (Intel/AMD 64-bit).
+AnswerCue is an Electron desktop application for preparing interview context, transcribing live interviews, generating real-time answer support, and continuing the conversation afterward with relevant history available as context (subject to retrieval and context limits). It runs on macOS 12+ (Apple Silicon or Intel) and Windows 10/11 (Intel/AMD 64-bit).
 
 The application is split across several process and module boundaries:
 
@@ -14,7 +14,7 @@ The application is split across several process and module boundaries:
 - **Preload bridge** — a narrow, context-isolated bridge that exposes a typed `electronAPI` surface to the renderer.
 - **Renderer / Vite UI** — a React application served by Vite, rendered in the Electron window.
 - **Rust native module** — a NAPI-RS compiled binary (`native-module/`) that provides low-level audio capture, device enumeration, hardware identification, license verification, and (on macOS) stealth window/keyboard helpers.
-- **Local Moonshine STT** — a packaged local speech-to-text model (Moonshine Base) run through a worker for live transcription.
+- **Local Moonshine STT** — a local speech-to-text model (Moonshine Base) run through a worker for live transcription; model weights download during local-STT setup/preflight and are cached locally.
 - **LLM provider routing** — routes chat/vision/structured requests across configured providers with capability, scope, and health-aware selection.
 - **SQLite persistence** — a local `better-sqlite3` database storing meetings, transcripts, AI interactions, RAG chunks, embeddings, modes, and app state.
 - **Document ingestion / RAG** — ingests documents to Markdown, classifies them, and builds retrievable context.
@@ -60,7 +60,7 @@ The loader tries packaged (`app.asar.unpacked`) and development paths and return
 
 ### Local Moonshine STT
 
-`electron/audio/LocalWhisperSTT.ts` runs the packaged local Moonshine Base model through a worker (`electron/audio/whisper/`) for live transcription. The model is preloaded in the background at startup. The STT provider selection in the main process (`createSTTProvider`) chooses between the local Moonshine path and cloud Google STT based on the stored `sttProvider` setting (`local-whisper` or `google`). Additional cloud STT providers exist (`DeepgramStreamingSTT`, `OpenAIStreamingSTT`, `ElevenLabsStreamingSTT`, `SonioxStreamingSTT`, `RestSTT`, `AnswerCueProSTT`).
+`electron/audio/LocalWhisperSTT.ts` runs the local Moonshine Base model through a worker (`electron/audio/whisper/`) for live transcription. The model weights download during local-STT setup/preflight and are cached locally; the worker is preloaded in the background at startup only when local STT is selected and the model is already cached. The STT provider selection in the main process (`createSTTProvider`) chooses between the local Moonshine path and cloud Google STT based on the stored `sttProvider` setting (`local-whisper` or `google`). Additional cloud STT providers exist (`DeepgramStreamingSTT`, `OpenAIStreamingSTT`, `ElevenLabsStreamingSTT`, `SonioxStreamingSTT`, `RestSTT`, `AnswerCueProSTT`).
 
 ### LLM provider routing
 
@@ -116,7 +116,7 @@ The `premium/` module is a separate, not-always-available code path. `featureGat
 ### 1. Startup and window management
 
 1. `electron/main.ts` acquires the single-instance lock and guards the native-module ABI.
-2. On `app.whenReady()`, the app configures telemetry, initializes `CredentialsManager`, seeds modes, registers IPC handlers (`initializeIpcHandlers`), applies disguise/stealth settings, starts the Ollama lifecycle manager, pre-warms STT providers, and creates the main window via `AppState.createWindow()`.
+2. On `app.whenReady()`, the app configures telemetry, initializes `CredentialsManager`, seeds modes, registers IPC handlers (`initializeIpcHandlers`), applies disguise/stealth settings, starts the Ollama lifecycle manager, pre-warms the local STT worker when local STT is selected and the model is cached, and creates the main window via `AppState.createWindow()`.
 3. Global shortcuts, tray, sleep/resume recovery, and preloaded companion windows are set up.
 4. A second-instance launch focuses and recenters the existing window.
 

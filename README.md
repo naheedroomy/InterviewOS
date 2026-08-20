@@ -19,7 +19,7 @@
 
 Requires macOS 12+ on Apple Silicon or Intel, or Windows 10/11 on Intel/AMD 64-bit.
 
-AnswerCue is a desktop interview assistant for preparing context, transcribing live interviews, and continuing the conversation afterward with the full interview history available as context.
+AnswerCue is a desktop interview assistant for preparing context, transcribing live interviews, and continuing the conversation afterward with relevant history available as context, subject to retrieval and context limits.
 
 It is designed around one flow:
 
@@ -45,7 +45,7 @@ If your operating system warns about an unsigned or newly signed build, make sur
 
 - **Interview-first flow:** prep chat, reusable docs, live interview transcript, AI answers, and post-interview follow-up all stay in one interview timeline.
 - **Bring your own provider key:** OpenAI, Google Gemini, and Anthropic Claude are supported from Settings.
-- **Local transcription path:** Moonshine Base runs locally after setup, so live transcription does not need a cloud speech provider.
+- **Local transcription path:** Moonshine Base runs locally after setup, so live transcription works without a cloud speech provider; Google Cloud Speech-to-Text is also selectable in Settings when you prefer cloud transcription.
 - **Reusable document context:** Markdown, TXT, PDF, and DOCX files are ingested into Markdown locally and can be attached across interviews.
 - **Persistent interview memory:** prep chat, selected docs, transcript, AI responses, and post-interview chat are saved so you can reopen an interview later.
 - **Custom instructions and AI persona:** Settings includes Custom Instructions, with support for ingesting one local file, plus an AI Persona.
@@ -54,7 +54,7 @@ If your operating system warns about an unsigned or newly signed build, make sur
 
 ## Privacy
 
-AnswerCue is designed to keep interview data on your device by default: prep chat, documents, transcripts, AI responses, settings, and interview history are stored locally, and transcription uses the packaged local Moonshine Base model. When you generate an answer, relevant prompt context is sent to the AI provider you configure and select. See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) for details.
+AnswerCue is designed to keep interview data on your device by default: prep chat, documents, transcripts, AI responses, settings, and interview history are stored locally, and transcription uses the local Moonshine Base model by default (Google Cloud Speech-to-Text is selectable in Settings and sends audio to Google when selected). When you generate an answer, relevant prompt context — including transcripts, documents, or screenshots when included — is sent to the AI provider you configure and select. See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) for details.
 
 ## Documentation
 

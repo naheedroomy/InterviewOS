@@ -10,7 +10,7 @@ The following capabilities are implemented in the current codebase:
 
 - **Electron desktop app** with preflight setup, prep chat, document context, live interview, and post-interview chat.
 - **LLM provider routing** for OpenAI, Google Gemini, and Anthropic Claude (plus additional providers such as Groq, Codex CLI, DeepSeek, and Ollama).
-- **Local transcription support** through the packaged Moonshine Base model.
+- **Local transcription support** through the Moonshine Base model (downloaded during local-STT setup/preflight and cached locally), with Google Cloud Speech-to-Text selectable in Settings.
 - **Audio capture** (microphone and system audio) via the Rust native module.
 - **Document ingestion** — Markdown, TXT, PDF, and DOCX ingested to Markdown locally, with document classification (Resume / Project / Other).
 - **RAG / interview persistence** — meeting transcripts, AI interactions, RAG chunks, and embeddings persisted in SQLite.
