@@ -6,7 +6,7 @@ This document describes the current AnswerCue system boundaries, data/control fl
 
 ## Overview
 
-AnswerCue is an Electron desktop application for preparing interview context, transcribing live interviews, generating real-time answer support, and continuing the conversation afterward with the full interview history available as context. It runs on macOS 12+ (Apple Silicon or Intel) and Windows 10/11 (Intel/AMD 64-bit).
+AnswerCue is an Electron desktop application for preparing interview context, transcribing live interviews, generating real-time answer support, and continuing the conversation afterward with the interview history available as context (subject to context token-budget limits). It runs on macOS 12+ (Apple Silicon or Intel) and Windows 10/11 (Intel/AMD 64-bit).
 
 The application is split across several process and module boundaries:
 
@@ -18,7 +18,7 @@ The application is split across several process and module boundaries:
 - **LLM provider routing** — routes chat/vision/structured requests across configured providers with capability, scope, and health-aware selection.
 - **SQLite persistence** — a local `better-sqlite3` database storing meetings, transcripts, AI interactions, RAG chunks, embeddings, modes, and app state.
 - **Document ingestion / RAG** — ingests documents to Markdown, classifies them, and builds retrievable context.
-- **Screenshot / screen context** — captures screen content and analyzes it (vision-first) to provide visual evidence to the assistant.
+- **Screenshot / screen context** — captures screen content and forwards the captured image data to the provider path for vision analysis.
 - **Update and licensing services** — `electron-updater` for app updates and a premium/license layer for paid features.
 
 ## Process and module boundaries
@@ -98,7 +98,9 @@ The RAG layer (`electron/rag/`) coordinates preprocessing, chunking, embedding, 
 
 ### Screenshot / screen context
 
-`electron/ScreenshotHelper.ts` captures screen content (including multi-display stitching) and saves screenshots. `electron/services/screen/ScreenUnderstandingService.ts` analyzes screen content — vision-first, extracting text, summaries, screen type, code blocks, tables, and errors — to provide visual evidence to the assistant. Legacy OCR text is retained as an optional alias.
+`electron/ScreenshotHelper.ts` captures screen content (including multi-display stitching) and saves screenshots to disk. The capture returns an image path (and preview) to the renderer through IPC (`take-screenshot` / `take-selective-screenshot`). When an answer is generated, the attached image paths are validated and forwarded to the provider path — `LLMHelper.analyzeImageFiles` / `WhatToAnswerLLM` read the image files, base64-encode them, and inject them into the vision-capable provider request. Screenshots are attached directly to the final LLM call rather than run through a separate pre-pass.
+
+A separate screen-understanding pipeline (`electron/services/screen/ScreenUnderstandingService.ts` and related services) provides vision-first screen analysis (extracting text, summaries, screen type, code blocks, tables, and errors) for screen-understanding modes. It is not invoked in the live screenshot-to-answer path.
 
 ### Update and licensing services
 
@@ -125,18 +127,18 @@ The `premium/` module is a separate, not-always-available code path. `featureGat
 3. The transcript is assembled with context (see the prompt-context model below) and sent to the routed LLM provider for a real-time answer.
 4. The answer is streamed back to the renderer and persisted.
 
-### 3. Document → RAG context
+### 3. Document → interview context and meeting RAG
 
 1. The user uploads a supported document; `InterviewContextDocsManager` ingests it to Markdown locally and saves it to the document library.
 2. The user classifies the document as Resume, Project, or Other (Other requires a description).
-3. Selected documents and prep-chat notes form the interview preparation context for the live assistant.
+3. Selected documents and prep-chat notes form the interview preparation context for the live assistant. These prep documents are attached directly as context; they are not chunked into the meeting-transcript RAG index.
 4. Meeting transcripts are chunked (`SemanticChunker`), embedded (`EmbeddingPipeline`), stored (`VectorStore`), and retrieved (`RAGRetriever`) for post-interview questions.
 
-### 4. Screenshot capture → analysis
+### 4. Screenshot capture → provider analysis
 
-1. `ScreenshotHelper` captures screen content (with multi-display stitching) and saves screenshots.
-2. `ScreenUnderstandingService` analyzes the capture — vision-first — extracting text, summaries, screen type, code blocks, tables, and errors.
-3. The extracted screen context is delivered to `PromptAssembler` as untrusted visual evidence for the assistant.
+1. `ScreenshotHelper` captures screen content (with multi-display stitching) and saves screenshots to disk.
+2. The capture returns an image path (and preview) to the renderer through IPC.
+3. When an answer is generated, the attached image paths are validated and forwarded to the provider path, which reads the image files and injects them (base64) into the vision-capable provider request.
 
 ### 5. Persistence
 
@@ -154,18 +156,18 @@ The live interview assistant receives context assembled by `electron/services/co
 4. **Live interview transcript** — the current transcript and generated AI responses from the live interview.
 5. **User request** — the current live answer request or follow-up chat question.
 
-The prep context must be included in live interview answer generation, not only in the pre-interview chat. In the current implementation, `PromptAssembler` assembles typed blocks (intent context, interview preparation, assistant history, screen context, transcript, mode context/reference files, meeting history, custom context) and orders them by trust level, with prompt-injection and XML-escaping applied to user-controlled content.
+The prep context must be included in live interview answer generation, not only in the pre-interview chat. In the current implementation, `PromptAssembler` assembles typed blocks (intent context, interview preparation, assistant history, screen context, transcript, mode context/reference files, meeting history, custom context) and orders them by trust level. XML escaping and prompt-injection escaping are applied to selected user-controlled fields (transcript, screen context, reference files, interview preparation, assistant/meeting history, and mode custom instructions); raw custom context and retrieved mode context are included without neutralization.
 
 ## Trust boundaries
 
 - **Renderer ↔ main IPC:** The renderer is context-isolated and reaches privileged functionality only through the preload `electronAPI`. IPC handlers are registered in `electron/ipcHandlers.ts` (and related helpers) via `ipcMain.handle`/`ipcMain.on`.
 - **Native audio:** Low-level audio capture and device enumeration run in the Rust native module, loaded and validated by `nativeModuleLoader.ts`.
 - **Local storage:** SQLite persistence and ingested documents live on the local machine. The database is currently plaintext; encryption is designed but not implemented.
-- **Selected external LLM providers:** When an external provider is selected, prompts, transcripts, documents, and screenshots are sent to that provider over the network.
+- **Selected external LLM providers:** When an external provider is selected and the relevant data is included in a request, prompts, transcripts, documents, and screenshots are sent to that provider over the network.
 - **Optional cloud STT:** When a cloud STT provider is selected, audio is sent to that provider for transcription.
 - **Licensing / network calls:** License verification (Gumroad/Dodo/AnswerCue API), update checks, and anonymous install pings make network calls.
 
-> **Important:** Local STT does **not** mean prompts, transcripts, documents, or screenshots stay local when an external provider is selected. Local speech recognition keeps audio local, but any external LLM or cloud STT provider receives the data it needs to operate.
+> **Important:** Local STT does **not** mean prompts, transcripts, documents, or screenshots stay local when an external provider is selected. Local speech recognition keeps audio local, but any external LLM or cloud STT provider receives the data that is included in a request (for example, a prompt, transcript, document, or screenshot that is selected or attached).
 
 ## Implementation anchors
 
@@ -178,5 +180,5 @@ The prep context must be included in live interview answer generation, not only 
 - `electron/services/InterviewContextDocsManager.ts` — document ingestion and classification.
 - `electron/rag/` — RAG chunking, embedding, and retrieval.
 - `electron/services/context/PromptAssembler.ts` — prompt-context assembly.
-- `electron/ScreenshotHelper.ts` and `electron/services/screen/ScreenUnderstandingService.ts` — screenshot capture and analysis.
+- `electron/ScreenshotHelper.ts` — screenshot capture; `electron/LLMHelper.ts` / `electron/llm/WhatToAnswerLLM.ts` — forwarding captured image data to the provider path.
 - `electron/premium/featureGate.ts` — premium-module boundary detection.
