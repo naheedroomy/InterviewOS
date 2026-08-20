@@ -1,30 +1,27 @@
 # AnswerCue Local Transcription Setup
 
-AnswerCue uses a packaged local Moonshine Base model for transcription. The user should not need to choose a cloud speech provider or configure a separate local transcription server.
+_Review date: 2026-08-20_
 
-## Expected User Experience
+This guide covers local speech-to-text (STT) setup for AnswerCue. It is part of the [AnswerCue documentation hub](README.md); see [ARCHITECTURE.md](ARCHITECTURE.md) for the transcription pipeline and [TESTING.md](TESTING.md) for the manual transcription check.
 
-In Settings, Audio should focus on:
+AnswerCue can transcribe interviews using the local Moonshine Base model. The local model is downloaded during setup and cached in app data, so you do not need to run a separate local transcription server.
 
-- Input device.
-- Output/system audio device.
-- Audio levels or device status.
+## Prerequisites
 
-It should not expose:
+- Node.js 20+ or 22 LTS and npm.
+- Rust/Cargo for the native audio module.
+- Xcode Command Line Tools on macOS.
+- Microphone and system-audio permissions for the app (macOS: Microphone, Screen Recording, and Accessibility if prompted).
 
-- Speech-provider selection.
-- WhisperLive setup.
-- Cloud transcription keys.
-- Test-sound controls that are no longer part of the current UI.
-- SCK backend controls that were removed from the current right panel.
-
-## Local Development
+## Setup
 
 Install dependencies:
 
 ```bash
 npm install
 ```
+
+`npm install` runs postinstall steps that rebuild native dependencies and download the embedding and classification models. It does **not** package the Moonshine STT model: the local speech model downloads during local-STT preflight into app data when local STT is selected and the model is not cached.
 
 Build native audio support:
 
@@ -40,7 +37,13 @@ npm start
 
 This starts Vite on `http://localhost:5180` and launches Electron.
 
-## Manual Transcription Check
+## Supported local-model behavior
+
+- The Moonshine Base model runs locally through a worker. It is downloaded during local-STT preflight into app data when local STT is selected and the model is not cached, and it is preloaded in the background at startup when local STT is selected and the model is cached.
+- The default STT provider is the local Moonshine path (`local-whisper`). A cloud Google STT path exists and is selected only when the stored `sttProvider` setting is `google`.
+- In Settings, the Speech Provider selector exposes two options: **Moonshine Base** (local) and **Google Cloud Speech-to-Text**. When Google is selected, Settings shows a Service Account JSON picker for the Google credentials. The Audio tab also exposes the input device, the output/system audio device, and audio levels or device status.
+
+## Manual transcription check
 
 1. Open Settings.
 2. Confirm the microphone input device.
@@ -73,3 +76,7 @@ If neither side appears:
 - Confirm the interview is started.
 - Restart the app after changing permissions.
 - Rebuild the native audio module if local development audio capture is missing.
+
+## Local speech recognition vs. external LLM data transfer
+
+Local STT keeps **audio** on your device: speech is transcribed by the local Moonshine model, not sent to a cloud speech provider. If you select Google Cloud Speech-to-Text in Settings instead, interview audio is streamed to Google for transcription. Local STT does **not** mean prompts, transcripts, documents, or screenshots stay local. When an external LLM provider is selected and relevant data is included in a request, that data (for example a prompt, transcript, document, or screenshot that is selected or attached) is sent to the provider over the network. See the trust boundaries in [ARCHITECTURE.md](ARCHITECTURE.md) and the privacy policy in [PRIVACY.md](../PRIVACY.md).

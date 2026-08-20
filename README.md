@@ -19,7 +19,7 @@
 
 Requires macOS 12+ on Apple Silicon or Intel, or Windows 10/11 on Intel/AMD 64-bit.
 
-AnswerCue is a desktop interview assistant for preparing context, transcribing live interviews, and continuing the conversation afterward with the full interview history available as context.
+AnswerCue is a desktop interview assistant for preparing context, transcribing live interviews, and continuing the conversation afterward with relevant history available as context, subject to retrieval and context limits.
 
 It is designed around one flow:
 
@@ -45,46 +45,26 @@ If your operating system warns about an unsigned or newly signed build, make sur
 
 - **Interview-first flow:** prep chat, reusable docs, live interview transcript, AI answers, and post-interview follow-up all stay in one interview timeline.
 - **Bring your own provider key:** OpenAI, Google Gemini, and Anthropic Claude are supported from Settings.
-- **Local transcription path:** Moonshine Base runs locally after setup, so live transcription does not need a cloud speech provider.
+- **Local transcription path:** Moonshine Base runs locally after setup, so live transcription works without a cloud speech provider; Google Cloud Speech-to-Text is also selectable in Settings when you prefer cloud transcription.
 - **Reusable document context:** Markdown, TXT, PDF, and DOCX files are ingested into Markdown locally and can be attached across interviews.
 - **Persistent interview memory:** prep chat, selected docs, transcript, AI responses, and post-interview chat are saved so you can reopen an interview later.
+- **Custom instructions and AI persona:** Settings includes Custom Instructions, with support for ingesting one local file, plus an AI Persona.
+- **Help assistant:** a persistent help chat backed by the in-app AnswerCue Help Guide and your selected main LLM.
 - **Light and dark UI:** the desktop app follows the AnswerCue visual system with both themes available.
 
-## Current Product Shape
+## Privacy
 
-AnswerCue is focused on interview workflows, not a generic meeting dashboard.
+AnswerCue is designed to keep interview data on your device by default: prep chat, documents, transcripts, AI responses, settings, and interview history are stored locally, and transcription uses the local Moonshine Base model by default (Google Cloud Speech-to-Text is selectable in Settings and sends audio to Google when selected). When you generate an answer, relevant prompt context — including transcripts, documents, or screenshots when included — is sent to the AI provider you configure and select. See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) for details.
 
-- **Preflight setup:** first-run setup guides the user through provider keys and required permissions.
-- **Provider keys:** Settings supports the main LLM providers: OpenAI, Google Gemini, and Anthropic Claude.
-- **Local transcription:** speech transcription uses the local Moonshine Base model downloaded during setup. Users should not need to choose a speech provider.
-- **Prep chat:** before an interview starts, the user can chat with the assistant to build interview context.
-- **Document context:** users can upload Markdown, TXT, PDF, and DOCX files. Files are ingested locally into Markdown, saved for reuse, and can be attached per interview.
-- **Custom instructions:** Settings includes Custom Instructions and AI Persona. Custom Instructions can also ingest one local file.
-- **Live interview phase:** the live transcript separates interviewer speech, user speech, and AI responses.
-- **Post-interview chat:** after the interview finishes, the user can keep asking questions with prep chat, selected docs, transcript, and generated AI responses available as context.
-- **Help assistant:** a bottom help entry opens a persistent help chat backed by the in-app AnswerCue Help Guide and the user's selected main LLM.
-- **Light and dark UI:** the UI uses the current AnswerCue palette and supports theme switching.
+## Documentation
 
-## Repository
+Current architecture, status, roadmap, testing, release, and local transcription details live in the [documentation hub](docs/README.md).
 
-Main repository:
-
-```bash
-https://github.com/FarzamHejaziK/AnswerCue
-```
-
-Clone:
-
-```bash
-git clone https://github.com/FarzamHejaziK/AnswerCue.git
-cd AnswerCue
-```
-
-The original upstream project remains configured separately for future merge updates, but AnswerCue branding, documentation, and release metadata should point to this repository.
-
-## License
-
-This fork remains under the original AGPL-3.0 license. If you publish modified versions, keep the license notices and make corresponding source available as required by AGPL-3.0.
+- [Project status](docs/PROJECT_STATUS.md) — verified shipped capabilities, known gaps, and validation state.
+- [Architecture](docs/ARCHITECTURE.md) — system boundaries, core flows, and trust boundaries.
+- [Testing](docs/TESTING.md) — test commands, test layers, and manual Electron checks.
+- [Release](docs/RELEASE.md) — build, signing, and packaging checklist.
+- [Local transcription setup](docs/LOCAL_STT_ANSWERCUE_SETUP.md) — local STT setup and troubleshooting.
 
 ## Local Development
 
@@ -128,100 +108,27 @@ Run the full service test suite only when needed:
 npm test
 ```
 
-## Manual Testing
+## Repository and Git Workflow
 
-For a clean local smoke test:
-
-1. Start the app with `npm start`.
-2. Open Settings.
-3. Add one provider key: OpenAI, Google Gemini, or Anthropic Claude.
-4. Select the model in the right panel.
-5. Confirm microphone input and meeting/system audio output.
-6. Grant required operating-system permissions.
-7. Create a New Interview.
-8. Add prep context in the chat.
-9. Attach a sample document and confirm it appears in the message history.
-10. Start the interview.
-11. Confirm live transcript separates interviewer, user, and AI response messages.
-12. End the interview.
-13. Confirm the "Interview finished" boundary appears after the last transcript item.
-14. Ask a follow-up question in the post-interview chat.
-15. Reopen the interview and confirm prep chat, selected docs, transcript, and post-interview chat persist.
-
-## Audio Setup
-
-For live interview transcription, AnswerCue needs:
-
-- Microphone input for your voice.
-- Meeting/system audio output for the interviewer.
-
-The output device selected in AnswerCue should match the device used by Zoom, Teams, Google Meet, or the meeting app. If the meeting plays through AirPods, choose AirPods. If it plays through Studio Display Speakers, choose Studio Display Speakers.
-
-If only your voice transcribes, the meeting/system audio device is probably mismatched or missing permission. If only the interviewer transcribes, check microphone input and microphone permission.
-
-## Document Ingestion
-
-Supported prep and custom-instruction files:
-
-- `.md`
-- `.txt`
-- `.pdf`
-- `.docx`
-
-Files are converted to Markdown locally and saved in the app's document library. After a document is uploaded once, selecting it for a later interview should attach the existing ingested document directly without asking again for its type.
-
-When a newly uploaded document is classified, the user can choose:
-
-- Resume
-- Project
-- Other
-
-For `Other`, the user should add a short description so the assistant understands how to use it.
-
-## Prompt Context Model
-
-The live interview assistant should receive context in this order:
-
-```text
-<custom_instructions>
-Typed custom instructions and ingested custom-instruction file Markdown.
-</custom_instructions>
-
-<ai_persona>
-The user's preferred assistant behavior and voice.
-</ai_persona>
-
-<interview_preparation_context>
-Prep chat notes plus selected document Markdown for this interview.
-</interview_preparation_context>
-
-<live_interview_transcript>
-Current transcript and generated AI responses from the live interview.
-</live_interview_transcript>
-
-<user_request>
-The current live answer request or follow-up chat question.
-</user_request>
-```
-
-The prep context must be included in live interview answer generation, not only in the pre-interview chat.
-
-## Git Workflow
-
-This checkout tracks:
-
-- `origin`: `https://github.com/FarzamHejaziK/AnswerCue.git`
-- `upstream`: original project remote, fetch-only
-
-Push AnswerCue work to `origin`, not `upstream`.
-
-To pull future upstream updates:
+Main repository:
 
 ```bash
-git fetch upstream
-git checkout main
-git merge upstream/main
-git push origin main
+https://github.com/FarzamHejaziK/AnswerCue
 ```
 
-Prefer merge over rebase on shared/public branches so public history is not rewritten.
+Clone:
+
+```bash
+git clone https://github.com/FarzamHejaziK/AnswerCue.git
+cd AnswerCue
+```
+
+This checkout tracks `origin` (`https://github.com/FarzamHejaziK/AnswerCue.git`); the original upstream project is configured separately as a fetch-only remote for future merge updates. Push AnswerCue work to `origin`, not `upstream`. Prefer merge over rebase on shared/public branches so public history is not rewritten.
+
+## License
+
+This fork remains under the original AGPL-3.0 license. If you publish modified versions, keep the license notices and make corresponding source available as required by AGPL-3.0.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before opening issues or pull requests.

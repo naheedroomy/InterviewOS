@@ -59,7 +59,7 @@ When making user-facing changes, keep the current AnswerCue workflow intact:
 7. Interview finished appears as a scrollable boundary after the last transcript item.
 8. Post-interview chat continues with prep context, selected docs, transcript, and AI responses.
 9. Settings exposes only the supported AI provider keys: OpenAI, Google Gemini, and Anthropic Claude.
-10. Transcription uses the packaged local Moonshine Base model and should not expose speech-provider selection.
+10. Transcription uses the local Moonshine Base model by default; Settings exposes a Speech Provider selector with Moonshine Base (local) and Google Cloud Speech-to-Text (which sends interview audio to Google when selected).
 
 ## Pull Requests
 
