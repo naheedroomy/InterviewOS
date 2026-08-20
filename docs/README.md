@@ -6,7 +6,7 @@ AnswerCue is an open-source desktop interview assistant for preparing interview 
 
 This directory is the source of truth for current AnswerCue documentation. Current architecture, project status, roadmap, testing, release, and local transcription guidance live here. Historical engineering and testing reports live under [docs/archive/](archive/) and are evidence only — they must not override current guidance.
 
-The repository root is limited to standard project entry points and legal/community documents: `README.md`, `CHANGELOG.md`, `PRIVACY.md`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and `AGENTS.md`.
+The repository root keeps standard project entry points and legal/community documents, including `README.md`, `CHANGELOG.md`, `PRIVACY.md`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `AGENTS.md`, `LICENSE`, `termsandcondition.md`, and `refund.md`.
 
 ## Current status
 
