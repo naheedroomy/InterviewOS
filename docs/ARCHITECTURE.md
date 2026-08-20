@@ -98,9 +98,9 @@ The RAG layer (`electron/rag/`) coordinates preprocessing, chunking, embedding, 
 
 ### Screenshot / screen context
 
-`electron/ScreenshotHelper.ts` captures screen content (including multi-display stitching) and saves screenshots to disk. The capture returns an image path (and preview) to the renderer through IPC (`take-screenshot` / `take-selective-screenshot`). When an answer is generated, the attached image paths are validated and forwarded to the provider path — `LLMHelper.analyzeImageFiles` / `WhatToAnswerLLM` read the image files, base64-encode them, and inject them into the vision-capable provider request. Screenshots are attached directly to the final LLM call rather than run through a separate pre-pass.
+`electron/ScreenshotHelper.ts` captures screen content (including multi-display stitching) and saves screenshots to disk. The capture returns an image path (and preview) to the renderer through IPC (`take-screenshot` / `take-selective-screenshot`). When a live answer is generated, the attached image paths are validated and forwarded along the live answer path: `ipcHandlers.ts` (`generate-what-to-say`) → `IntelligenceEngine.ts` → `WhatToAnswerLLM.ts` → `LLMHelper.streamChat`, which encodes the images and injects them into the vision-capable provider request. Screenshots are attached directly to the final LLM call rather than run through a separate pre-pass.
 
-A separate screen-understanding pipeline (`electron/services/screen/ScreenUnderstandingService.ts` and related services) provides vision-first screen analysis (extracting text, summaries, screen type, code blocks, tables, and errors) for screen-understanding modes. It is not invoked in the live screenshot-to-answer path.
+`LLMHelper.analyzeImageFiles` is a separate image-file analysis method (used by the `analyze-image-file` IPC handler), not part of live answer generation. `ScreenUnderstandingService` and its related screen-understanding services have no runtime callers in the current codebase.
 
 ### Update and licensing services
 
@@ -138,7 +138,7 @@ The `premium/` module is a separate, not-always-available code path. `featureGat
 
 1. `ScreenshotHelper` captures screen content (with multi-display stitching) and saves screenshots to disk.
 2. The capture returns an image path (and preview) to the renderer through IPC.
-3. When an answer is generated, the attached image paths are validated and forwarded to the provider path, which reads the image files and injects them (base64) into the vision-capable provider request.
+3. When a live answer is generated, the attached image paths are validated and forwarded along the live answer path (`ipcHandlers.ts` → `IntelligenceEngine.ts` → `WhatToAnswerLLM.ts` → `LLMHelper.streamChat`), which encodes the images and injects them into the vision-capable provider request.
 
 ### 5. Persistence
 
@@ -156,7 +156,7 @@ The live interview assistant receives context assembled by `electron/services/co
 4. **Live interview transcript** — the current transcript and generated AI responses from the live interview.
 5. **User request** — the current live answer request or follow-up chat question.
 
-The prep context must be included in live interview answer generation, not only in the pre-interview chat. In the current implementation, `PromptAssembler` assembles typed blocks (intent context, interview preparation, assistant history, screen context, transcript, mode context/reference files, meeting history, custom context) and orders them by trust level. XML escaping and prompt-injection escaping are applied to selected user-controlled fields (transcript, screen context, reference files, interview preparation, assistant/meeting history, and mode custom instructions); raw custom context and retrieved mode context are included without neutralization.
+The prep context must be included in live interview answer generation, not only in the pre-interview chat. In the current implementation, `PromptAssembler` assembles typed blocks (intent context, interview preparation, assistant history, screen context, transcript, mode context/reference files, meeting history, custom context) and orders them by trust level. Protections are applied selectively: XML escaping is applied to screen context, reference files, interview preparation context, and assistant/meeting history; prompt-pattern neutralization is applied to reference files, interview preparation context, and mode custom instructions. Raw custom context and retrieved mode context are included without neutralization.
 
 ## Trust boundaries
 
@@ -180,5 +180,5 @@ The prep context must be included in live interview answer generation, not only 
 - `electron/services/InterviewContextDocsManager.ts` — document ingestion and classification.
 - `electron/rag/` — RAG chunking, embedding, and retrieval.
 - `electron/services/context/PromptAssembler.ts` — prompt-context assembly.
-- `electron/ScreenshotHelper.ts` — screenshot capture; `electron/LLMHelper.ts` / `electron/llm/WhatToAnswerLLM.ts` — forwarding captured image data to the provider path.
+- `electron/ScreenshotHelper.ts` — screenshot capture; live answer path `electron/ipcHandlers.ts` → `electron/IntelligenceEngine.ts` → `electron/llm/WhatToAnswerLLM.ts` → `electron/LLMHelper.ts` (`streamChat`) — forwarding captured image data to the provider path.
 - `electron/premium/featureGate.ts` — premium-module boundary detection.
