@@ -98,9 +98,9 @@ The RAG layer (`electron/rag/`) coordinates preprocessing, chunking, embedding, 
 
 ### Screenshot / screen context
 
-`electron/ScreenshotHelper.ts` captures screen content (including multi-display stitching) and saves screenshots to disk. The capture returns an image path (and preview) to the renderer through IPC (`take-screenshot` / `take-selective-screenshot`). When a live answer is generated, the attached image paths are validated and forwarded along the live answer path: `ipcHandlers.ts` (`generate-what-to-say`) → `IntelligenceEngine.ts` → `WhatToAnswerLLM.ts` → `LLMHelper.streamChat`, which encodes the images and injects them into the vision-capable provider request. Screenshots are attached directly to the final LLM call rather than run through a separate pre-pass.
+`electron/ScreenshotHelper.ts` captures screen content (including multi-display stitching) and saves screenshots to disk. The capture returns an image path (and preview) to the renderer through IPC (`take-screenshot` / `take-selective-screenshot`). When a live answer is generated, the attached image paths are validated and forwarded along the live answer path: `ipcHandlers.ts` (`generate-what-to-say`) → `IntelligenceEngine.ts` → `WhatToAnswerLLM.ts` → `LLMHelper.streamChat`, which delegates to `_streamChatInner` / `streamVisionWithFallback`; provider-specific vision methods encode the images and inject them into the vision-capable provider request. Screenshots are attached directly to the final LLM call rather than run through a separate pre-pass.
 
-`LLMHelper.analyzeImageFiles` is a separate image-file analysis method (used by the `analyze-image-file` IPC handler), not part of live answer generation. `ScreenUnderstandingService` and its related screen-understanding services have no runtime callers in the current codebase.
+`LLMHelper.analyzeImageFiles` is a separate image-file analysis method (used by the `analyze-image-file` IPC handler), not part of live answer generation. `ScreenUnderstandingService` itself has no production caller; related screen-understanding services such as `ImageOptimizer` are used at runtime (for example, `ipcHandlers.ts` `optimizeImagesForVision` compresses images before provider calls).
 
 ### Update and licensing services
 
@@ -138,7 +138,7 @@ The `premium/` module is a separate, not-always-available code path. `featureGat
 
 1. `ScreenshotHelper` captures screen content (with multi-display stitching) and saves screenshots to disk.
 2. The capture returns an image path (and preview) to the renderer through IPC.
-3. When a live answer is generated, the attached image paths are validated and forwarded along the live answer path (`ipcHandlers.ts` → `IntelligenceEngine.ts` → `WhatToAnswerLLM.ts` → `LLMHelper.streamChat`), which encodes the images and injects them into the vision-capable provider request.
+3. When a live answer is generated, the attached image paths are validated and forwarded along the live answer path (`ipcHandlers.ts` → `IntelligenceEngine.ts` → `WhatToAnswerLLM.ts` → `LLMHelper.streamChat` → `_streamChatInner` / `streamVisionWithFallback`), where provider-specific vision methods encode the images and inject them into the vision-capable provider request.
 
 ### 5. Persistence
 
