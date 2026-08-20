@@ -66,3 +66,14 @@ ELECTRON_APP_PORT=5173 npx playwright test
 Treat Electron/preload failures in browser-only Playwright as harness issues unless the test is run against a real Electron window.
 
 - Manual macOS smoke checklist: launch Electron with `npm start`, grant Microphone/Screen Recording/Accessibility if prompted, open Settings, configure one AI provider, confirm input/output audio devices, create a New Interview, add prep context, attach a sample document, start the interview, verify transcript updates, stop the interview, and confirm prep chat/transcript/post-interview chat persist.
+
+## Repository Map
+
+A full codemap is available at `codemap.md` in the project root.
+
+Before working on any task, read `codemap.md` to understand:
+- Project architecture and entry points
+- Directory responsibilities and design patterns
+- Data flow and integration points between modules
+
+For deep work on a specific folder, also read that folder's `codemap.md`.

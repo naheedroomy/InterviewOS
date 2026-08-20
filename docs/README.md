@@ -34,6 +34,7 @@ See [PROJECT_STATUS.md](PROJECT_STATUS.md) for the full status summary and links
 | --- | --- |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Current system boundaries, core flows, trust boundaries, and implementation anchors. |
 | [PROJECT_STATUS.md](PROJECT_STATUS.md) | Verified shipped capabilities, known gaps, validation state, and review date. |
+| [APPLICATION_FLOW_AUDIT.md](APPLICATION_FLOW_AUDIT.md) | Cross-system audit findings, owner decisions, unresolved questions, and remediation order. |
 | [ROADMAP.md](ROADMAP.md) | Current priorities, near-term reliability/security work, and deferred ideas. |
 | [TESTING.md](TESTING.md) | Supported test commands, test layers, manual Electron checks, and coverage limitations. |
 | [RELEASE.md](RELEASE.md) | Build, signing, notarization, packaging, and release checklist. |

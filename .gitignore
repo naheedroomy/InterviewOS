@@ -206,6 +206,7 @@ native-module/*.node
 .github/RepoGuide.md
 
 # AI / Agent tooling
+.slim/deepwork/
 .sisyphus/
 .opencode/
 .planning/
