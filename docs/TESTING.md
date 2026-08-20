@@ -26,7 +26,7 @@ npm install
 npm run build:native
 ```
 
-`npm install` runs postinstall steps that rebuild native dependencies (`better-sqlite3`, `keytar`), download the local transcription model, and patch the Electron plist. `npm run build:native` builds the Rust native audio module.
+`npm install` runs postinstall steps that rebuild native dependencies (`better-sqlite3`, `keytar`), download the embedding and classification models, and patch the Electron plist. It does **not** package the Moonshine STT model: the local speech model downloads during local-STT preflight into app data when local STT is selected and the model is not cached. `npm run build:native` builds the Rust native audio module.
 
 Prerequisites: Node.js 20+ or 22 LTS, npm, Rust/Cargo for the native audio module, and Xcode Command Line Tools on macOS.
 

@@ -4,7 +4,7 @@ _Review date: 2026-08-20_
 
 This guide covers local speech-to-text (STT) setup for AnswerCue. It is part of the [AnswerCue documentation hub](README.md); see [ARCHITECTURE.md](ARCHITECTURE.md) for the transcription pipeline and [TESTING.md](TESTING.md) for the manual transcription check.
 
-AnswerCue uses a packaged local Moonshine Base model for transcription. The user should not need to choose a cloud speech provider or configure a separate local transcription server.
+AnswerCue can transcribe interviews using the local Moonshine Base model. The local model is downloaded during setup and cached in app data, so you do not need to run a separate local transcription server.
 
 ## Prerequisites
 
@@ -21,7 +21,7 @@ Install dependencies:
 npm install
 ```
 
-`npm install` runs postinstall steps that download the local transcription model and rebuild native dependencies.
+`npm install` runs postinstall steps that rebuild native dependencies and download the embedding and classification models. It does **not** package the Moonshine STT model: the local speech model downloads during local-STT preflight into app data when local STT is selected and the model is not cached.
 
 Build native audio support:
 
@@ -39,9 +39,9 @@ This starts Vite on `http://localhost:5180` and launches Electron.
 
 ## Supported local-model behavior
 
-- The packaged Moonshine Base model runs locally through a worker and is preloaded in the background at startup.
+- The Moonshine Base model runs locally through a worker. It is downloaded during local-STT preflight into app data when local STT is selected and the model is not cached, and it is preloaded in the background at startup when local STT is selected and the model is cached.
 - The default STT provider is the local Moonshine path (`local-whisper`). A cloud Google STT path exists and is selected only when the stored `sttProvider` setting is `google`.
-- In Settings, Audio should focus on the input device, the output/system audio device, and audio levels or device status. It should not expose speech-provider selection, WhisperLive setup, cloud transcription keys, test-sound controls that are no longer part of the current UI, or SCK backend controls that were removed from the current right panel.
+- In Settings, the Speech Provider selector exposes two options: **Moonshine Base** (local) and **Google Cloud Speech-to-Text**. When Google is selected, Settings shows a Service Account JSON picker for the Google credentials. The Audio tab also exposes the input device, the output/system audio device, and audio levels or device status.
 
 ## Manual transcription check
 

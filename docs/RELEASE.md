@@ -14,6 +14,7 @@ This app ships through GitHub Releases from the `FarzamHejaziK/AnswerCue` releas
 - Rust/Cargo for the native audio module (`npm run build:native`).
 - Xcode Command Line Tools/Xcode on macOS.
 - For signed macOS builds: a Developer ID Application certificate in the login keychain (or `ANSWERCUE_SIGN_IDENTITY` / `CSC_NAME`), and a notarytool keychain profile (`answercue-notary`) or App Store Connect API key credentials.
+- For signed macOS DMG rebuilds: `create-dmg` must be available. CI installs it with `npm install --no-save --no-package-lock create-dmg@8.1.0` (see `release-macos.yml`); locally, install it the same way or via your package manager.
 - For signed Windows builds: Azure Trusted Signing credentials (see `electron-builder.windows.cjs`).
 
 ## Build and package commands
@@ -38,7 +39,7 @@ The production signing path is `electron-builder.signed.cjs` (`npm run dist:sign
 - **Signing identity:** Developer ID Application certificate, auto-discovered or set via `ANSWERCUE_SIGN_IDENTITY` / `CSC_NAME`.
 - **Hardened runtime:** `hardenedRuntime: true` (required for notarization), with `build/entitlements.mac.plist` and `build/entitlements.mac.inherit.plist`.
 - **Notarization:** `notarize: true` — electron-builder runs notarytool and staples the `.app`. Credentials come from the `answercue-notary` keychain profile (`APPLE_KEYCHAIN_PROFILE`) or App Store Connect API key environment variables.
-- **DMG handling:** electron-builder's own DMG creation corrupts the embedded app signature, so the signed config builds only the `zip` target; `scripts/afterAllArtifactBuild.cjs` rebuilds the styled DMGs from the pristine signed `.app` via `create-dmg`, then signs, notarizes, and staples them, and verifies the updater ZIP manifest.
+- **DMG handling:** electron-builder's own DMG creation corrupts the embedded app signature, so the signed config builds only the `zip` target; `scripts/afterAllArtifactBuild.cjs` rebuilds the styled DMGs from the pristine signed `.app` via `create-dmg` for **both** the x64 (`AnswerCue-X.Y.Z.dmg`) and arm64 (`AnswerCue-X.Y.Z-arm64.dmg`) slices, then signs, notarizes, and staples them, and verifies the updater ZIP manifest.
 
 The default `package.json` `build.mac` keeps `identity: null` and `hardenedRuntime: false`; the default/dev path is intentionally unsigned.
 
@@ -82,13 +83,13 @@ gh release create vX.Y.Z \
 
 | Platform | Artifact | Notes |
 | --- | --- | --- |
-| macOS Apple Silicon | `AnswerCue-X.Y.Z-arm64-mac.zip` | Primary Apple Silicon build |
+| macOS Apple Silicon | `AnswerCue-X.Y.Z-arm64-mac.zip`, `AnswerCue-X.Y.Z-arm64.dmg` | Apple Silicon updater ZIP plus DMG |
 | macOS Intel | `AnswerCue-X.Y.Z.dmg`, `AnswerCue-X.Y.Z-mac.zip` | Intel x64 DMG plus updater ZIP |
 | macOS update metadata | `latest-mac.yml` | Used by Electron updater |
 | Windows Intel x64 | `AnswerCue-Setup-X.Y.Z.exe` | NSIS installer and updater target |
 | Windows update metadata | `latest.yml` | Used by Electron updater |
-| Linux AppImage | `AnswerCue-X.Y.Z.AppImage` | Portable Linux app |
-| Linux Debian | `answercue_X.Y.Z_amd64.deb` | Debian/Ubuntu package |
+| Linux AppImage | `AnswerCue-X.Y.Z.AppImage` | Optional/manual — not produced by the documented macOS/Windows workflows |
+| Linux Debian | `answercue_X.Y.Z_amd64.deb` | Optional/manual — not produced by the documented macOS/Windows workflows |
 
 ## Artifact checks
 

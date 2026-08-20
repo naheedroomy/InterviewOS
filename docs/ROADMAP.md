@@ -64,7 +64,7 @@ macOS signing/notarization state is unresolved and must be verified for each rel
 
 ## Deferred ideas
 
-The following ideas are **not current priorities**. They come from the superseded root-level [ROADMAP.md](../ROADMAP.md) (last updated March 2026) and are listed here only so they are not mistaken for active work. They are not scheduled and have no engineering evidence behind them in this repository.
+The following ideas are **not current priorities**. They come from the superseded root-level [ROADMAP.md](archive/root/ROADMAP.md) (last updated March 2026) and are listed here only so they are not mistaken for active work. They are not scheduled and have no engineering evidence behind them in this repository.
 
 - **AnswerCue token / Pro access** — token-based rewards, wallet connection, blockchain verification, and governance rights.
 - **Mobile app development** — no mobile client exists or is planned.
