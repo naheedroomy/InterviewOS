@@ -543,6 +543,9 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
   const pinAnswerPanelRef = useRef<() => void>(() => {});
   const [voiceInput, setVoiceInput] = useState(''); // Accumulated user voice input
   const voiceInputRef = useRef<string>(''); // Ref for capturing in async handlers
+  useEffect(() => {
+    voiceInputRef.current = voiceInput;
+  }, [voiceInput]);
   const textInputRef = useRef<HTMLInputElement>(null); // Ref for input focus
   const isStealthRef = useRef<boolean>(false); // Tracks if the next expansion should be stealthy
   // CGEventTap stealth-typing state. Driven by IPC from main; ref shadows
@@ -1332,7 +1335,8 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
       // Slight delay to allow animation to clean up if needed, though immediate is safer for click-through
       // Using setTimeout to ensure the render cycle completes first
       // Increased to 400ms to allow "contract to bottom" exit animation to finish
-      setTimeout(() => window.electronAPI.hideWindow(), 400);
+      const hideTimer = setTimeout(() => window.electronAPI.hideWindow(), 400);
+      return () => clearTimeout(hideTimer);
     }
   }, [isExpanded]);
 
@@ -1763,7 +1767,9 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
     answerPanelPinnedRef.current = true;
     setAnswerPanelPinned(true);
   }, []);
-  pinAnswerPanelRef.current = pinAnswerPanel;
+  useEffect(() => {
+    pinAnswerPanelRef.current = pinAnswerPanel;
+  }, [pinAnswerPanel]);
 
   const prepareIntelligenceStreamPlaceholder = useCallback(
     (intent: string) => {
@@ -1853,12 +1859,7 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
         // Use ref to avoid stale closure issue
         if (isRecordingRef.current && transcript.speaker === 'user') {
           if (transcript.final) {
-            // Accumulate final transcripts
-            setVoiceInput((prev) => {
-              const updated = prev + (prev ? ' ' : '') + transcript.text;
-              voiceInputRef.current = updated;
-              return updated;
-            });
+            setVoiceInput((prev) => prev + (prev ? ' ' : '') + transcript.text);
             setManualTranscript(''); // Clear partial preview
             manualTranscriptRef.current = '';
           } else {
@@ -3097,7 +3098,9 @@ Provide only the answer, nothing else.`;
   // Refresh the latest-handler ref on every render so the captured-key
   // listener (mounted with [] deps) calls the CURRENT closure, not a
   // stale snapshot from first render.
-  handleManualSubmitRef.current = handleManualSubmit;
+  useEffect(() => {
+    handleManualSubmitRef.current = handleManualSubmit;
+  });
 
   const clearChat = () => {
     setMessages([]);
@@ -3482,18 +3485,20 @@ Provide only the answer, nothing else.`;
     handleBrainstorm,
   });
 
-  // Update ref on every render so the event listener always access latest state/props
-  handlersRef.current = {
-    handleWhatToSay,
-    handleFollowUp,
-    handleFollowUpQuestions,
-    handleRecap,
-    handleAnswerNow,
-    handleClarify,
-    handleCodeHint,
-    handleSolveCode,
-    handleBrainstorm,
-  };
+  // Update ref so the event listener always accesses latest state/props
+  useEffect(() => {
+    handlersRef.current = {
+      handleWhatToSay,
+      handleFollowUp,
+      handleFollowUpQuestions,
+      handleRecap,
+      handleAnswerNow,
+      handleClarify,
+      handleCodeHint,
+      handleSolveCode,
+      handleBrainstorm,
+    };
+  });
 
   useEffect(() => {
     // ── Continuous, frame-rate-independent scroll with momentum ──
@@ -3740,66 +3745,68 @@ Provide only the answer, nothing else.`;
     },
   });
 
-  // Update ref
-  generalHandlersRef.current = {
-    toggleVisibility: () => window.electronAPI.toggleWindow(),
-    processScreenshots: handleWhatToSay,
-    resetCancel: async () => {
-      if (isProcessing) {
-        setIsProcessing(false);
-      } else {
-        await window.electronAPI.resetIntelligence();
-        setMessages([]);
-        answerPanelPinnedRef.current = false;
-        setAnswerPanelPinned(false);
-        setAttachedContext([]);
-        setInputValue('');
-      }
-    },
-    toggleMousePassthrough: () => {
-      const newState = !isMousePassthrough;
-      setIsMousePassthrough(newState);
-      window.electronAPI?.setOverlayMousePassthrough?.(newState);
-    },
-    takeScreenshot: async () => {
-      try {
-        const data = await window.electronAPI.takeScreenshot();
-        if (data && data.path) {
-          handleScreenshotAttach(data as { path: string; preview: string });
+  // Update ref so keyboard listeners always access latest handlers
+  useEffect(() => {
+    generalHandlersRef.current = {
+      toggleVisibility: () => window.electronAPI.toggleWindow(),
+      processScreenshots: handleWhatToSay,
+      resetCancel: async () => {
+        if (isProcessing) {
+          setIsProcessing(false);
+        } else {
+          await window.electronAPI.resetIntelligence();
+          setMessages([]);
+          answerPanelPinnedRef.current = false;
+          setAnswerPanelPinned(false);
+          setAttachedContext([]);
+          setInputValue('');
         }
-      } catch (err) {
-        console.error('Error triggering screenshot:', err);
-      }
-    },
-    captureAndSolveCode: async (attachment?: ScreenshotAttachment) => {
-      try {
-        setIsExpanded(true);
-        const data = attachment || (await window.electronAPI.takeScreenshot());
-        if (data && data.path) {
-          pendingCaptureRef.current = data as ScreenshotAttachment;
-          setAttachedContext((prev) => {
-            if (prev.some((s) => s.path === data.path)) return prev;
-            return [...prev, data as ScreenshotAttachment].slice(-5);
+      },
+      toggleMousePassthrough: () => {
+        const newState = !isMousePassthrough;
+        setIsMousePassthrough(newState);
+        window.electronAPI?.setOverlayMousePassthrough?.(newState);
+      },
+      takeScreenshot: async () => {
+        try {
+          const data = await window.electronAPI.takeScreenshot();
+          if (data && data.path) {
+            handleScreenshotAttach(data as { path: string; preview: string });
+          }
+        } catch (err) {
+          console.error('Error triggering screenshot:', err);
+        }
+      },
+      captureAndSolveCode: async (attachment?: ScreenshotAttachment) => {
+        try {
+          setIsExpanded(true);
+          const data = attachment || (await window.electronAPI.takeScreenshot());
+          if (data && data.path) {
+            pendingCaptureRef.current = data as ScreenshotAttachment;
+            setAttachedContext((prev) => {
+              if (prev.some((s) => s.path === data.path)) return prev;
+              return [...prev, data as ScreenshotAttachment].slice(-5);
+            });
+          }
+          requestAnimationFrame(() => {
+            handlersRef.current.handleSolveCode();
           });
+        } catch (err) {
+          console.error('Error triggering screenshot + code:', err);
         }
-        requestAnimationFrame(() => {
-          handlersRef.current.handleSolveCode();
-        });
-      } catch (err) {
-        console.error('Error triggering screenshot + code:', err);
-      }
-    },
-    selectiveScreenshot: async () => {
-      try {
-        const data = await window.electronAPI.takeSelectiveScreenshot();
-        if (data && !data.cancelled && data.path) {
-          handleScreenshotAttach(data as { path: string; preview: string });
+      },
+      selectiveScreenshot: async () => {
+        try {
+          const data = await window.electronAPI.takeSelectiveScreenshot();
+          if (data && !data.cancelled && data.path) {
+            handleScreenshotAttach(data as { path: string; preview: string });
+          }
+        } catch (err) {
+          console.error('Error triggering selective screenshot:', err);
         }
-      } catch (err) {
-        console.error('Error triggering selective screenshot:', err);
-      }
-    },
-  };
+      },
+    };
+  });
 
   useEffect(() => {
     const handleGeneralKeyDown = (e: KeyboardEvent) => {
@@ -4981,6 +4988,13 @@ Provide only the answer, nothing else.`;
                           const codexCliName = getCodexCliModelDisplayName(m);
                           if (codexCliName) return codexCliName;
                           if (m.startsWith('ollama-')) return m.replace('ollama-', '');
+                          const cleanModel = m.replace(/^models\//, '');
+                          if (cleanModel === 'gemini-2.5-flash') return 'Gemini 2.5 Flash';
+                          if (cleanModel === 'gemini-2.5-pro') return 'Gemini 2.5 Pro';
+                          if (cleanModel === 'gemini-2.0-flash') return 'Gemini 2.0 Flash';
+                          if (cleanModel === 'gemini-2.0-flash-lite') return 'Gemini 2.0 Flash Lite';
+                          if (cleanModel === 'gemini-1.5-pro') return 'Gemini 1.5 Pro';
+                          if (cleanModel === 'gemini-1.5-flash') return 'Gemini 1.5 Flash';
                           if (m === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
                           if (m === 'gemini-3.1-flash-lite-preview') return 'Gemini 3.1 Flash';
                           if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
@@ -4993,7 +5007,7 @@ Provide only the answer, nothing else.`;
                           if (m === 'claude-opus-4-7') return 'Opus 4.7';
                           if (m === 'claude-opus-4-6') return 'Opus 4.6';
                           if (m === 'claude-sonnet-4-6') return 'Sonnet 4.6';
-                          return m;
+                          return cleanModel;
                         })()}
                       </span>
                       <ChevronDown size={14} className="shrink-0 transition-transform" />

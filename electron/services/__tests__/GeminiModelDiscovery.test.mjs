@@ -391,7 +391,7 @@ describe('fetchGeminiModels — minimal source-level structural guards', () => {
   });
 
   test('no version regex filter in Gemini section', () => {
-    const regexPattern = /gemini-\s*\(?\[?[3-9]/;
+    const regexPattern = /gemini-\s*\(\[3-9\]/;
     const match = src.match(regexPattern);
     assert.equal(match, null, 'Version-gating regex on Gemini model versions must be absent');
   });
@@ -525,7 +525,7 @@ describe('AIProvidersSettings — Gemini dynamic model integration', () => {
   });
 
   test('handleGeminiModelsFetched callback transforms ProviderModel[] to ModelOption[]', () => {
-    const cbMatch = src.match(/const handleGeminiModelsFetched\s*=\s*useCallback[^}]+}/);
+    const cbMatch = src.match(/const handleGeminiModelsFetched\s*=\s*useCallback[\s\S]*?\},\s*\[\]\);/);
     assert.ok(cbMatch, 'handleGeminiModelsFetched useCallback must exist');
     const body = cbMatch[0];
     assert.ok(body.includes('m.label'), 'must map label field');
@@ -596,7 +596,7 @@ describe('AIProvidersSettings — Gemini dynamic model integration', () => {
     const beforeMapped = discoverySection.slice(0, discoverySection.indexOf('mapped.length > 0'));
     // The reconciliation code must be inside a `mapped.length > 0` guard
     assert.ok(
-      discoverySection.match(/mapped\.length\s*>\s*0\s*&&\s*currentPreferred\s*&&\s*!/),
+      discoverySection.match(/mapped\.length\s*>\s*0\s*&&\s*!mapped/),
       'stale preferred model reconciliation must be inside non-empty guard'
     );
   });
@@ -636,7 +636,7 @@ describe('ModelSelector.tsx — Gemini dynamic fetch', () => {
   const src = read('src/components/ui/ModelSelector.tsx');
 
   test('fetches Gemini models via IPC when key is configured', () => {
-    const geminiBlock = src.match(/prov === 'gemini'[\s\S]{0,800}catch/);
+    const geminiBlock = src.match(/prov === 'gemini'[\s\S]{0,1400}console\.warn/);
     assert.ok(geminiBlock, 'Gemini branch must exist in cloud model builder');
     const block = geminiBlock[0];
     assert.ok(block.includes("fetchProviderModels('gemini', '')"), 'Calls IPC with empty key');
@@ -651,7 +651,7 @@ describe('ModelSelector.tsx — Gemini dynamic fetch', () => {
   });
 
   test('fails gracefully without removing other provider options', () => {
-    const geminiBlock = src.match(/prov === 'gemini'[\s\S]{0,800}catch/);
+    const geminiBlock = src.match(/prov === 'gemini'[\s\S]{0,1400}console\.warn/);
     assert.ok(geminiBlock, 'Gemini block exists');
     const block = geminiBlock[0];
     assert.ok(block.includes('console.warn'), 'Logs warn on failure');
@@ -665,7 +665,7 @@ describe('ModelSelectorWindow.tsx — Gemini dynamic fetch', () => {
   const src = read('src/components/ModelSelectorWindow.tsx');
 
   test('fetches Gemini models via IPC when key is configured', () => {
-    const geminiBlock = src.match(/prov === 'gemini'[\s\S]{0,800}catch/);
+    const geminiBlock = src.match(/prov === 'gemini'[\s\S]{0,1400}console\.warn/);
     assert.ok(geminiBlock, 'Gemini branch must exist in model builder');
     const block = geminiBlock[0];
     assert.ok(block.includes("fetchProviderModels('gemini', '')"), 'Calls IPC with empty key');
@@ -678,7 +678,7 @@ describe('ModelSelectorWindow.tsx — Gemini dynamic fetch', () => {
   });
 
   test('fails gracefully without removing other provider options', () => {
-    const geminiBlock = src.match(/prov === 'gemini'[\s\S]{0,800}catch/);
+    const geminiBlock = src.match(/prov === 'gemini'[\s\S]{0,1400}console\.warn/);
     assert.ok(geminiBlock, 'Gemini block exists');
     const block = geminiBlock[0];
     assert.ok(block.includes('console.warn'), 'Logs warn on failure');

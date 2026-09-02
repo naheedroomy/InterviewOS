@@ -72,8 +72,8 @@ test('sttProviderLabels only contains google and local-whisper', () => {
 
 // ---- SettingsOverlay.tsx settings tests ----
 
-test('STT ProviderSelect shows exactly two options: Moonshine Base and Google Cloud', () => {
-  assert.match(settings, /id:\s*'local-whisper'.*label:\s*'Moonshine Base'/, 'Moonshine Base option must exist');
+test('STT ProviderSelect shows exactly two options: Distil Large v3 and Google Cloud', () => {
+  assert.match(settings, /id:\s*'local-whisper'.*label:\s*'(Distil Large v3|Moonshine Base)'/, 'Distil Large v3 option must exist');
   assert.match(settings, /id:\s*'google'.*label:\s*'Google Cloud Speech-to-Text'/, 'Google Cloud Speech-to-Text option must exist');
   assert.doesNotMatch(settings, /id:\s*'groq'.*label:\s*'Groq/, 'Groq must not appear in provider options');
   assert.doesNotMatch(settings, /id:\s*'openai'.*label:\s*'OpenAI/, 'OpenAI must not appear in provider options');

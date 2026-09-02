@@ -202,11 +202,12 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
     useEffect(() => {
         if (isOpen && initialQuery && messages.length === 0) {
             setChatState('opening');
-            setTimeout(() => {
+            const timer = setTimeout(() => {
                 submitQuestion(initialQuery);
             }, 100);
+            return () => clearTimeout(timer);
         }
-    }, [isOpen, initialQuery]);
+    }, [isOpen, initialQuery, messages.length, submitQuestion]);
 
     // Listen for new queries from parent
     useEffect(() => {
@@ -290,9 +291,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
         setErrorMessage(null);
 
         // Scroll to bottom when user sends message
-        setTimeout(() => {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 50);
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
 
         const assistantMessageId = genMessageId();
 

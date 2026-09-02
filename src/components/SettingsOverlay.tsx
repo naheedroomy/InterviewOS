@@ -2337,7 +2337,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         onChange={(val) => handleSttProviderChange(val as any)}
                                                         disabled={isMeetingActive}
                                                         options={[
-                                                            { id: 'local-whisper', label: 'Moonshine Base', badge: null, desc: 'Privacy-first: runs locally on your device', color: 'green', icon: <Cpu size={14} /> },
+                                                            { id: 'local-whisper', label: 'Distil Large v3', badge: null, desc: 'Privacy-first: runs locally on your device', color: 'green', icon: <Cpu size={14} /> },
                                                             { id: 'google', label: 'Google Cloud Speech-to-Text', badge: googleServiceAccountPath ? 'Saved' : null, desc: 'gRPC streaming via Service Account', color: 'blue', icon: <Mic size={14} /> },
                                                         ]}
                                                     />

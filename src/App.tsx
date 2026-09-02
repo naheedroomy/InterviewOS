@@ -33,24 +33,22 @@ import { ErrorBoundary } from "./components/ErrorBoundary"
 
 const queryClient = new QueryClient()
 
-const App: React.FC = () => {
+const Cropper = React.lazy(() => import('./components/Cropper'));
+
+const CropperView: React.FC = () => (
+  <React.Suspense fallback={<div className="w-screen h-screen bg-transparent" />}>
+    <Cropper />
+  </React.Suspense>
+);
+
+const MainAppContent: React.FC = () => {
   const isSettingsWindow = new URLSearchParams(window.location.search).get('window') === 'settings';
   const isLauncherWindow = new URLSearchParams(window.location.search).get('window') === 'launcher';
   const isOverlayWindow = new URLSearchParams(window.location.search).get('window') === 'overlay';
   const isModelSelectorWindow = new URLSearchParams(window.location.search).get('window') === 'model-selector';
-  const isCropperWindow = new URLSearchParams(window.location.search).get('window') === 'cropper';
 
   // Default to launcher if not specified (dev mode safety)
-  const isDefault = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !isCropperWindow;
-
-  if (isCropperWindow) {
-    const Cropper = React.lazy(() => import('./components/Cropper'));
-    return (
-      <React.Suspense fallback={<div className="w-screen h-screen bg-transparent" />}>
-        <Cropper />
-      </React.Suspense>
-    );
-  }
+  const isDefault = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow;
 
   // Initialize Analytics
   useEffect(() => {
@@ -98,6 +96,7 @@ const App: React.FC = () => {
     openSettingsExclusive('custom-instructions');
   }, [openSettingsExclusive]);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [delayedTrialExpired, setDelayedTrialExpired] = useState(false);
   const [isPremiumActive, setIsPremiumActive] = useState(false);
   const [hasLoadedLicense, setHasLoadedLicense] = useState(false);
   const [planDetails, setPlanDetails] = useState<{ isPremium: boolean; plan?: string; provider?: string }>({ isPremium: false });
@@ -181,27 +180,31 @@ const App: React.FC = () => {
   }, [previewAd]);
 
   useEffect(() => {
+    let mounted = true;
     // Clean up old local storage
     localStorage.removeItem('useLegacyAudioBackend');
 
     // Basic status check for campaign targeting
-    window.electronAPI?.profileGetStatus?.().then(s => setHasProfile(s?.hasProfile || false)).catch(() => {});
+    window.electronAPI?.profileGetStatus?.().then(s => { if (mounted) setHasProfile(s?.hasProfile || false); }).catch(() => {});
     // Load full plan details for targeted ad delivery (plan tier + provider).
     window.electronAPI?.licenseGetDetails?.()
       .then(details => {
+        if (!mounted) return;
         setPlanDetails(details ?? { isPremium: false });
         setIsPremiumActive(details?.isPremium ?? false);
         setHasLoadedLicense(true);
       })
       .catch(() => {
+        if (!mounted) return;
         // Fallback: async premium check if licenseGetDetails is unavailable
         const premiumCheck = window.electronAPI?.licenseCheckPremiumAsync ?? window.electronAPI?.licenseCheckPremium;
         if (premiumCheck) {
           premiumCheck().then((active: boolean) => {
+            if (!mounted) return;
             setIsPremiumActive(active);
             setPlanDetails({ isPremium: active });
             setHasLoadedLicense(true);
-          }).catch(() => setHasLoadedLicense(true));
+          }).catch(() => { if (mounted) setHasLoadedLicense(true); });
         } else {
           setHasLoadedLicense(true);
         }
@@ -209,16 +212,15 @@ const App: React.FC = () => {
 
     // Also check for AnswerCue API key
     window.electronAPI?.getStoredCredentials?.()
-      .then((creds) => setHasAnswerCueApi(!!creds?.hasAnswerCueKey))
+      .then((creds) => { if (mounted) setHasAnswerCueApi(!!creds?.hasAnswerCueKey); })
       .catch(() => {});
 
     // ── Trial: check stored token and start polling if active ──
-    let trialPollId: ReturnType<typeof setInterval> | null = null;
     let profileWiped = false; // guard: only wipe once per session
     const checkTrial = async () => {
       try {
         const res = await window.electronAPI?.getTrialStatus?.();
-        if (!res?.ok) return;
+        if (!mounted || !res?.ok) return;
         if (res.expired) {
           setActiveTrial(null);
           // Auto-wipe profile data the first time expiry is detected so that
@@ -228,7 +230,6 @@ const App: React.FC = () => {
             window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
           }
           if (SHOW_PROMOTIONAL_SURFACES) setShowTrialExpiredModal(true);
-          if (trialPollId) { clearInterval(trialPollId); trialPollId = null; }
         } else {
           setActiveTrial({
             expiresAt: res.expires_at ?? '',
@@ -237,8 +238,9 @@ const App: React.FC = () => {
         }
       } catch { /* ignore — non-critical */ }
     };
+
     window.electronAPI?.getLocalTrial?.().then((local: any) => {
-      if (!local?.hasToken) return;
+      if (!mounted || !local?.hasToken) return;
       if (local.expired) {
         // Already expired at launch — wipe immediately then show modal after a brief delay
         if (!profileWiped) {
@@ -246,12 +248,11 @@ const App: React.FC = () => {
           window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
         }
         if (SHOW_PROMOTIONAL_SURFACES) {
-          setTimeout(() => setShowTrialExpiredModal(true), 10_000);
+          setDelayedTrialExpired(true);
         }
         return;
       }
       checkTrial();
-      trialPollId = setInterval(checkTrial, 30_000);
     }).catch(() => {});
 
     // Listen for trial-ended event (emitted by trial:end-byok IPC)
@@ -291,7 +292,6 @@ const App: React.FC = () => {
         setOllamaPullStatus('complete');
         setOllamaPullMessage('Local AI memory ready');
         setOllamaPullPercent(100);
-        setTimeout(() => setOllamaPullStatus('idle'), 3000);
       });
     }
 
@@ -315,11 +315,45 @@ const App: React.FC = () => {
       if (removeComplete) removeComplete();
       if (removeWarning) removeWarning();
       if (removeLicenseListener) removeLicenseListener();
-      if (trialPollId) clearInterval(trialPollId);
       if (removeTrialListener) removeTrialListener();
       if (removeOpenSettingsTab) removeOpenSettingsTab();
+      mounted = false;
     }
   }, []);
+
+  // Periodic trial status polling with guaranteed unmount cleanup
+  useEffect(() => {
+    if (!activeTrial) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await window.electronAPI?.getTrialStatus?.();
+        if (res?.expired) {
+          setActiveTrial(null);
+          if (SHOW_PROMOTIONAL_SURFACES) setShowTrialExpiredModal(true);
+        } else if (res?.ok) {
+          setActiveTrial({
+            expiresAt: res.expires_at ?? '',
+            usage: res.usage ?? { ai: 0, stt_seconds: 0, search: 0 },
+          });
+        }
+      } catch { /* ignore */ }
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [activeTrial]);
+
+  // Show trial expired modal after delay with guaranteed unmount cleanup
+  useEffect(() => {
+    if (!delayedTrialExpired) return;
+    const timer = setTimeout(() => setShowTrialExpiredModal(true), 10_000);
+    return () => clearTimeout(timer);
+  }, [delayedTrialExpired]);
+
+  // Reset complete Ollama pull status after delay with guaranteed unmount cleanup
+  useEffect(() => {
+    if (ollamaPullStatus !== 'complete') return;
+    const timer = setTimeout(() => setOllamaPullStatus('idle'), 3000);
+    return () => clearTimeout(timer);
+  }, [ollamaPullStatus]);
 
   // Listen for overlay opacity changes — scoped to overlay window only
   useEffect(() => {
@@ -733,5 +767,13 @@ const App: React.FC = () => {
     </ErrorBoundary>
   )
 }
+
+const App: React.FC = () => {
+  const isCropperWindow = new URLSearchParams(window.location.search).get('window') === 'cropper';
+  if (isCropperWindow) {
+    return <CropperView />;
+  }
+  return <MainAppContent />;
+};
 
 export default App

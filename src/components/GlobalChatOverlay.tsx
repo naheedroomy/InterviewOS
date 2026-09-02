@@ -129,11 +129,12 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
     // Submit initial query when overlay opens
     useEffect(() => {
         if (isOpen && initialQuery && messages.length === 0) {
-            setTimeout(() => {
+            const timer = setTimeout(() => {
                 submitQuestion(initialQuery);
             }, 100);
+            return () => clearTimeout(timer);
         }
-    }, [isOpen, initialQuery]);
+    }, [isOpen, initialQuery, messages.length, submitQuestion]);
 
     // Listen for new queries from parent
     useEffect(() => {
@@ -183,9 +184,7 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
         setErrorMessage(null);
 
         // Scroll to bottom when user sends message
-        setTimeout(() => {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 50);
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
 
         const assistantMessageId = genMessageId();
 

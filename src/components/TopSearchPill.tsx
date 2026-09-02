@@ -216,13 +216,8 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
             }
         };
 
-        // Delay to prevent immediate close on open click
-        const timer = setTimeout(() => {
-            document.addEventListener('mousedown', handleClickOutside);
-        }, 100);
-
+        document.addEventListener('mousedown', handleClickOutside);
         return () => {
-            clearTimeout(timer);
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, [state, close]);

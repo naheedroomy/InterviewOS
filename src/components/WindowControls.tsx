@@ -7,13 +7,7 @@ import { isMac } from '../utils/platformUtils';
  * Returns null immediately on macOS (native traffic lights are used there).
  * The null-return is at the TOP, before any hooks, satisfying React's rules.
  */
-const WindowControls: React.FC = () => {
-  // Return null early if on macOS — BEFORE any hooks would be called.
-  // NOTE: isMac is a module-level constant evaluated once at module load, so it
-  // is safe to use as an early-return guard (same value every render, no hook).
-  if (isMac) return null;
-
-  // Hooks — only reachable on Windows / Linux
+const NonMacWindowControls: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
@@ -72,6 +66,15 @@ const WindowControls: React.FC = () => {
       </button>
     </div>
   );
+};
+
+/**
+ * WindowControls — Custom minimize / maximize / close buttons.
+ * Returns null on macOS (native traffic lights are used there).
+ */
+const WindowControls: React.FC = () => {
+  if (isMac) return null;
+  return <NonMacWindowControls />;
 };
 
 export default WindowControls;
