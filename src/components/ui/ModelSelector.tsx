@@ -79,6 +79,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                         } catch (_geminiErr) {
                             console.warn('Failed to fetch Gemini models for cloud selector');
                         }
+                        if (creds?.geminiPreferredModel && !cModels.some(cm => cm.id === creds.geminiPreferredModel)) {
+                            cModels.push({
+                                id: creds.geminiPreferredModel,
+                                name: prettifyModelId(creds.geminiPreferredModel),
+                                desc: 'Google • Preferred',
+                                provider: 'gemini',
+                            });
+                        }
                     } else {
                         cfg.ids.forEach((id, i) => cModels.push({ id, name: cfg.names[i], desc: cfg.descs[i], provider: prov }));
                     }
@@ -96,6 +104,37 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
         loadData();
     }, [isOpen]);
 
+    // Preload cloud models on initial mount so getModelDisplayName displays immediately
+    useEffect(() => {
+        let mounted = true;
+        const preload = async () => {
+            try {
+                // @ts-ignore
+                const creds = await window.electronAPI?.getStoredCredentials?.();
+                if (!mounted || !creds) return;
+                const models: { id: string; name: string; desc: string; provider: string }[] = [];
+                if (creds.hasGeminiKey) {
+                    const geminiResult = await window.electronAPI?.fetchProviderModels('gemini', '');
+                    if (geminiResult?.success && geminiResult.models && mounted) {
+                        for (const m of geminiResult.models) {
+                            if (!models.some(cm => cm.id === m.id)) {
+                                models.push({ id: m.id, name: m.label || m.id, desc: 'Google • Gemini', provider: 'gemini' });
+                            }
+                        }
+                        if (creds.geminiPreferredModel && !models.some(cm => cm.id === creds.geminiPreferredModel)) {
+                            models.push({ id: creds.geminiPreferredModel, name: prettifyModelId(creds.geminiPreferredModel), desc: 'Google • Preferred', provider: 'gemini' });
+                        }
+                        setCloudModels(prev => [...prev, ...models.filter(nm => !prev.some(pm => pm.id === nm.id))]);
+                    }
+                }
+            } catch {
+                // silent preload fallback
+            }
+        };
+        preload();
+        return () => { mounted = false; };
+    }, []);
+
     const handleSelect = (model: string) => {
         // For custom/local, we might need to pass an ID or specific format
         // The backend logic (LLMHelper) needs to know how to handle this string or we need a richer object
@@ -112,6 +151,12 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
         const codexCliName = getCodexCliModelDisplayName(model);
         if (codexCliName) return codexCliName;
         if (model.startsWith('ollama-')) return model.replace('ollama-', '');
+        if (model === 'gemini-2.5-flash' || model === 'models/gemini-2.5-flash') return 'Gemini 2.5 Flash';
+        if (model === 'gemini-2.5-pro' || model === 'models/gemini-2.5-pro') return 'Gemini 2.5 Pro';
+        if (model === 'gemini-2.0-flash' || model === 'models/gemini-2.0-flash') return 'Gemini 2.0 Flash';
+        if (model === 'gemini-2.0-flash-lite' || model === 'models/gemini-2.0-flash-lite') return 'Gemini 2.0 Flash Lite';
+        if (model === 'gemini-1.5-pro' || model === 'models/gemini-1.5-pro') return 'Gemini 1.5 Pro';
+        if (model === 'gemini-1.5-flash' || model === 'models/gemini-1.5-flash') return 'Gemini 1.5 Flash';
         if (model === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
         if (model === 'gemini-3.1-flash-lite-preview') return 'Gemini 3.1 Flash';
         if (model === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
@@ -126,7 +171,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
         if (model === 'claude-sonnet-4-6') return 'Sonnet 4.6';
 
         // Check dynamic cloud models
-        const cloud = cloudModels.find(m => m.id === model);
+        const cloud = cloudModels.find(m => m.id === model || m.id === model.replace(/^models\//, '') || m.id === `models/${model}`);
         if (cloud) return cloud.name;
 
         // Check custom providers

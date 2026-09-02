@@ -115,9 +115,9 @@ const INITIAL_READINESS: SessionReadiness = {
 };
 
 const INITIAL_LOCAL_STT_MODEL: LocalSttModelState = {
-    id: 'onnx-community/moonshine-base-ONNX',
-    name: 'Moonshine Base',
-    sizeMb: 280,
+    id: 'distil-whisper/distil-large-v3',
+    name: 'Distil Large v3',
+    sizeMb: 731,
     status: 'missing',
     progress: 0,
     loading: true,
@@ -152,7 +152,7 @@ const providerLabels: Record<string, string> = {
 
 const sttProviderLabels: Record<string, string> = {
     google: 'Google Cloud Speech-to-Text',
-    'local-whisper': 'Moonshine Base',
+    'local-whisper': 'Distil Large v3',
 };
 
 const inferProviderLabel = (provider: string | undefined, model: string | undefined) => {
@@ -3794,7 +3794,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             ? {
                 key: 'speech-model',
                 label: 'Download local transcription model',
-                detail: readiness.sttHint || 'Moonshine Base is required for local transcription.',
+                detail: readiness.sttHint || 'Distil Large v3 is required for local transcription.',
                 tab: 'audio',
             }
             : null,
@@ -4125,7 +4125,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                     </div>
                                                     <h1 className="text-[28px] leading-tight font-semibold text-text-primary">Download local transcription</h1>
                                                     <p className="mt-3 text-[15px] leading-relaxed text-text-secondary">
-                                                        AnswerCue transcribes interviews on this computer. Download Moonshine once and it stays cached across app updates.
+                                                        AnswerCue transcribes interviews on this computer. Download Distil Large v3 once and it stays cached across app updates.
                                                     </p>
                                                 </div>
                                                 <p className="text-[12px] leading-relaxed text-text-tertiary">

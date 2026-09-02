@@ -93,6 +93,9 @@ const ModelSelectorWindow = () => {
                         } catch (_geminiErr) {
                             console.warn('Failed to fetch Gemini models for overlay selector');
                         }
+                        if (creds?.geminiPreferredModel && !models.some(ex => ex.id === creds.geminiPreferredModel)) {
+                            models.push({ id: creds.geminiPreferredModel, name: prettifyModelId(creds.geminiPreferredModel), type: 'cloud', provider: 'gemini' });
+                        }
                     } else {
                         cfg.ids.forEach((id, i) => {
                             models.push({ id, name: cfg.names[i], type: 'cloud', provider: prov });

@@ -184,10 +184,17 @@ async function fetchDeepSeekModels(apiKey: string): Promise<ProviderModel[]> {
  * empty fetch returns [].
  */
 export const FALLBACK_GEMINI_MODELS: ProviderModel[] = [
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+    { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+    { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
     { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
     { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite Preview' },
     { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
 ];
+
+let cachedDiscoveredGeminiModels: ProviderModel[] | null = null;
 
 /**
  * Pure filtering/transformation helper (no network I/O).
@@ -284,8 +291,15 @@ export async function fetchGeminiModelsWithFallback(
     httpGet: HttpGet
 ): Promise<ProviderModel[]> {
     try {
-        return await fetchGeminiModelsPaginated(apiKey, httpGet);
+        const models = await fetchGeminiModelsPaginated(apiKey, httpGet);
+        if (models && models.length > 0) {
+            cachedDiscoveredGeminiModels = models;
+        }
+        return models;
     } catch (_error: any) {
+        if (cachedDiscoveredGeminiModels && cachedDiscoveredGeminiModels.length > 0) {
+            return cachedDiscoveredGeminiModels;
+        }
         return FALLBACK_GEMINI_MODELS;
     }
 }

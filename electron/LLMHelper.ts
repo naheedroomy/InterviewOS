@@ -631,8 +631,13 @@ export class LLMHelper {
     this.currentModelId = targetModelId;
 
     // Update specific model props if needed
-    if (targetModelId === GEMINI_PRO_MODEL) this.geminiModel = GEMINI_PRO_MODEL;
-    if (targetModelId === GEMINI_FLASH_MODEL) this.geminiModel = GEMINI_FLASH_MODEL;
+    if (this.isGeminiModel(targetModelId)) {
+      this.geminiModel = targetModelId;
+    } else if (targetModelId === GEMINI_PRO_MODEL) {
+      this.geminiModel = GEMINI_PRO_MODEL;
+    } else if (targetModelId === GEMINI_FLASH_MODEL) {
+      this.geminiModel = GEMINI_FLASH_MODEL;
+    }
 
     console.log(`[LLMHelper] Switched to Model: ${targetModelId}`);
   }
@@ -1008,7 +1013,8 @@ export class LLMHelper {
     if (!this.client) throw new Error("Gemini client not initialized")
     this.assertOutboundScopes('gemini', JSON.stringify(contents));
 
-    const targetModel = modelIdOverride || this.geminiModel;
+    const rawModel = modelIdOverride || this.geminiModel;
+    const targetModel = rawModel.replace(/^models\//, '');
     console.log(`[LLMHelper] Calling ${targetModel}...`)
 
     return this.withRetry(async () => {
@@ -4359,14 +4365,15 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // CACHE BOUNDARY: static system content lives in `config.cachedContent`
     // (or `config.systemInstruction` on fallback); dynamic content stays in `contents`.
+    const targetModel = model.replace(/^models\//, '');
     const cacheName = systemInstruction
-      ? await this.geminiPromptCache.getOrCreate(this.client, model, systemInstruction)
+      ? await this.geminiPromptCache.getOrCreate(this.client, targetModel, systemInstruction)
       : null;
 
     const buildConfig = (useCacheName: string | null) => ({
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       temperature: 0.4,
-      ...this.getGeminiThinkingConfig(model),
+      ...this.getGeminiThinkingConfig(targetModel),
       ...(useCacheName
         ? { cachedContent: useCacheName }
         : systemInstruction
@@ -4377,7 +4384,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     let streamResult: any;
     try {
       streamResult = await this.client.models.generateContentStream({
-        model,
+        model: targetModel,
         contents,
         config: buildConfig(cacheName),
       });
@@ -4389,7 +4396,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         console.warn(`[LLMHelper] Gemini cachedContent ${cacheName} stale (${msg}); retrying with systemInstruction`);
         this.geminiPromptCache.invalidate(cacheName);
         streamResult = await this.client.models.generateContentStream({
-          model,
+          model: targetModel,
           contents,
           config: buildConfig(null),
         });

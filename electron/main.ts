@@ -1371,8 +1371,8 @@ export class AppState {
     } else {
       // Default to local-whisper
       const { LocalWhisperSTT } = require('./audio/LocalWhisperSTT');
-      const { DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID } = require('./audio/whisper/modelManager');
-      console.log(`[Main] Using local Moonshine Base STT for ${speaker}, model: ${DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID}`);
+      const { DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID, DEFAULT_LOCAL_TRANSCRIPTION_MODEL_NAME } = require('./audio/whisper/modelManager');
+      console.log(`[Main] Using local ${DEFAULT_LOCAL_TRANSCRIPTION_MODEL_NAME} STT for ${speaker}, model: ${DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID}`);
       const lws = new LocalWhisperSTT(DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID);
       // Channel label disambiguates the two concurrent instances in latency logs.
       lws.setChannel(speaker === 'interviewer' ? 'system' : 'mic');

@@ -5,8 +5,8 @@ import type { WhisperModelId, WhisperModelInfo } from './types';
 // env is configured lazily via configureTransformersCache()
 // We import the type only here; the actual require() happens at runtime.
 
-export const DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID: WhisperModelId = 'onnx-community/moonshine-base-ONNX';
-export const DEFAULT_LOCAL_TRANSCRIPTION_MODEL_NAME = 'Moonshine Base';
+export const DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID: WhisperModelId = 'distil-whisper/distil-large-v3';
+export const DEFAULT_LOCAL_TRANSCRIPTION_MODEL_NAME = 'Distil Large v3';
 
 const MODEL_CATALOG: WhisperModelInfo[] = [
   // ── Moonshine — streaming-native ASR. ~100× lower latency than Whisper Large v3.

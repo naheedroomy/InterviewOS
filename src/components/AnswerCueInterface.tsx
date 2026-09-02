@@ -4981,6 +4981,13 @@ Provide only the answer, nothing else.`;
                           const codexCliName = getCodexCliModelDisplayName(m);
                           if (codexCliName) return codexCliName;
                           if (m.startsWith('ollama-')) return m.replace('ollama-', '');
+                          const cleanModel = m.replace(/^models\//, '');
+                          if (cleanModel === 'gemini-2.5-flash') return 'Gemini 2.5 Flash';
+                          if (cleanModel === 'gemini-2.5-pro') return 'Gemini 2.5 Pro';
+                          if (cleanModel === 'gemini-2.0-flash') return 'Gemini 2.0 Flash';
+                          if (cleanModel === 'gemini-2.0-flash-lite') return 'Gemini 2.0 Flash Lite';
+                          if (cleanModel === 'gemini-1.5-pro') return 'Gemini 1.5 Pro';
+                          if (cleanModel === 'gemini-1.5-flash') return 'Gemini 1.5 Flash';
                           if (m === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
                           if (m === 'gemini-3.1-flash-lite-preview') return 'Gemini 3.1 Flash';
                           if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
@@ -4993,7 +5000,7 @@ Provide only the answer, nothing else.`;
                           if (m === 'claude-opus-4-7') return 'Opus 4.7';
                           if (m === 'claude-opus-4-6') return 'Opus 4.6';
                           if (m === 'claude-sonnet-4-6') return 'Sonnet 4.6';
-                          return m;
+                          return cleanModel;
                         })()}
                       </span>
                       <ChevronDown size={14} className="shrink-0 transition-transform" />
