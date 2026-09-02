@@ -207,7 +207,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
             }, 100);
             return () => clearTimeout(timer);
         }
-    }, [isOpen, initialQuery, messages.length, submitQuestion]);
+    }, [isOpen, initialQuery]);
 
     // Listen for new queries from parent
     useEffect(() => {
