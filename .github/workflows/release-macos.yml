@@ -43,10 +43,14 @@ name: Release (macOS signed + notarized)
 #     "auto-discover").
 
 on:
+  workflow_dispatch: {} # manual trigger uses the branch/tag selected in the Actions UI
   push:
+    branches:
+      - main
     tags:
       - 'v*'
-  workflow_dispatch: {} # manual trigger uses the branch/tag selected in the Actions UI
+    paths-ignore:
+      - '**/*.md'
 
 permissions:
   contents: write # needed to upload release assets
