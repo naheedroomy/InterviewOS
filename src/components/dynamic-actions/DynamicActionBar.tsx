@@ -25,7 +25,9 @@ export const DynamicActionBar: React.FC<Props> = ({
 }) => {
   const [actions, setActions] = useState<DynamicActionPayload[]>([]);
   const actionsRef = useRef(actions);
-  actionsRef.current = actions;
+  useEffect(() => {
+    actionsRef.current = actions;
+  }, [actions]);
 
   const handleIncoming = useCallback(
     (action: DynamicActionPayload) => {

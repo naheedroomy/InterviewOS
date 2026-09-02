@@ -65,8 +65,10 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     // Refs to avoid stale closures in the auto-save timer
     const savedRef = useRef(savedStatus);
     const savingRef = useRef(savingStatus);
-    savedRef.current = savedStatus;
-    savingRef.current = savingStatus;
+    useEffect(() => {
+        savedRef.current = savedStatus;
+        savingRef.current = savingStatus;
+    }, [savedStatus, savingStatus]);
 
     // Auto-save API key after 5 seconds of inactivity
     useEffect(() => {

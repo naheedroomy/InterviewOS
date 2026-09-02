@@ -2697,9 +2697,15 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         loadAudioDevices();
 
         // Sync initial meeting active state — guarded so unmounted component isn't written to
+        const wasMeetingActiveRef = { current: false };
         if (window.electronAPI?.getMeetingActive) {
             window.electronAPI.getMeetingActive()
-                .then((active) => { if (mounted) setIsMeetingActive(active); })
+                .then((active) => {
+                    if (mounted) {
+                        wasMeetingActiveRef.current = active;
+                        setIsMeetingActive(active);
+                    }
+                })
                 .catch(() => {});
         }
 
@@ -2707,16 +2713,16 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         let removeMeetingStateListener: (() => void) | undefined;
         if (window.electronAPI?.onMeetingStateChanged) {
             removeMeetingStateListener = window.electronAPI.onMeetingStateChanged(({ isActive }) => {
-                setIsMeetingActive((wasActive) => {
-                    if (isActive) {
-                        pendingOpenLatestInterviewRef.current = false;
-                        selectMeeting(null);
-                        setLiveTranscript([]);
-                    } else if (wasActive) {
-                        pendingOpenLatestInterviewRef.current = true;
-                    }
-                    return isActive;
-                });
+                const wasActive = wasMeetingActiveRef.current;
+                wasMeetingActiveRef.current = isActive;
+                if (isActive) {
+                    pendingOpenLatestInterviewRef.current = false;
+                    selectMeeting(null);
+                    setLiveTranscript([]);
+                } else if (wasActive) {
+                    pendingOpenLatestInterviewRef.current = true;
+                }
+                setIsMeetingActive(isActive);
             });
         }
 
@@ -2960,10 +2966,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             window.removeEventListener('keydown', handleKeyDown);
         };
     }, [isShortcutPressed]);
-
-    if (!window.electronAPI) {
-        return <div className="text-white p-10">Error: Electron API not initialized. Check preload script.</div>;
-    }
 
     const toggleDetectable = () => {
         const newState = !isDetectable;
@@ -3908,6 +3910,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             action: () => openPermissionSettings('accessibility'),
         },
     ];
+
+    if (!window.electronAPI) {
+        return <div className="text-white p-10">Error: Electron API not initialized. Check preload script.</div>;
+    }
 
     return (
         <div className="h-full w-full flex flex-col bg-bg-primary text-text-primary font-sans overflow-hidden selection:bg-[var(--accent-muted)]">
