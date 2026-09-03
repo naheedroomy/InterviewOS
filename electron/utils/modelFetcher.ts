@@ -197,12 +197,18 @@ export const FALLBACK_GEMINI_MODELS: ProviderModel[] = [
 let cachedDiscoveredGeminiModels: ProviderModel[] | null = null;
 
 /**
- * Predicate to check if a Gemini model is a supported Flash, Flash-Lite, or Pro tier.
- * Excludes antigravity, deep research, preview, experimental, and non-chat models.
+ * Predicate to check if a Gemini model is a supported Flash, Flash-Lite, or Pro tier (v2.0+).
+ * Excludes antigravity, deep research, preview, experimental, legacy 1.x, and non-chat models.
  */
 export function isAllowedGeminiModel(id: string): boolean {
     const clean = (id || '').replace(/^models\//, '').toLowerCase();
     if (!clean.startsWith('gemini-')) return false;
+
+    // Hide older 1.x legacy models (Gemini 2.0+ only)
+    const versionMatch = clean.match(/^gemini-(\d+)(?:\.(\d+))?/);
+    if (!versionMatch) return false;
+    const major = parseInt(versionMatch[1], 10);
+    if (major < 2) return false;
 
     // Must be a Flash (including Flash-Lite, Flash-8B) or Pro tier
     const isFlashOrPro = clean.includes('flash') || clean.includes('pro');

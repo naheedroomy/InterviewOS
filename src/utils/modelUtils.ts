@@ -54,6 +54,12 @@ export const isAllowedGeminiModel = (modelId: string): boolean => {
     const clean = (modelId || '').replace(/^models\//, '').toLowerCase();
     if (!clean.startsWith('gemini-')) return false;
 
+    // Hide older 1.x legacy models (Gemini 2.0+ only)
+    const versionMatch = clean.match(/^gemini-(\d+)(?:\.(\d+))?/);
+    if (!versionMatch) return false;
+    const major = parseInt(versionMatch[1], 10);
+    if (major < 2) return false;
+
     const isFlashOrPro = clean.includes('flash') || clean.includes('pro');
     if (!isFlashOrPro) return false;
 
