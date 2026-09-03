@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Check, Loader2 } from 'lucide-react';
-import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, getCodexCliModelDisplayName, isAllowedStandardCloudModel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
+import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, getCodexCliModelDisplayName, isAllowedStandardCloudModel, isAllowedGeminiModel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
 // Define Model Types
@@ -93,7 +93,7 @@ const ModelSelectorWindow = () => {
                         } catch (_geminiErr) {
                             console.warn('Failed to fetch Gemini models for overlay selector');
                         }
-                        if (creds?.geminiPreferredModel && !models.some(ex => ex.id === creds.geminiPreferredModel)) {
+                        if (creds?.geminiPreferredModel && isAllowedGeminiModel(creds.geminiPreferredModel) && !models.some(ex => ex.id === creds.geminiPreferredModel)) {
                             models.push({ id: creds.geminiPreferredModel, name: prettifyModelId(creds.geminiPreferredModel), type: 'cloud', provider: 'gemini' });
                         }
                     } else {
