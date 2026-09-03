@@ -50,6 +50,31 @@ export const isAllowedStandardCloudModel = (provider: string, modelId: string): 
     return config.ids.includes(modelId);
 };
 
+export const isAllowedGeminiModel = (modelId: string): boolean => {
+    const clean = (modelId || '').replace(/^models\//, '').toLowerCase();
+    if (!clean.startsWith('gemini-')) return false;
+
+    const isFlashOrPro = clean.includes('flash') || clean.includes('pro');
+    if (!isFlashOrPro) return false;
+
+    const excludePatterns = [
+        'antigravity',
+        'deep-research',
+        'research',
+        'preview',
+        'exp',
+        'experimental',
+        'thinking',
+        'vision',
+        'custom',
+        'tuned',
+        'robotics',
+        'learnlm',
+    ];
+
+    return !excludePatterns.some(p => clean.includes(p));
+};
+
 export const CODEX_CLI_MODEL = {
     id: 'codex-cli',
     name: 'Codex CLI',

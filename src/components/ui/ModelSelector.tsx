@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, Check, Cloud, Terminal, Monitor, Server, Plus } from 'lucide-react';
-import { getCodexCliModelDisplayName, isAllowedStandardCloudModel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { getCodexCliModelDisplayName, isAllowedStandardCloudModel, isAllowedGeminiModel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 
 interface ModelSelectorProps {
     currentModel: string;
@@ -79,7 +79,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                         } catch (_geminiErr) {
                             console.warn('Failed to fetch Gemini models for cloud selector');
                         }
-                        if (creds?.geminiPreferredModel && !cModels.some(cm => cm.id === creds.geminiPreferredModel)) {
+                        if (creds?.geminiPreferredModel && isAllowedGeminiModel(creds.geminiPreferredModel) && !cModels.some(cm => cm.id === creds.geminiPreferredModel)) {
                             cModels.push({
                                 id: creds.geminiPreferredModel,
                                 name: prettifyModelId(creds.geminiPreferredModel),
@@ -121,7 +121,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                                 models.push({ id: m.id, name: m.label || m.id, desc: 'Google • Gemini', provider: 'gemini' });
                             }
                         }
-                        if (creds.geminiPreferredModel && !models.some(cm => cm.id === creds.geminiPreferredModel)) {
+                        if (creds.geminiPreferredModel && isAllowedGeminiModel(creds.geminiPreferredModel) && !models.some(cm => cm.id === creds.geminiPreferredModel)) {
                             models.push({ id: creds.geminiPreferredModel, name: prettifyModelId(creds.geminiPreferredModel), desc: 'Google • Preferred', provider: 'gemini' });
                         }
                         setCloudModels(prev => [...prev, ...models.filter(nm => !prev.some(pm => pm.id === nm.id))]);

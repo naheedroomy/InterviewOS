@@ -75,44 +75,48 @@ describe('processGeminiModels — runtime (pure filtering)', () => {
   test('preserves exact m.name as id including models/ prefix', { skip: !canRunRuntime() }, () => {
     const input = [
       { name: 'models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', supportedGenerationMethods: ['generateContent'] },
-      { name: 'models/gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', supportedGenerationMethods: ['generateContent'] },
     ];
     const result = processGeminiModelsRuntime(input);
     assert.equal(result[0].id, 'models/gemini-2.5-flash');
-    assert.equal(result[1].id, 'models/gemini-3.1-pro-preview');
+    assert.equal(result[1].id, 'models/gemini-2.5-pro');
   });
 
   test('label uses displayName, falls back to name', { skip: !canRunRuntime() }, () => {
     const input = [
-      { name: 'models/gemini-has-display', displayName: 'My Display Name', supportedGenerationMethods: ['generateContent'] },
-      { name: 'models/gemini-no-display', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-flash-has-display', displayName: 'My Display Name', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-pro-no-display', supportedGenerationMethods: ['generateContent'] },
     ];
     const result = processGeminiModelsRuntime(input);
-    assert.equal(result.find(m => m.id === 'models/gemini-has-display').label, 'My Display Name');
-    assert.equal(result.find(m => m.id === 'models/gemini-no-display').label, 'models/gemini-no-display');
+    assert.equal(result.find(m => m.id === 'models/gemini-flash-has-display').label, 'My Display Name');
+    assert.equal(result.find(m => m.id === 'models/gemini-pro-no-display').label, 'models/gemini-pro-no-display');
   });
 
-  test('no version regex — preview/experimental aliases pass through', { skip: !canRunRuntime() }, () => {
+  test('filters to Flash, Flash-Lite, and Pro tiers only', { skip: !canRunRuntime() }, () => {
     const input = [
-      { name: 'models/gemini-2.0-flash-latest', displayName: 'Gemini 2.0 Flash Latest', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-2.0-flash', displayName: 'Gemini 2.0 Flash', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-2.0-flash-lite', displayName: 'Gemini 2.0 Flash Lite', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', supportedGenerationMethods: ['generateContent'] },
       { name: 'models/gemini-1.5-pro-experimental', displayName: 'Gemini 1.5 Pro Experimental', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro Preview', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-deep-research', displayName: 'Gemini Deep Research', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/antigravity-flash', displayName: 'Antigravity Flash', supportedGenerationMethods: ['generateContent'] },
       { name: 'models/learnlm-1.5-pro-experimental', displayName: 'LearnLM', supportedGenerationMethods: ['generateContent'] },
     ];
     const result = processGeminiModelsRuntime(input);
     assert.equal(result.length, 3);
-    assert.ok(result.some(m => m.id === 'models/gemini-2.0-flash-latest'));
-    assert.ok(result.some(m => m.id === 'models/gemini-1.5-pro-experimental'));
-    assert.ok(result.some(m => m.id === 'models/learnlm-1.5-pro-experimental'));
+    assert.ok(result.some(m => m.id === 'models/gemini-2.0-flash'));
+    assert.ok(result.some(m => m.id === 'models/gemini-2.0-flash-lite'));
+    assert.ok(result.some(m => m.id === 'models/gemini-2.5-pro'));
   });
 
-  test('no hardcoded name exclusion — only generateContent gate applies', { skip: !canRunRuntime() }, () => {
-    // Models that were previously excluded by name patterns but have generateContent
+  test('excludes specialized variants like vision, nano, and non-gemini', { skip: !canRunRuntime() }, () => {
     const input = [
-      { name: 'models/gemini-vision', displayName: 'Vision Model', supportedGenerationMethods: ['generateContent', 'generateImages'] },
+      { name: 'models/gemini-pro-vision', displayName: 'Vision Model', supportedGenerationMethods: ['generateContent'] },
       { name: 'models/gemini-nano', displayName: 'Nano', supportedGenerationMethods: ['generateContent'] },
     ];
     const result = processGeminiModelsRuntime(input);
-    assert.equal(result.length, 2);
+    assert.equal(result.length, 0);
   });
 
   test('dedup by exact id — first occurrence wins', { skip: !canRunRuntime() }, () => {
@@ -127,23 +131,23 @@ describe('processGeminiModels — runtime (pure filtering)', () => {
 
   test('deterministic sort — id primary, label tie-break', { skip: !canRunRuntime() }, () => {
     const input = [
-      { name: 'models/b', displayName: 'Beta', supportedGenerationMethods: ['generateContent'] },
-      { name: 'models/c', displayName: 'Alpha', supportedGenerationMethods: ['generateContent'] },
-      { name: 'models/a', displayName: 'Gamma', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-b-flash', displayName: 'Beta', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-c-flash', displayName: 'Alpha', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-a-flash', displayName: 'Gamma', supportedGenerationMethods: ['generateContent'] },
     ];
     const result = processGeminiModelsRuntime(input);
     // Primary sort by id: a, b, c
-    assert.equal(result[0].id, 'models/a');
-    assert.equal(result[1].id, 'models/b');
-    assert.equal(result[2].id, 'models/c');
+    assert.equal(result[0].id, 'models/gemini-a-flash');
+    assert.equal(result[1].id, 'models/gemini-b-flash');
+    assert.equal(result[2].id, 'models/gemini-c-flash');
   });
 
   test('sort id tie-break falls back to label', { skip: !canRunRuntime() }, () => {
     // IDs are unique after dedup so tie-break normally never fires,
     // but verify the comparator handles equal ids gracefully.
     const input = [
-      { name: 'models/x', displayName: 'Zeta', supportedGenerationMethods: ['generateContent'] },
-      { name: 'models/x', displayName: 'Alpha', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-x-pro', displayName: 'Zeta', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-x-pro', displayName: 'Alpha', supportedGenerationMethods: ['generateContent'] },
     ];
     const result = processGeminiModelsRuntime(input);
     assert.equal(result.length, 1); // dedup keeps first

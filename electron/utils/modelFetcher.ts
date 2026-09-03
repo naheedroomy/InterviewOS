@@ -197,13 +197,45 @@ export const FALLBACK_GEMINI_MODELS: ProviderModel[] = [
 let cachedDiscoveredGeminiModels: ProviderModel[] | null = null;
 
 /**
+ * Predicate to check if a Gemini model is a supported Flash, Flash-Lite, or Pro tier.
+ * Excludes antigravity, deep research, preview, experimental, and non-chat models.
+ */
+export function isAllowedGeminiModel(id: string): boolean {
+    const clean = (id || '').replace(/^models\//, '').toLowerCase();
+    if (!clean.startsWith('gemini-')) return false;
+
+    // Must be a Flash (including Flash-Lite, Flash-8B) or Pro tier
+    const isFlashOrPro = clean.includes('flash') || clean.includes('pro');
+    if (!isFlashOrPro) return false;
+
+    // Exclude antigravity, deep research, preview, experimental, and specialized variants
+    const excludePatterns = [
+        'antigravity',
+        'deep-research',
+        'research',
+        'preview',
+        'exp',
+        'experimental',
+        'thinking',
+        'vision',
+        'custom',
+        'tuned',
+        'robotics',
+        'learnlm',
+    ];
+
+    return !excludePatterns.some(p => clean.includes(p));
+}
+
+/**
  * Pure filtering/transformation helper (no network I/O).
  *
  * 1. Keep only models whose supportedGenerationMethods includes 'generateContent'.
- * 2. Preserve the exact API m.name as id, including the "models/" prefix.
- * 3. label = m.displayName || m.name.
- * 4. Deduplicate by exact id (first occurrence wins).
- * 5. Stable sort: canonical id localeCompare, then label as a tie-breaker.
+ * 2. Filter to Gemini Flash, Flash-Lite, and Pro models only.
+ * 3. Preserve the exact API m.name as id, including the "models/" prefix.
+ * 4. label = m.displayName || m.name.
+ * 5. Deduplicate by exact id (first occurrence wins).
+ * 6. Stable sort: canonical id localeCompare, then label as a tie-breaker.
  */
 export function processGeminiModels(rawModels: any[]): ProviderModel[] {
     const seen = new Set<string>();
@@ -215,6 +247,7 @@ export function processGeminiModels(rawModels: any[]): ProviderModel[] {
 
         const id: string = m.name || '';
         if (!id || seen.has(id)) continue;
+        if (!isAllowedGeminiModel(id)) continue;
         seen.add(id);
 
         result.push({ id, label: m.displayName || id });
