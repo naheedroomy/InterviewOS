@@ -115,11 +115,12 @@ export class IntelligenceEngine extends EventEmitter {
     private readonly triggerCooldown: number = 3000; // 3 seconds
 
     // Speculative inference: start LLM on high-confidence interviewer partials
+    private speculativeInferenceEnabled: boolean = true;
     private speculativeTimer: ReturnType<typeof setTimeout> | null = null;
     private speculativeText: string | null = null;
     // epoch ms after which speculativeText is stale; Infinity while stream is still running
     private speculativeTextExpiry: number = Infinity;
-    private readonly SPECULATIVE_DEBOUNCE_MS = 350;
+    private readonly SPECULATIVE_DEBOUNCE_MS = 800;
     private readonly SPECULATIVE_MIN_WORDS = 7;
     private readonly SPECULATIVE_MIN_CONFIDENCE = 0.75;
     private readonly SPECULATIVE_SIMILARITY_THRESHOLD = 0.75;
@@ -245,9 +246,22 @@ export class IntelligenceEngine extends EventEmitter {
         return /\b(what|how|why|where|when|which|who|can you|could you|tell me|explain|describe|walk me through|talk me through)\b/i.test(text);
     }
 
+    public setSpeculativeInferenceEnabled(enabled: boolean): void {
+        this.speculativeInferenceEnabled = enabled;
+        if (!enabled && this.speculativeTimer !== null) {
+            clearTimeout(this.speculativeTimer);
+            this.speculativeTimer = null;
+        }
+    }
+
+    public isSpeculativeInferenceEnabled(): boolean {
+        return this.speculativeInferenceEnabled;
+    }
+
     // Fires speculative LLM inference on a stable high-confidence interviewer partial.
     // Debounced so rapid word-by-word partials don't spawn multiple streams.
     private maybeSpeculate(segment: TranscriptSegment): void {
+        if (!this.speculativeInferenceEnabled) return;
         if (this.activeMode !== 'idle' && this.activeMode !== 'assist') return;
 
         // Snapshot values now — STT adapters may mutate the same segment object in place.
@@ -1268,6 +1282,7 @@ export class IntelligenceEngine extends EventEmitter {
     private setMode(mode: IntelligenceMode): void {
         if (this.activeMode !== mode) {
             this.activeMode = mode;
+            this.session?.setBusy(mode !== 'idle');
             this.emit('mode_changed', mode);
         }
     }
@@ -1281,6 +1296,7 @@ export class IntelligenceEngine extends EventEmitter {
      */
     reset(): void {
         this.activeMode = 'idle';
+        this.session?.setBusy(false);
         this.currentGenerationId++; // Increment to break all active LLM streams
         if (this.assistCancellationToken) {
             this.assistCancellationToken.abort();

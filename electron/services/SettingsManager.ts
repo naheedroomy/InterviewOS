@@ -60,6 +60,8 @@ export interface AppSettings {
     overlayExpanded?: boolean;
     // Pre-expand bounds: saved when toggling into expanded mode, restored on un-expand.
     preExpandBounds?: { x: number; y: number; width: number; height: number; displayId: number } | null;
+    // When false, disables background speculative LLM inference on partial STT. Defaults to true.
+    speculativeInferenceEnabled?: boolean;
 }
 
 export const VALID_SCREEN_UNDERSTANDING_MODES = ['vision_first', 'vision_only', 'private_vision'] as const;

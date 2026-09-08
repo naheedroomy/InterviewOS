@@ -67,6 +67,20 @@ export class SessionTracker {
     private static readonly MAX_EPOCH_SUMMARIES = 5;
     private transcriptEpochSummaries: string[] = [];
     private isCompacting: boolean = false;
+    private isBusy: boolean = false;
+
+    public setBusy(busy: boolean): void {
+        this.isBusy = busy;
+        if (!busy && this.fullTranscript.length > 1800) {
+            void this.compactTranscriptIfNeeded().catch(e =>
+                console.warn('[SessionTracker] compactTranscript error (non-fatal):', e)
+            );
+        }
+    }
+
+    public isBusyState(): boolean {
+        return this.isBusy;
+    }
 
     // Track interim interviewer segment
     private lastInterimInterviewer: TranscriptSegment | null = null;
@@ -603,6 +617,22 @@ export class SessionTracker {
      */
     private async compactTranscriptIfNeeded(): Promise<void> {
         if (this.fullTranscript.length <= 1800 || this.isCompacting) return;
+
+        // Defer background LLM compaction during active queries so it does not compete for rate limits or tokens.
+        // If buffer grows beyond 2400 during a prolonged active turn, perform fast text-only sliding-window eviction.
+        if (this.isBusy) {
+            if (this.fullTranscript.length > 2400) {
+                const summarizeCount = 500;
+                const oldEntries = this.fullTranscript.slice(0, summarizeCount);
+                const marker = `[Earlier discussion: ${oldEntries.length} segments preserved (deferred compaction during active query).]`;
+                this.transcriptEpochSummaries.push(marker);
+                if (this.transcriptEpochSummaries.length > SessionTracker.MAX_EPOCH_SUMMARIES) {
+                    this.transcriptEpochSummaries = this.transcriptEpochSummaries.slice(-SessionTracker.MAX_EPOCH_SUMMARIES);
+                }
+                this.fullTranscript = this.fullTranscript.slice(summarizeCount);
+            }
+            return;
+        }
 
         this.isCompacting = true;
         try {

@@ -84,6 +84,14 @@ export class IntelligenceManager extends EventEmitter {
         this.engine.reinitializeLLMs();
     }
 
+    setSpeculativeInferenceEnabled(enabled: boolean): void {
+        this.engine.setSpeculativeInferenceEnabled(enabled);
+    }
+
+    isSpeculativeInferenceEnabled(): boolean {
+        return this.engine.isSpeculativeInferenceEnabled();
+    }
+
     // ============================================
     // Context Management (delegates to session)
     // ============================================
