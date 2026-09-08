@@ -22,6 +22,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import type { InterviewWorkspace, InterviewRound } from '../types/electron';
 
 interface Meeting {
     id: string;
@@ -1835,8 +1836,35 @@ const formatTime = (dateStr: string) => {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
 };
 
+const formatRelativeTime = (dateStr: string) => {
+    try {
+        const date = new Date(dateStr);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        if (diffMs < 0) return 'Just now';
+        const diffSecs = Math.floor(diffMs / 1000);
+        if (diffSecs < 60) return 'Just now';
+        const diffMins = Math.floor(diffSecs / 60);
+        if (diffMins < 60) return `${diffMins}m ago`;
+        const diffHours = Math.floor(diffMins / 60);
+        if (diffHours < 24) return `${diffHours}h ago`;
+        const diffDays = Math.floor(diffHours / 24);
+        if (diffDays === 1) return 'Yesterday';
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } catch {
+        return 'Draft';
+    }
+};
+
 const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onPageChange, ollamaPullStatus = 'idle', ollamaPullPercent = 0, ollamaPullMessage = '' }) => {
     const [meetings, setMeetings] = useState<Meeting[]>([]);
+    const [workspaces, setWorkspaces] = useState<InterviewWorkspace[]>([]);
+    const [selectedWorkspace, setSelectedWorkspace] = useState<InterviewWorkspace | null>(null);
+    const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<string | null>(null);
+    const [workspaceRenameDraft, setWorkspaceRenameDraft] = useState('');
+    const [isSavingWorkspaceRename, setIsSavingWorkspaceRename] = useState(false);
+    const [workspaceRenameError, setWorkspaceRenameError] = useState<string | null>(null);
     const [isDetectable, setIsDetectable] = useState(false);
     const [isMeetingActive, setIsMeetingActive] = useState(false);
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
@@ -1897,6 +1925,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
 
     const pendingOpenLatestInterviewRef = useRef(false);
     const selectedMeetingRef = useRef<Meeting | null>(null);
+    const selectedWorkspaceRef = useRef<InterviewWorkspace | null>(null);
     const workspaceGenerationRef = useRef(0);
     const readinessGenRef = useRef(0);
     const {
@@ -1909,6 +1938,69 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         selectedMeetingRef.current = meeting;
         setSelectedMeeting(meeting);
     }, []);
+
+    const selectWorkspace = useCallback((workspace: InterviewWorkspace) => {
+        selectedWorkspaceRef.current = workspace;
+        setSelectedWorkspace(workspace);
+        setWorkspaceStateId(workspace.id);
+        safeWriteWorkspacePointer(workspace.id);
+
+        const docIds = Array.isArray(workspace.documentIds) ? workspace.documentIds : [];
+        setSelectedDocIds(docIds);
+        setWorkspaceContextDocIds(docIds);
+
+        const activeRound = workspace.rounds?.find(r => r.id === workspace.activeRoundId) || workspace.rounds?.[0];
+        const messages = Array.isArray(activeRound?.prepMessages)
+            ? activeRound.prepMessages.map((m: any) => ({ ...m, isStreaming: false }))
+            : [];
+        setPrepMessages(messages);
+        setPrepDraft('');
+        setWorkspaceConversationState('idle');
+        setWorkspaceErrorMessage(null);
+        setLiveTranscript([]);
+        resetWorkspaceStreamBuffer();
+
+        if (activeRound?.meetingId && window.electronAPI?.getMeetingDetails) {
+            window.electronAPI.getMeetingDetails(activeRound.meetingId)
+                .then(fullMeeting => {
+                    if (fullMeeting) {
+                        selectMeeting(fullMeeting);
+                    } else {
+                        selectMeeting(null);
+                    }
+                })
+                .catch(() => selectMeeting(null));
+        } else {
+            selectMeeting(null);
+        }
+    }, [resetWorkspaceStreamBuffer, selectMeeting]);
+
+    const fetchWorkspaces = useCallback(async () => {
+        if (!window.electronAPI?.interviewWorkspaceList) return;
+        try {
+            const res = await window.electronAPI.interviewWorkspaceList();
+            if (res?.success && Array.isArray(res.workspaces)) {
+                let list = res.workspaces;
+                if (list.length === 0 && window.electronAPI.interviewWorkspaceCreate) {
+                    const createRes = await window.electronAPI.interviewWorkspaceCreate({ title: 'New Interview' });
+                    if (createRes?.success && createRes.workspace) {
+                        list = [createRes.workspace];
+                    }
+                }
+                setWorkspaces(list);
+
+                const currentId = selectedWorkspaceRef.current?.id || safeReadWorkspacePointer();
+                const matched = list.find(w => w.id === currentId);
+                const targetWorkspace = matched || list[0] || null;
+
+                if (targetWorkspace) {
+                    selectWorkspace(targetWorkspace);
+                }
+            }
+        } catch (err) {
+            console.error('[Launcher] Failed to fetch workspaces:', err);
+        }
+    }, [selectWorkspace]);
 
     const hydrateWorkspaceForMeeting = useCallback(async (meetingId: string) => {
         setWorkspaceConversationState('idle');
@@ -2023,6 +2115,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         selectedMeetingRef.current = selectedMeeting;
     }, [selectedMeeting]);
 
+    useEffect(() => {
+        selectedWorkspaceRef.current = selectedWorkspace;
+    }, [selectedWorkspace]);
+
     const refreshSelectedMeetingDetails = useCallback(async (meetingId: string) => {
         if (!window.electronAPI?.getMeetingDetails) return;
 
@@ -2125,12 +2221,27 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             messages,
             overrides.selectedDocumentIds ?? selectedDocIds,
         );
-        const documentsForContext = interviewDocs.filter(doc => selectedDocumentIds.includes(doc.id));
+        const selectedDocIdsSet = new Set(selectedDocumentIds);
+        const documentsForContext = interviewDocs.filter(doc => selectedDocIdsSet.has(doc.id));
         const contextMarkdown = buildInterviewContextMarkdown(messages, documentsForContext);
         const persistedMessages = messages.map(message => ({
             ...message,
             isStreaming: false,
         }));
+
+        if (id && window.electronAPI?.interviewWorkspaceUpdateRoundPrep) {
+            const currentWs = selectedWorkspaceRef.current?.id === id
+                ? selectedWorkspaceRef.current
+                : null;
+            const roundId = currentWs?.activeRoundId || currentWs?.rounds?.[0]?.id;
+            if (roundId) {
+                void window.electronAPI.interviewWorkspaceUpdateRoundPrep({
+                    workspaceId: id,
+                    roundId,
+                    messages: persistedMessages,
+                });
+            }
+        }
 
         // 1) Try V2 updatePrep for draft/prep-only persistence (no meeting linkage)
         const explicitMeetingId = overrides.meetingId;
@@ -2181,6 +2292,11 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     ]);
 
     useEffect(() => {
+        if (typeof window.electronAPI?.interviewWorkspaceList === 'function') {
+            fetchWorkspaces();
+            return;
+        }
+
         const savedDraftId = safeReadWorkspacePointer();
         if (!savedDraftId) {
             // No saved pointer — resolve a fresh draft workspace
@@ -2518,6 +2634,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         analytics.trackCommandExecuted('refresh_launcher');
         try {
             setShowNotification(true);
+            fetchWorkspaces();
             fetchMeetings();
             fetchInterviewDocs();
             loadAudioDevices();
@@ -2588,6 +2705,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             });
         }
 
+        fetchWorkspaces();
         fetchMeetings();
         fetchInterviewDocs();
         refreshReadiness();
@@ -2997,6 +3115,26 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     const prepContextMarkdown = buildInterviewContextMarkdown(prepMessages, contextDocs);
 
     const handleNewInterview = async () => {
+        try {
+            let newWorkspace: InterviewWorkspace | null = null;
+            if (window.electronAPI?.interviewWorkspaceCreate) {
+                const res = await window.electronAPI.interviewWorkspaceCreate({ title: 'New Interview' });
+                if (res?.success && res.workspace) {
+                    newWorkspace = res.workspace;
+                }
+            }
+            if (newWorkspace) {
+                setWorkspaces(prev => [newWorkspace!, ...prev.filter(w => w.id !== newWorkspace!.id)]);
+                selectWorkspace(newWorkspace);
+                beginRenameWorkspace(newWorkspace, 'sidebar');
+                analytics.trackCommandExecuted('new_interview_ready_from_sidebar');
+                return;
+            }
+        } catch (err) {
+            console.error('[Launcher] Error in handleNewInterview:', err);
+        }
+
+        // Fallback if interviewWorkspaceCreate is unavailable
         const generation = ++workspaceGenerationRef.current;
         selectMeeting(null);
         setForwardMeeting(null);
@@ -3011,7 +3149,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         pendingOpenLatestInterviewRef.current = false;
         resetWorkspaceStreamBuffer();
 
-        // Await durable creation via V2 resolveDraft forceNew, or fallback
         if (window.electronAPI?.interviewWorkspaceResolveDraft) {
             try {
                 const result = await window.electronAPI.interviewWorkspaceResolveDraft({
@@ -3024,28 +3161,14 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                     analytics.trackCommandExecuted('new_interview_ready_from_sidebar');
                     return;
                 }
-                // V2 failed — do NOT write a generated pointer; keep existing.
-                // The backend owns workspace creation; retry on next action.
-                console.error('[Launcher] forceNew resolveDraft failed:', result?.error);
-                analytics.trackCommandExecuted('new_interview_ready_from_sidebar');
-                return;
             } catch (error) {
                 console.error('[Launcher] resolveDraft forceNew error:', error);
-                // Fall through to legacy path only because V2 threw (unexpected)
             }
         }
 
-        // Legacy fallback — only reached when V2 is absent or threw unexpectedly
         const fallbackId = genMessageId();
         safeWriteWorkspacePointer(fallbackId);
         setWorkspaceStateId(fallbackId);
-        window.electronAPI?.interviewWorkspaceSave?.({
-            id: fallbackId,
-            status: 'draft',
-            messages: [],
-            selectedDocumentIds: [],
-            contextMarkdown: '',
-        }).catch(error => console.error('[Launcher] Failed to create draft interview workspace:', error));
         analytics.trackCommandExecuted('new_interview_ready_from_sidebar');
     };
 
@@ -3243,6 +3366,96 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         }
     };
 
+    const beginRenameWorkspace = (workspace: InterviewWorkspace, origin: 'header' | 'sidebar' = 'sidebar') => {
+        setRenamingWorkspaceId(workspace.id);
+        setRenameOrigin(origin);
+        setWorkspaceRenameDraft(workspace.title || '');
+        setWorkspaceRenameError(null);
+        setActiveMenuId(null);
+    };
+
+    const cancelRenameWorkspace = () => {
+        setRenamingWorkspaceId(null);
+        setRenameOrigin(null);
+        setWorkspaceRenameDraft('');
+        setWorkspaceRenameError(null);
+    };
+
+    const saveRenameWorkspace = async () => {
+        const id = renamingWorkspaceId;
+        const nextTitle = workspaceRenameDraft.trim();
+        if (!id || isSavingWorkspaceRename) return;
+        if (!nextTitle) {
+            setWorkspaceRenameError('Interview title cannot be empty.');
+            return;
+        }
+
+        const currentWorkspace = workspaces.find(w => w.id === id) || selectedWorkspaceRef.current;
+        if (nextTitle === currentWorkspace?.title) {
+            cancelRenameWorkspace();
+            return;
+        }
+
+        setIsSavingWorkspaceRename(true);
+        setWorkspaceRenameError(null);
+        try {
+            if (window.electronAPI?.interviewWorkspaceRename) {
+                const res = await window.electronAPI.interviewWorkspaceRename({ id, title: nextTitle });
+                if (!res?.success) {
+                    setWorkspaceRenameError(res?.error || 'Could not rename interview.');
+                    return;
+                }
+                const updatedWs = res.workspace;
+                setWorkspaces(prev => prev.map(w => w.id === id ? (updatedWs || { ...w, title: nextTitle }) : w));
+                if (selectedWorkspaceRef.current?.id === id) {
+                    setSelectedWorkspace(prev => prev ? (updatedWs || { ...prev, title: nextTitle }) : null);
+                }
+            }
+            cancelRenameWorkspace();
+            analytics.trackCommandExecuted('rename_interview_workspace');
+        } catch (error) {
+            console.error('[Launcher] Failed to rename interview workspace:', error);
+            setWorkspaceRenameError('Could not rename interview.');
+        } finally {
+            setIsSavingWorkspaceRename(false);
+        }
+    };
+
+    const handleDeleteWorkspace = async (id: string) => {
+        setActiveMenuId(null);
+        if (!window.electronAPI?.interviewWorkspaceDelete) return;
+
+        try {
+            const res = await window.electronAPI.interviewWorkspaceDelete(id);
+            if (!res?.success) {
+                console.error('[Launcher] Failed to delete interview workspace:', res?.error);
+                return;
+            }
+
+            const remaining = workspaces.filter(w => w.id !== id);
+            setWorkspaces(remaining);
+
+            if (selectedWorkspaceRef.current?.id === id) {
+                if (remaining.length > 0) {
+                    selectWorkspace(remaining[0]);
+                } else if (window.electronAPI.interviewWorkspaceCreate) {
+                    const createRes = await window.electronAPI.interviewWorkspaceCreate({ title: 'New Interview' });
+                    if (createRes?.success && createRes.workspace) {
+                        setWorkspaces([createRes.workspace]);
+                        selectWorkspace(createRes.workspace);
+                    } else {
+                        setSelectedWorkspace(null);
+                    }
+                } else {
+                    setSelectedWorkspace(null);
+                }
+            }
+            analytics.trackCommandExecuted('delete_interview_workspace');
+        } catch (err) {
+            console.error('[Launcher] Error in handleDeleteWorkspace:', err);
+        }
+    };
+
     const resetDeviceFallback = () => {
         if (!deviceFallbackNotice) return;
         if (deviceFallbackNotice.kind === 'input') {
@@ -3267,19 +3480,24 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                 return;
             }
             setInterviewDocs(prev => [result.document, ...prev]);
-            setSelectedDocIds(prev => {
-                const next = prev.includes(result.document.id) ? prev : [...prev, result.document.id];
-                if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
-                    void window.electronAPI.interviewWorkspaceUpdateDocuments({
-                        workspaceId: workspaceStateId,
-                        documentIds: next,
-                    });
-                }
-                persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
-                    console.error('[Launcher] Failed to persist uploaded document:', error);
+
+            const next = selectedDocIds.includes(result.document.id)
+                ? selectedDocIds
+                : [...selectedDocIds, result.document.id];
+            setSelectedDocIds(next);
+
+            if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+                void window.electronAPI.interviewWorkspaceUpdateDocuments({
+                    workspaceId: workspaceStateId,
+                    documentIds: next,
                 });
-                return next;
+            }
+            persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
+                console.error('[Launcher] Failed to persist uploaded document:', error);
             });
+            setSelectedWorkspace(prev => prev ? { ...prev, documentIds: next } : null);
+            setWorkspaces(prev => prev.map(w => w.id === workspaceStateId ? { ...w, documentIds: next } : w));
+
             setDocDetailsTargetId(result.document.id);
             setDocDetailsMode('upload');
             setDocDetailsError(null);
@@ -3293,53 +3511,57 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     };
 
     const handleAttachExistingDoc = (docId: string) => {
-        setSelectedDocIds(prev => {
-            if (prev.includes(docId)) return prev;
-            const next = [...prev, docId];
-            if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
-                void window.electronAPI.interviewWorkspaceUpdateDocuments({
-                    workspaceId: workspaceStateId,
-                    documentIds: next,
-                });
-            }
-            persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
-                console.error('[Launcher] Failed to persist attached document:', error);
+        if (selectedDocIds.includes(docId)) return;
+        const next = [...selectedDocIds, docId];
+        setSelectedDocIds(next);
+
+        if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+            void window.electronAPI.interviewWorkspaceUpdateDocuments({
+                workspaceId: workspaceStateId,
+                documentIds: next,
             });
-            return next;
+        }
+        persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
+            console.error('[Launcher] Failed to persist attached document:', error);
         });
+        setSelectedWorkspace(prev => prev ? { ...prev, documentIds: next } : null);
+        setWorkspaces(prev => prev.map(w => w.id === workspaceStateId ? { ...w, documentIds: next } : w));
     };
 
     const handleRemoveInterviewDoc = (docId: string) => {
-        setSelectedDocIds(prev => {
-            const next = prev.filter(id => id !== docId);
-            if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
-                void window.electronAPI.interviewWorkspaceUpdateDocuments({
-                    workspaceId: workspaceStateId,
-                    documentIds: next,
-                });
-            }
-            persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
-                console.error('[Launcher] Failed to persist document removal:', error);
+        const next = selectedDocIds.filter(id => id !== docId);
+        setSelectedDocIds(next);
+
+        if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+            void window.electronAPI.interviewWorkspaceUpdateDocuments({
+                workspaceId: workspaceStateId,
+                documentIds: next,
             });
-            return next;
+        }
+        persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
+            console.error('[Launcher] Failed to persist document removal:', error);
         });
+        setSelectedWorkspace(prev => prev ? { ...prev, documentIds: next } : null);
+        setWorkspaces(prev => prev.map(w => w.id === workspaceStateId ? { ...w, documentIds: next } : w));
     };
 
     const handleDeleteInterviewDoc = async (id: string) => {
         const result = await window.electronAPI?.interviewDocsDelete?.(id);
         if (result?.success) {
             setInterviewDocs(prev => prev.filter(doc => doc.id !== id));
-            setSelectedDocIds(prev => {
-                const next = prev.filter(docId => docId !== id);
-                if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
-                    void window.electronAPI.interviewWorkspaceUpdateDocuments({
-                        workspaceId: workspaceStateId,
-                        documentIds: next,
-                    });
-                }
-                return next;
-            });
+            const next = selectedDocIds.filter(docId => docId !== id);
+            setSelectedDocIds(next);
+
+            if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+                void window.electronAPI.interviewWorkspaceUpdateDocuments({
+                    workspaceId: workspaceStateId,
+                    documentIds: next,
+                });
+            }
             setWorkspaceContextDocIds(prev => prev.filter(docId => docId !== id));
+            setSelectedWorkspace(prev => prev ? { ...prev, documentIds: next } : null);
+            setWorkspaces(prev => prev.map(w => w.id === workspaceStateId ? { ...w, documentIds: next } : w));
+
             if (docDetailsTargetId === id) {
                 setDocDetailsTargetId(null);
                 setDocDetailsMode(null);
@@ -3349,21 +3571,22 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     };
 
     const toggleSelectedDoc = (id: string) => {
-        setSelectedDocIds(prev => {
-            const next = prev.includes(id)
-                ? prev.filter(docId => docId !== id)
-                : [...prev, id];
-            if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
-                void window.electronAPI.interviewWorkspaceUpdateDocuments({
-                    workspaceId: workspaceStateId,
-                    documentIds: next,
-                });
-            }
-            persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
-                console.error('[Launcher] Failed to persist selected document:', error);
+        const next = selectedDocIds.includes(id)
+            ? selectedDocIds.filter(docId => docId !== id)
+            : [...selectedDocIds, id];
+        setSelectedDocIds(next);
+
+        if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+            void window.electronAPI.interviewWorkspaceUpdateDocuments({
+                workspaceId: workspaceStateId,
+                documentIds: next,
             });
-            return next;
+        }
+        persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
+            console.error('[Launcher] Failed to persist selected document:', error);
         });
+        setSelectedWorkspace(prev => prev ? { ...prev, documentIds: next } : null);
+        setWorkspaces(prev => prev.map(w => w.id === workspaceStateId ? { ...w, documentIds: next } : w));
     };
 
     const saveDocDetails = async (metadata: { contextKind: InterviewContextDocumentKind; contextDescription?: string }) => {
@@ -3379,19 +3602,20 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             }
 
             setInterviewDocs(prev => prev.map(doc => doc.id === result.document.id ? result.document : doc));
-            setSelectedDocIds(prev => {
-                const next = prev.includes(result.document.id) ? prev : [...prev, result.document.id];
-                if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
-                    void window.electronAPI.interviewWorkspaceUpdateDocuments({
-                        workspaceId: workspaceStateId,
-                        documentIds: next,
-                    });
-                }
-                persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
-                    console.error('[Launcher] Failed to persist document details:', error);
+            const next = selectedDocIds.includes(result.document.id) ? selectedDocIds : [...selectedDocIds, result.document.id];
+            setSelectedDocIds(next);
+
+            if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+                void window.electronAPI.interviewWorkspaceUpdateDocuments({
+                    workspaceId: workspaceStateId,
+                    documentIds: next,
                 });
-                return next;
+            }
+            persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
+                console.error('[Launcher] Failed to persist document details:', error);
             });
+            setSelectedWorkspace(prev => prev ? { ...prev, documentIds: next } : null);
+            setWorkspaces(prev => prev.map(w => w.id === workspaceStateId ? { ...w, documentIds: next } : w));
             setDocDetailsTargetId(null);
             setDocDetailsMode(null);
         } catch (error) {
@@ -3453,16 +3677,15 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             isStreaming: true,
         };
         const nextMessages = [...prepMessages, userMessage, assistantPlaceholder];
-        const nextContextDocIds = getWorkspaceDocumentIds([...prepMessages, userMessage], []);
+        const nextContextDocIds = getWorkspaceDocumentIds([...prepMessages, userMessage], selectedDocIds);
         setPrepDraft('');
-        setSelectedDocIds([]);
         setWorkspaceContextDocIds(nextContextDocIds);
         setWorkspaceErrorMessage(null);
         setPrepMessages(nextMessages);
         setWorkspaceConversationState('waiting');
         persistWorkspaceState({
             messages: nextMessages,
-            selectedDocumentIds: nextContextDocIds,
+            selectedDocumentIds: selectedDocIds,
         }).catch(error => console.error('[LauncherWorkspaceChat] failed to persist outgoing message:', error));
 
         let tokenCleanup: (() => void) | undefined;
@@ -3473,10 +3696,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             resetWorkspaceStreamBuffer();
             const messagesForContext = [...prepMessages, userMessage];
             const messageAttachmentIds = new Set(messageAttachments.map(doc => doc.id));
+            const selectedDocSet = new Set(selectedDocIds);
+            const prepAttachmentIds = new Set(prepMessages.flatMap(m => m.attachments?.map(a => a.id) || []));
             const documentsForContext = interviewDocs.filter(doc =>
-                selectedDocIds.includes(doc.id) ||
+                selectedDocSet.has(doc.id) ||
                 messageAttachmentIds.has(doc.id) ||
-                prepMessages.some(message => message.attachments?.some(attachment => attachment.id === doc.id)),
+                prepAttachmentIds.has(doc.id),
             );
             const context = buildInterviewWorkspaceChatContext(
                 messagesForContext,
@@ -4307,7 +4532,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                     <div className="shrink-0 px-3 py-2 border-b border-border-subtle flex items-center justify-between">
                                         <div>
                                             <h2 className="text-[13px] font-semibold text-text-primary">Interviews</h2>
-                                            <p className="text-[11px] text-text-tertiary">{meetings.length} saved</p>
+                                            <p className="text-[11px] text-text-tertiary">{workspaces.length} saved</p>
                                         </div>
                                         <button
                                             onClick={handleRefresh}
@@ -4319,187 +4544,201 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                         </button>
                                     </div>
                                     <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-2 py-3">
-                                        {sortedGroups.map((label) => (
-                                            <section key={label} className="mb-4">
-                                                <h3 className="px-2 mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">{label}</h3>
-                                                <div className="space-y-1">
-                                                    {groupedMeetings[label].map((m) => {
-                                                        const rowFinalizing = isMeetingFinalizing(m);
-                                                        const rowRenaming = renamingMeetingId === m.id && renameOrigin === 'sidebar';
+                                        <div className="space-y-1">
+                                            {workspaces.map((ws) => {
+                                                const isSelected = selectedWorkspace?.id === ws.id;
+                                                const isRenaming = renamingWorkspaceId === ws.id && renameOrigin === 'sidebar';
+                                                const isLive = ws.rounds?.some((r) => r.status === 'active');
+                                                const roundCount = ws.rounds?.length || 1;
+                                                const roundLabel = `${roundCount} ${roundCount === 1 ? 'round' : 'rounds'}`;
+                                                const hasCompleted = ws.rounds?.some((r) => r.status === 'completed');
+                                                const statusOrTime = hasCompleted
+                                                    ? formatRelativeTime(ws.updatedAt)
+                                                    : 'Draft';
 
-                                                        return (
-                                                        <motion.div
-                                                            key={m.id}
-                                                            layoutId={`meeting-${m.id}`}
-                                                            className={`group relative px-2.5 py-2 rounded-md transition-colors ${rowRenaming ? 'cursor-default' : 'cursor-pointer'} ${
-                                                                selectedMeeting?.id === m.id
-                                                                    ? isLight
-                                                                        ? 'bg-bg-elevated shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]'
-                                                                        : 'bg-white/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]'
-                                                                    : isLight
-                                                                        ? 'hover:bg-bg-elevated'
-                                                                        : 'hover:bg-white/6'
-                                                            }`}
-                                                            onClick={() => {
-                                                                if (!rowRenaming) handleOpenMeeting(m);
-                                                            }}
-                                                        >
-                                                            <div className="flex items-center justify-between gap-2">
-                                                                {rowRenaming ? (
-                                                                    <div className="min-w-0 flex-1 flex items-center gap-1">
-                                                                        <input
-                                                                            value={renameDraft}
-                                                                            onChange={(event) => {
-                                                                                setRenameDraft(event.target.value);
-                                                                                setRenameError(null);
-                                                                            }}
-                                                                            onClick={(event) => event.stopPropagation()}
-                                                                            onKeyDown={(event) => {
-                                                                                if (event.key === 'Enter') {
-                                                                                    event.preventDefault();
-                                                                                    saveRenameMeeting();
-                                                                                } else if (event.key === 'Escape') {
-                                                                                    event.preventDefault();
-                                                                                    cancelRenameMeeting();
-                                                                                }
-                                                                            }}
-                                                                            onFocus={(event) => event.currentTarget.select()}
-                                                                            disabled={isSavingRename}
-                                                                            autoFocus
-                                                                            className={`h-7 min-w-0 flex-1 rounded-md border px-2 text-[13px] font-medium outline-none ${isLight ? 'bg-white border-border-muted text-text-primary focus:border-accent-primary' : 'bg-bg-input border-border-subtle text-text-primary focus:border-accent-primary'}`}
-                                                                        />
+                                                return (
+                                                    <motion.div
+                                                        key={ws.id}
+                                                        layoutId={`workspace-${ws.id}`}
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        aria-label={`Interview: ${ws.title}`}
+                                                        className={`group relative px-2.5 py-2 rounded-md transition-colors ${
+                                                            isRenaming ? 'cursor-default' : 'cursor-pointer'
+                                                        } ${
+                                                            isSelected
+                                                                ? isLight
+                                                                    ? 'bg-bg-elevated shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]'
+                                                                    : 'bg-white/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]'
+                                                                : isLight
+                                                                    ? 'hover:bg-bg-elevated'
+                                                                    : 'hover:bg-white/6'
+                                                        }`}
+                                                        onClick={() => {
+                                                            if (!isRenaming && selectedWorkspace?.id !== ws.id) {
+                                                                selectWorkspace(ws);
+                                                            }
+                                                        }}
+                                                        onKeyDown={(event) => {
+                                                            if ((event.key === 'Enter' || event.key === ' ') && !isRenaming) {
+                                                                event.preventDefault();
+                                                                selectWorkspace(ws);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            {isRenaming ? (
+                                                                <div className="min-w-0 flex-1 flex items-center gap-1">
+                                                                    <input
+                                                                        value={workspaceRenameDraft}
+                                                                        onChange={(event) => {
+                                                                            setWorkspaceRenameDraft(event.target.value);
+                                                                            setWorkspaceRenameError(null);
+                                                                        }}
+                                                                        onClick={(event) => event.stopPropagation()}
+                                                                        onDoubleClick={(event) => event.stopPropagation()}
+                                                                        onKeyDown={(event) => {
+                                                                            if (event.key === 'Enter') {
+                                                                                event.preventDefault();
+                                                                                saveRenameWorkspace();
+                                                                            } else if (event.key === 'Escape') {
+                                                                                event.preventDefault();
+                                                                                cancelRenameWorkspace();
+                                                                            }
+                                                                        }}
+                                                                        onFocus={(event) => event.currentTarget.select()}
+                                                                        disabled={isSavingWorkspaceRename}
+                                                                        autoFocus
+                                                                        className={`h-7 min-w-0 flex-1 rounded-md border px-2 text-[13px] font-medium outline-none ${
+                                                                            isLight
+                                                                                ? 'bg-white border-border-muted text-text-primary focus:border-accent-primary'
+                                                                                : 'bg-bg-input border-border-subtle text-text-primary focus:border-accent-primary'
+                                                                        }`}
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(event) => {
+                                                                            event.stopPropagation();
+                                                                            saveRenameWorkspace();
+                                                                        }}
+                                                                        disabled={isSavingWorkspaceRename}
+                                                                        title="Save title"
+                                                                        className={`h-7 w-7 shrink-0 rounded-md flex items-center justify-center text-text-tertiary hover:text-text-primary disabled:opacity-50 ${
+                                                                            isLight ? 'hover:bg-black/8' : 'hover:bg-white/10'
+                                                                        }`}
+                                                                    >
+                                                                        {isSavingWorkspaceRename ? <RefreshCw size={13} className="animate-spin" /> : <Check size={14} />}
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(event) => {
+                                                                            event.stopPropagation();
+                                                                            cancelRenameWorkspace();
+                                                                        }}
+                                                                        disabled={isSavingWorkspaceRename}
+                                                                        title="Cancel rename"
+                                                                        className={`h-7 w-7 shrink-0 rounded-md flex items-center justify-center text-text-tertiary hover:text-text-primary disabled:opacity-50 ${
+                                                                            isLight ? 'hover:bg-black/8' : 'hover:bg-white/10'
+                                                                        }`}
+                                                                    >
+                                                                        <X size={14} />
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <>
+                                                                    <p
+                                                                        onDoubleClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            beginRenameWorkspace(ws, 'sidebar');
+                                                                        }}
+                                                                        className="min-w-0 flex-1 truncate text-[13px] font-medium text-text-primary"
+                                                                        title={ws.title}
+                                                                    >
+                                                                        {ws.title}
+                                                                    </p>
+                                                                    <button
+                                                                        className="opacity-0 group-hover:opacity-100 h-6 w-6 shrink-0 rounded-md flex items-center justify-center text-text-tertiary hover:text-text-primary hover:bg-bg-item-active transition-all"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setActiveMenuId(activeMenuId === ws.id ? null : ws.id);
+                                                                        }}
+                                                                        title="Interview options"
+                                                                    >
+                                                                        <MoreHorizontal size={14} />
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                        <div className="mt-1 flex items-center gap-2 text-[11px] text-text-tertiary">
+                                                            {isRenaming && workspaceRenameError ? (
+                                                                <span className="truncate text-red-400">{workspaceRenameError}</span>
+                                                            ) : isLive ? (
+                                                                <>
+                                                                    <span>{roundLabel}</span>
+                                                                    <span className="h-1 w-1 rounded-full bg-text-tertiary/50" />
+                                                                    <span className="flex items-center gap-1 font-medium text-emerald-500">
+                                                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                                                        <span>Live</span>
+                                                                    </span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span>{roundLabel}</span>
+                                                                    <span className="h-1 w-1 rounded-full bg-text-tertiary/50" />
+                                                                    <span>{statusOrTime}</span>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                        <AnimatePresence>
+                                                            {activeMenuId === ws.id && (
+                                                                <motion.div
+                                                                    initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                                                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                                    exit={{ opacity: 0, scale: 0.96, y: 4 }}
+                                                                    transition={{ duration: 0.1 }}
+                                                                    className={`absolute right-2 top-8 w-[116px] backdrop-blur-xl rounded-lg shadow-2xl z-50 overflow-hidden border ${
+                                                                        isLight
+                                                                            ? 'bg-bg-elevated border-border-muted shadow-[0_8px_24px_rgba(0,0,0,0.12)]'
+                                                                            : 'bg-[#1E1E1E]/90 border-white/10'
+                                                                    }`}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    onMouseEnter={() => setMenuEntered(true)}
+                                                                    onMouseLeave={() => {
+                                                                        if (menuEntered) setActiveMenuId(null);
+                                                                    }}
+                                                                >
+                                                                    <div className="p-1 flex flex-col gap-0.5">
                                                                         <button
-                                                                            type="button"
-                                                                            onClick={(event) => {
-                                                                                event.stopPropagation();
-                                                                                saveRenameMeeting();
-                                                                            }}
-                                                                            disabled={isSavingRename}
-                                                                            title="Save title"
-                                                                            className={`h-7 w-7 shrink-0 rounded-md flex items-center justify-center text-text-tertiary hover:text-text-primary disabled:opacity-50 ${isLight ? 'hover:bg-black/8' : 'hover:bg-white/10'}`}
-                                                                        >
-                                                                            {isSavingRename ? <RefreshCw size={13} className="animate-spin" /> : <Check size={14} />}
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={(event) => {
-                                                                                event.stopPropagation();
-                                                                                cancelRenameMeeting();
-                                                                            }}
-                                                                            disabled={isSavingRename}
-                                                                            title="Cancel rename"
-                                                                            className={`h-7 w-7 shrink-0 rounded-md flex items-center justify-center text-text-tertiary hover:text-text-primary disabled:opacity-50 ${isLight ? 'hover:bg-black/8' : 'hover:bg-white/10'}`}
-                                                                        >
-                                                                            <X size={14} />
-                                                                        </button>
-                                                                    </div>
-                                                                ) : (
-                                                                    <>
-                                                                        <p className={`min-w-0 flex-1 truncate text-[13px] font-medium ${rowFinalizing ? 'text-accent-primary italic animate-pulse' : 'text-text-primary'}`}>
-                                                                            {m.title}
-                                                                        </p>
-                                                                        <button
-                                                                            className="opacity-0 group-hover:opacity-100 h-6 w-6 shrink-0 rounded-md flex items-center justify-center text-text-tertiary hover:text-text-primary hover:bg-bg-item-active transition-all"
+                                                                            className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-text-primary rounded-md transition-colors text-left ${
+                                                                                isLight ? 'hover:bg-bg-item-surface' : 'hover:bg-white/10'
+                                                                            }`}
                                                                             onClick={(e) => {
                                                                                 e.stopPropagation();
-                                                                                setActiveMenuId(activeMenuId === m.id ? null : m.id);
+                                                                                beginRenameWorkspace(ws, 'sidebar');
                                                                             }}
                                                                         >
-                                                                            <MoreHorizontal size={14} />
+                                                                            <Pencil size={13} />
+                                                                            Rename
                                                                         </button>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                            <div className="mt-1 flex items-center gap-2 text-[11px] text-text-tertiary">
-                                                                {rowRenaming && renameError ? (
-                                                                    <span className="truncate text-red-400">{renameError}</span>
-                                                                ) : rowFinalizing ? (
-                                                                    <>
-                                                                        <RefreshCw size={11} className="animate-spin text-accent-primary" />
-                                                                        <span>Finalizing</span>
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        <span>{formatTime(m.date)}</span>
-                                                                        <span className="h-1 w-1 rounded-full bg-text-tertiary/50" />
-                                                                        <span>{formatDurationPill(m.duration)}</span>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                            <AnimatePresence>
-                                                                {activeMenuId === m.id && (
-                                                                    <motion.div
-                                                                        initial={{ opacity: 0, scale: 0.96, y: 8 }}
-                                                                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                                                                        exit={{ opacity: 0, scale: 0.96, y: 4 }}
-                                                                        transition={{ duration: 0.1 }}
-                                                                        className={`absolute right-2 top-8 w-[116px] backdrop-blur-xl rounded-lg shadow-2xl z-50 overflow-hidden border ${isLight ? 'bg-bg-elevated border-border-muted shadow-[0_8px_24px_rgba(0,0,0,0.12)]' : 'bg-[#1E1E1E]/90 border-white/10'}`}
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                        onMouseEnter={() => setMenuEntered(true)}
-                                                                        onMouseLeave={() => {
-                                                                            if (menuEntered) setActiveMenuId(null);
-                                                                        }}
-                                                                    >
-                                                                        <div className="p-1 flex flex-col gap-0.5">
-                                                                            {!rowFinalizing && (
-                                                                                <button
-                                                                                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-text-primary rounded-md transition-colors text-left ${isLight ? 'hover:bg-bg-item-surface' : 'hover:bg-white/10'}`}
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        beginRenameMeeting(m, 'sidebar');
-                                                                                    }}
-                                                                                >
-                                                                                    <Pencil size={13} />
-                                                                                    Rename
-                                                                                </button>
-                                                                            )}
-                                                                            <button
-                                                                                className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-text-primary rounded-md transition-colors text-left ${isLight ? 'hover:bg-bg-item-surface' : 'hover:bg-white/10'}`}
-                                                                                onClick={async () => {
-                                                                                    setActiveMenuId(null);
-                                                                                    analytics.trackPdfExported();
-                                                                                    if (window.electronAPI && window.electronAPI.getMeetingDetails) {
-                                                                                        try {
-                                                                                            const fullMeeting = await window.electronAPI.getMeetingDetails(m.id);
-                                                                                            generateMeetingPDF(fullMeeting || m);
-                                                                                        } catch (e) {
-                                                                                            console.error("Failed to fetch details for PDF", e);
-                                                                                            generateMeetingPDF(m);
-                                                                                        }
-                                                                                    } else {
-                                                                                        generateMeetingPDF(m);
-                                                                                    }
-                                                                                }}
-                                                                            >
-                                                                                <Download size={13} />
-                                                                                Export
-                                                                            </button>
-                                                                            <button
-                                                                                className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-md transition-colors text-left"
-                                                                                onClick={async () => {
-                                                                                    if (window.electronAPI && window.electronAPI.deleteMeeting) {
-                                                                                        const success = await window.electronAPI.deleteMeeting(m.id);
-                                                                                        if (success) {
-                                                                                            setMeetings(prev => prev.filter(meeting => meeting.id !== m.id));
-                                                                                        }
-                                                                                    }
-                                                                                    setActiveMenuId(null);
-                                                                                }}
-                                                                            >
-                                                                                <Trash2 size={13} />
-                                                                                Delete
-                                                                            </button>
-                                                                        </div>
-                                                                    </motion.div>
-                                                                )}
-                                                            </AnimatePresence>
-                                                        </motion.div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </section>
-                                        ))}
-                                        {meetings.length === 0 && (
+                                                                        <button
+                                                                            className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-md transition-colors text-left"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleDeleteWorkspace(ws.id);
+                                                                            }}
+                                                                        >
+                                                                            <Trash2 size={13} />
+                                                                            Delete
+                                                                        </button>
+                                                                    </div>
+                                                                </motion.div>
+                                                            )}
+                                                        </AnimatePresence>
+                                                    </motion.div>
+                                                );
+                                            })}
+                                        </div>
+                                        {workspaces.length === 0 && (
                                             <div className="px-3 py-8 text-center text-[13px] text-text-tertiary">No interviews yet.</div>
                                         )}
                                     </div>
