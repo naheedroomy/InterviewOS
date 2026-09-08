@@ -22,6 +22,7 @@
     "start": "npm run app:dev",
     "dist": "npm run app:build",
     "dist:signed": "npm run app:build:signed",
+    "mac:reset": "bash scripts/reset-mac-permissions.sh",
     "build:native": "node scripts/build-native.js",
     "test": "npm run build:electron && node --test 'electron/services/__tests__/**/*.test.mjs' 'electron/llm/__tests__/**/*.test.mjs' 'electron/audio/__tests__/**/*.test.mjs'",
     "test:modes": "npm run build:electron && node --test electron/services/__tests__/Mode*.test.mjs electron/services/__tests__/ProfileIntelligenceGate.test.mjs electron/services/__tests__/AnswerCueApiE2E.test.mjs",
