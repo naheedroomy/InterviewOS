@@ -235,6 +235,7 @@ jobs:
             release/*.zip
             release/latest*.yml
           if-no-files-found: error
+          retention-days: 3
 
       - name: Upload artifacts to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')

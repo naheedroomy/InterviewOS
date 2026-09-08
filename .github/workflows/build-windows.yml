@@ -68,3 +68,4 @@ jobs:
             release/*.exe
             release/latest.yml
           if-no-files-found: error
+          retention-days: 3
