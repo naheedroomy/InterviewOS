@@ -158,7 +158,7 @@ function normalizeWorkspace(raw: any, existing?: InterviewWorkspace): InterviewW
     rounds,
     activeRoundId,
     createdAt: existing?.createdAt || normalizeString(raw?.createdAt) || now,
-    updatedAt: now,
+    updatedAt: normalizeString(raw?.updatedAt || existing?.updatedAt).trim() || now,
   };
 }
 
@@ -460,7 +460,7 @@ export class InterviewWorkspaceStateManager {
     const wsId = normalizeString(workspaceId).trim();
     const rId = normalizeString(roundId).trim();
     const mId = normalizeString(meetingId).trim();
-    if (!wsId || !rId) return null;
+    if (!wsId || !rId || !mId) return null;
 
     const store = this.readStore();
     const existing = store.workspaces.find(ws => ws.id === wsId);
@@ -474,7 +474,7 @@ export class InterviewWorkspaceStateManager {
     updatedRounds[roundIdx] = {
       ...updatedRounds[roundIdx],
       status: 'completed',
-      meetingId: mId || undefined,
+      meetingId: mId,
       completedAt: now,
     };
 

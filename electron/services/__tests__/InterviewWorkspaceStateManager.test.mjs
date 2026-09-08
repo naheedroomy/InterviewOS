@@ -134,4 +134,58 @@ test('InterviewWorkspaceStateManager edge cases and atomic persistence', () => {
   assert.deepEqual(reloaded.documentIds, ['doc-1', 'doc-2']);
 });
 
+test('InterviewWorkspaceStateManager preserves updatedAt on store reads and rejects empty meetingId', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-updated-at-'));
+  const statePath = path.join(tmpDir, 'workspaces.json');
+
+  // Pre-seed workspaces.json with a specific historical updatedAt timestamp
+  const historicalTime = '2025-01-15T12:00:00.000Z';
+  const rawStore = {
+    version: 3,
+    workspaces: [
+      {
+        id: 'seeded-ws',
+        title: 'Historical Workspace',
+        documentIds: ['doc-x'],
+        rounds: [
+          {
+            id: 'seeded-round-1',
+            name: 'Round 1',
+            roundNumber: 1,
+            status: 'draft',
+            prepMessages: [],
+            createdAt: historicalTime,
+          },
+        ],
+        activeRoundId: 'seeded-round-1',
+        createdAt: historicalTime,
+        updatedAt: historicalTime,
+      },
+    ],
+  };
+  fs.writeFileSync(statePath, JSON.stringify(rawStore, null, 2));
+
+  InterviewWorkspaceStateManager.__setTestStatePath(statePath);
+  const manager = InterviewWorkspaceStateManager.getInstance();
+
+  // Reading the workspace must NOT change updatedAt to "now"
+  const read1 = manager.getWorkspace('seeded-ws');
+  assert.equal(read1.updatedAt, historicalTime, 'updatedAt preserved on getWorkspace');
+
+  const list = manager.listWorkspaces();
+  assert.equal(list[0].updatedAt, historicalTime, 'updatedAt preserved on listWorkspaces');
+
+  // finishRoundMeeting rejects empty / whitespace meetingId
+  assert.equal(manager.finishRoundMeeting('seeded-ws', 'seeded-round-1', ''), null, 'empty meetingId rejected');
+  assert.equal(manager.finishRoundMeeting('seeded-ws', 'seeded-round-1', '   '), null, 'whitespace meetingId rejected');
+
+  // Genuine mutation updates updatedAt
+  const afterFinish = manager.finishRoundMeeting('seeded-ws', 'seeded-round-1', 'mtg-valid-1');
+  assert.ok(afterFinish);
+  assert.notEqual(afterFinish.updatedAt, historicalTime, 'mutation updates updatedAt');
+  assert.equal(afterFinish.rounds[0].status, 'completed');
+  assert.equal(afterFinish.rounds[0].meetingId, 'mtg-valid-1');
+});
+
+
 
