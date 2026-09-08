@@ -53,6 +53,27 @@ export interface InterviewWorkspaceMessage {
   attachments?: InterviewWorkspaceAttachment[];
 }
 
+export interface InterviewRound {
+  id: string;
+  name: string;
+  roundNumber: number;
+  status: 'draft' | 'active' | 'completed';
+  prepMessages: any[];
+  meetingId?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface InterviewWorkspace {
+  id: string;
+  title: string;
+  documentIds: string[];
+  rounds: InterviewRound[];
+  activeRoundId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface InterviewWorkspaceState {
   id: string;
   meetingIds: string[];
@@ -299,18 +320,28 @@ export interface ElectronAPI {
   interviewDocsUpload: () => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>
   interviewDocsUpdateMetadata: (id: string, metadata: { contextKind: 'resume' | 'project' | 'other'; contextDescription?: string }) => Promise<{ success: boolean; document?: any; error?: string }>
   interviewDocsDelete: (id: string) => Promise<{ success: boolean; error?: string }>
+  // Interview Workspace & Multi-Round APIs
+  interviewWorkspaceList: () => Promise<{ success: boolean; workspaces?: InterviewWorkspace[]; error?: string }>
+  interviewWorkspaceCreate: (payload?: { title?: string; initialDocIds?: string[] }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
   interviewWorkspaceGetById: (id: string) => Promise<any | null>
+  interviewWorkspaceRename: (payload: { id: string; title: string } | string, maybeTitle?: string) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceDelete: (id: string) => Promise<{ success: boolean; error?: string }>
+  interviewWorkspaceAddRound: (payload: { workspaceId: string; name?: string } | string, name?: string) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceRenameRound: (payload: { workspaceId: string; roundId: string; name: string }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceSetActiveRound: (payload: { workspaceId: string; roundId: string }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceUpdateRoundPrep: (payload: { workspaceId: string; roundId: string; messages: any[] }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceUpdateDocuments: (payload: { workspaceId: string; documentIds: string[] }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceStartMeeting: (payload: { workspaceId: string; roundId: string }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; meetingId?: string; error?: string }>
+  interviewWorkspaceFinishMeeting: (payload: { workspaceId: string; roundId: string; meetingId: string }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+
+  // Backward Compatibility Workspace APIs
   interviewWorkspaceGetByMeeting: (meetingId: string) => Promise<any | null>
   interviewWorkspaceSave: (state: any) => Promise<{ success: boolean; state?: any; error?: string }>
-
-  // V2 workspace APIs
   interviewWorkspaceResolveDraft: (options?: { preferredId?: string; forceNew?: boolean }) => Promise<{ success: boolean; workspace?: InterviewWorkspaceState; created?: boolean; error?: string }>
   interviewWorkspaceUpdatePrep: (payload: { id: string; messages?: InterviewWorkspaceMessage[]; contextMarkdown?: string; selectedDocumentIds?: string[] }) => Promise<{ success: boolean; workspace?: InterviewWorkspaceState; error?: string }>
   interviewWorkspaceBeginRun: (id: string) => Promise<{ success: boolean; workspace?: InterviewWorkspaceState; error?: string }>
   interviewWorkspaceFinishRun: (payload: { id: string; meetingId: string }) => Promise<{ success: boolean; workspace?: InterviewWorkspaceState; error?: string }>
   interviewWorkspaceCancelRun: (id: string) => Promise<{ success: boolean; workspace?: InterviewWorkspaceState; error?: string }>
-  interviewWorkspaceList: () => Promise<{ success: boolean; workspaces?: InterviewWorkspaceState[]; error?: string }>
-  interviewWorkspaceDelete: (id: string) => Promise<{ success: boolean; error?: string }>
   startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string }>
   endMeeting: () => Promise<{ success: boolean; error?: string }>
   finalizeMicSTT: () => Promise<void>

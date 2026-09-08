@@ -1152,7 +1152,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, error: 'invalid_value' };
     }
     SettingsManager.getInstance().set('speculativeInferenceEnabled', enabled);
-    appState.intelligenceManager?.setSpeculativeInferenceEnabled(enabled);
+    (appState as any).intelligenceManager?.setSpeculativeInferenceEnabled(enabled);
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
         win.webContents.send('speculative-inference-enabled-changed', enabled);
@@ -1941,7 +1941,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  const validateCurlProviderPayload = (provider: unknown): { ok: true } | { ok: false; error: string } => {
+  const validateCurlProviderPayload = (provider: unknown): { ok: true; error?: undefined } | { ok: false; error: string } => {
     if (
       typeof provider !== 'object' ||
       provider === null ||
@@ -3207,9 +3207,142 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('interview-workspace:get-by-id', async (_, id: string) => {
-    return InterviewWorkspaceStateManager.getInstance().getWorkspace(id);
+  // ─── Interview Workspace & Multi-Round Handlers ────────────────────────────
+
+  safeHandle('interview-workspace:list', async () => {
+    try {
+      const workspaces = InterviewWorkspaceStateManager.getInstance().listWorkspaces();
+      return { success: true, workspaces };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:list error:', error?.message ?? error);
+      return { success: false, workspaces: [], error: error?.message || 'Could not list workspaces.' };
+    }
   });
+
+  safeHandle('interview-workspace:create', async (_, payload?: { title?: string; initialDocIds?: string[] }) => {
+    try {
+      const workspace = InterviewWorkspaceStateManager.getInstance().createWorkspace(payload);
+      return { success: true, workspace };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:create error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not create workspace.' };
+    }
+  });
+
+  safeHandle('interview-workspace:get-by-id', async (_, idOrPayload: string | { id: string }) => {
+    try {
+      const id = typeof idOrPayload === 'string' ? idOrPayload : idOrPayload?.id;
+      const workspace = InterviewWorkspaceStateManager.getInstance().getWorkspace(id);
+      return workspace ? { success: true, workspace, ...workspace } : null;
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:get-by-id error:', error?.message ?? error);
+      return null;
+    }
+  });
+
+  safeHandle('interview-workspace:rename', async (_, payload: { id: string; title: string } | string, maybeTitle?: string) => {
+    try {
+      const id = typeof payload === 'string' ? payload : payload?.id;
+      const title = typeof payload === 'string' ? maybeTitle || '' : payload?.title;
+      const workspace = InterviewWorkspaceStateManager.getInstance().renameWorkspace(id, title);
+      return { success: !!workspace, workspace: workspace || undefined };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:rename error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not rename workspace.' };
+    }
+  });
+
+  safeHandle('interview-workspace:delete', async (_, idOrPayload: string | { id: string }) => {
+    try {
+      const id = typeof idOrPayload === 'string' ? idOrPayload : idOrPayload?.id;
+      const deleted = InterviewWorkspaceStateManager.getInstance().deleteWorkspace(id);
+      return { success: deleted };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:delete error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not delete workspace.' };
+    }
+  });
+
+  safeHandle('interview-workspace:add-round', async (_, payload: { workspaceId: string; name?: string } | string, maybeName?: string) => {
+    try {
+      const workspaceId = typeof payload === 'string' ? payload : payload?.workspaceId;
+      const name = typeof payload === 'string' ? maybeName : payload?.name;
+      const workspace = InterviewWorkspaceStateManager.getInstance().addRound(workspaceId, name);
+      return { success: !!workspace, workspace: workspace || undefined };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:add-round error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not add round.' };
+    }
+  });
+
+  safeHandle('interview-workspace:rename-round', async (_, payload: { workspaceId: string; roundId: string; name: string }) => {
+    try {
+      const workspace = InterviewWorkspaceStateManager.getInstance().renameRound(payload.workspaceId, payload.roundId, payload.name);
+      return { success: !!workspace, workspace: workspace || undefined };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:rename-round error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not rename round.' };
+    }
+  });
+
+  safeHandle('interview-workspace:set-active-round', async (_, payload: { workspaceId: string; roundId: string }) => {
+    try {
+      const workspace = InterviewWorkspaceStateManager.getInstance().setActiveRound(payload.workspaceId, payload.roundId);
+      return { success: !!workspace, workspace: workspace || undefined };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:set-active-round error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not set active round.' };
+    }
+  });
+
+  safeHandle('interview-workspace:update-round-prep', async (_, payload: { workspaceId: string; roundId: string; messages: any[] }) => {
+    try {
+      const workspace = InterviewWorkspaceStateManager.getInstance().updateRoundPrep(payload.workspaceId, payload.roundId, payload.messages);
+      return { success: !!workspace, workspace: workspace || undefined };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:update-round-prep error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not update round prep.' };
+    }
+  });
+
+  safeHandle('interview-workspace:update-documents', async (_, payload: { workspaceId: string; documentIds: string[] }) => {
+    try {
+      const workspace = InterviewWorkspaceStateManager.getInstance().updateDocuments(payload.workspaceId, payload.documentIds);
+      return { success: !!workspace, workspace: workspace || undefined };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:update-documents error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not update documents.' };
+    }
+  });
+
+  safeHandle('interview-workspace:start-meeting', async (_, payload: { workspaceId: string; roundId: string }) => {
+    try {
+      const workspace = InterviewWorkspaceStateManager.getInstance().startRoundMeeting(payload.workspaceId, payload.roundId);
+      if (!workspace) {
+        return { success: false, error: 'Workspace or round not found.' };
+      }
+      const activeRound = workspace.rounds.find(r => r.id === payload.roundId);
+      return { success: true, workspace, meetingId: activeRound?.meetingId };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:start-meeting error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not start round meeting.' };
+    }
+  });
+
+  safeHandle('interview-workspace:finish-meeting', async (_, payload: { workspaceId: string; roundId: string; meetingId: string }) => {
+    try {
+      const workspace = InterviewWorkspaceStateManager.getInstance().finishRoundMeeting(payload.workspaceId, payload.roundId, payload.meetingId);
+      if (!workspace) {
+        return { success: false, error: 'Workspace, round, or meetingId not found or invalid.' };
+      }
+      return { success: true, workspace };
+    } catch (error: any) {
+      console.error('[IPC] interview-workspace:finish-meeting error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not finish round meeting.' };
+    }
+  });
+
+  // ─── Backward Compatibility Workspace Handlers ───────────────────────────
 
   safeHandle('interview-workspace:get-by-meeting', async (_, meetingId: string) => {
     return InterviewWorkspaceStateManager.getInstance().getWorkspaceForMeeting(meetingId);
@@ -3224,8 +3357,6 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, error: error?.message || 'Could not save interview workspace.' };
     }
   });
-
-  // ─── V2 workspace APIs ────────────────────────────────────────────────────
 
   safeHandle('interview-workspace:resolve-draft', async (_, options?: { preferredId?: string; forceNew?: boolean }) => {
     try {
@@ -3276,26 +3407,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       console.error('[IPC] interview-workspace:cancel-run error:', error?.message ?? error);
       return { success: false, error: error?.message || 'Could not cancel workspace run.' };
-    }
-  });
-
-  safeHandle('interview-workspace:list', async () => {
-    try {
-      const workspaces = InterviewWorkspaceStateManager.getInstance().listWorkspaces();
-      return { success: true, workspaces };
-    } catch (error: any) {
-      console.error('[IPC] interview-workspace:list error:', error?.message ?? error);
-      return { success: false, error: error?.message || 'Could not list workspaces.' };
-    }
-  });
-
-  safeHandle('interview-workspace:delete', async (_, id: string) => {
-    try {
-      const deleted = InterviewWorkspaceStateManager.getInstance().deleteWorkspace(id);
-      return { success: deleted };
-    } catch (error: any) {
-      console.error('[IPC] interview-workspace:delete error:', error?.message ?? error);
-      return { success: false, error: error?.message || 'Could not delete workspace.' };
     }
   });
 
