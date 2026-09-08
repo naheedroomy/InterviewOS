@@ -757,6 +757,11 @@ interface ElectronAPI {
     enabled: boolean,
   ) => Promise<{ success: boolean; error?: string }>;
   onTechnicalInterviewVisionFirstChanged: (callback: (enabled: boolean) => void) => () => void;
+  getSpeculativeInferenceEnabled: () => Promise<boolean>;
+  setSpeculativeInferenceEnabled: (
+    enabled: boolean,
+  ) => Promise<{ success: boolean; error?: string }>;
+  onSpeculativeInferenceEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
   /** @deprecated alias for technicalInterviewVisionFirst — retained so older renderer builds keep working. */
   getTechnicalInterviewDirectVision: () => Promise<boolean>;
   /** @deprecated alias for technicalInterviewVisionFirst — retained so older renderer builds keep working. */
@@ -2074,6 +2079,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('technical-interview-vision-first-changed', subscription);
     return () => {
       ipcRenderer.removeListener('technical-interview-vision-first-changed', subscription);
+    };
+  },
+  getSpeculativeInferenceEnabled: () =>
+    ipcRenderer.invoke('get-speculative-inference-enabled'),
+  setSpeculativeInferenceEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('set-speculative-inference-enabled', enabled),
+  onSpeculativeInferenceEnabledChanged: (callback: (enabled: boolean) => void) => {
+    const subscription = (_: any, enabled: boolean) => callback(enabled);
+    ipcRenderer.on('speculative-inference-enabled-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('speculative-inference-enabled-changed', subscription);
     };
   },
   // Deprecated aliases — kept so renderer builds compiled against the old API keep working.

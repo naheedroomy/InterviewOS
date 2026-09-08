@@ -830,6 +830,8 @@ export class AppState {
 
     // Initialize IntelligenceManager with LLMHelper
     this.intelligenceManager = new IntelligenceManager(this.processingHelper.getLLMHelper())
+    const speculativeEnabled = settingsManager.get('speculativeInferenceEnabled') ?? true;
+    this.intelligenceManager.setSpeculativeInferenceEnabled(speculativeEnabled);
 
     // Initialize ThemeManager
     this.themeManager = ThemeManager.getInstance()

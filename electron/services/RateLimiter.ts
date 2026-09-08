@@ -47,8 +47,13 @@ export class RateLimiter {
      * Acquire a token. Resolves immediately if available.
      * If the bucket is empty, waits up to MAX_QUEUE_DEPTH slots.
      * Throws RateLimitQueueFullError if the queue is full — callers should catch and fail-fast.
+     * If an abortSignal is provided and fires while queued, removes the entry from the queue.
      */
-    public async acquire(): Promise<void> {
+    public async acquire(abortSignal?: AbortSignal): Promise<void> {
+        if (abortSignal?.aborted) {
+            throw new Error('Request aborted before rate limiter token acquired');
+        }
+
         this.refill();
 
         if (this.tokens >= 1) {
@@ -64,7 +69,27 @@ export class RateLimiter {
 
         // Wait for a token to become available
         return new Promise<void>((resolve, reject) => {
-            this.waitQueue.push({ resolve, reject });
+            const entry: { resolve: () => void; reject: (err: Error) => void } = { resolve, reject };
+
+            if (abortSignal) {
+                const onAbort = () => {
+                    abortSignal.removeEventListener('abort', onAbort);
+                    const idx = this.waitQueue.indexOf(entry);
+                    if (idx !== -1) {
+                        this.waitQueue.splice(idx, 1);
+                    }
+                    reject(new Error('Rate limiter token acquire aborted'));
+                };
+                abortSignal.addEventListener('abort', onAbort, { once: true });
+
+                const origResolve = entry.resolve;
+                entry.resolve = () => {
+                    abortSignal.removeEventListener('abort', onAbort);
+                    origResolve();
+                };
+            }
+
+            this.waitQueue.push(entry);
         });
     }
 

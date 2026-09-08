@@ -439,6 +439,7 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
   const [inputValue, setInputValue] = useState('');
   const { shortcuts, isShortcutPressed } = useShortcuts();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [showAllMessages, setShowAllMessages] = useState(false);
   const latestVisibleScreenshotRef = useRef<ScreenshotAttachment | null>(null);
   const [selectedScreenshot, setSelectedScreenshot] = useState<ScreenshotPreviewAttachment | null>(
     null,
@@ -1405,6 +1406,7 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
       // Release auto-clamp latch so the new meeting starts in compact mode
       window.electronAPI?.clearCompactLatch?.().catch(() => {});
       setMessages([]);
+      setShowAllMessages(false);
       setSelectedScreenshot(null);
       setScreenshotSaveError(null);
       answerPanelPinnedRef.current = false;
@@ -1797,10 +1799,21 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
     [flushToken, pinAnswerPanel],
   );
 
-  const displayMessages = useMemo(
+  const MAX_DOM_MESSAGES = 20;
+
+  const collapsedMessages = useMemo(
     () => collapseConsecutiveDuplicateSystemMessages(messages),
     [messages],
   );
+
+  const hiddenMessageCount = Math.max(0, collapsedMessages.length - MAX_DOM_MESSAGES);
+
+  const displayMessages = useMemo(() => {
+    if (showAllMessages || collapsedMessages.length <= MAX_DOM_MESSAGES) {
+      return collapsedMessages;
+    }
+    return collapsedMessages.slice(-MAX_DOM_MESSAGES);
+  }, [collapsedMessages, showAllMessages]);
   // ──────────────────────────────────────────────────────────────────────────
 
   const applyRollingPartialPreview = useCallback((partialText: string) => {
@@ -3104,6 +3117,7 @@ Provide only the answer, nothing else.`;
 
   const clearChat = () => {
     setMessages([]);
+    setShowAllMessages(false);
     answerPanelPinnedRef.current = false;
     setAnswerPanelPinned(false);
     lastManualSubmitRef.current = null;
@@ -3694,6 +3708,7 @@ Provide only the answer, nothing else.`;
       } else {
         await window.electronAPI.resetIntelligence();
         setMessages([]);
+        setShowAllMessages(false);
         answerPanelPinnedRef.current = false;
         setAnswerPanelPinned(false);
         setAttachedContext([]);
@@ -3756,6 +3771,7 @@ Provide only the answer, nothing else.`;
         } else {
           await window.electronAPI.resetIntelligence();
           setMessages([]);
+          setShowAllMessages(false);
           answerPanelPinnedRef.current = false;
           setAnswerPanelPinned(false);
           setAttachedContext([]);
@@ -4655,6 +4671,18 @@ Provide only the answer, nothing else.`;
                                         so a setMessages on the streaming row does NOT
                                         re-render every prior message — bailout fires on
                                         identity equality (msg, theme, callbacks). */}
+                   {hiddenMessageCount > 0 && !showAllMessages && (
+                    <div className="flex justify-center my-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowAllMessages(true)}
+                        className="text-[11px] px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white/90 transition-colors border border-white/10"
+                      >
+                        Show {hiddenMessageCount} earlier {hiddenMessageCount === 1 ? 'message' : 'messages'}
+                      </button>
+                    </div>
+                  )}
+
                   {displayMessages.map((msg: Message) => (
 	                    <MessageRow
 	                      key={msg.id}

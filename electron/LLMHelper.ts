@@ -3891,7 +3891,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (!this.groqClient) throw new Error("Groq client not initialized");
     this.assertOutboundScopes('groq', userMessage);
 
-    await this.rateLimiters.groq.acquire();
+    try {
+      await this.rateLimiters.groq.acquire(abortSignal);
+    } catch (err: any) {
+      if (abortSignal?.aborted) return;
+      throw err;
+    }
 
     const messages: any[] = [];
     if (systemPrompt) {
@@ -3930,7 +3935,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (!this.groqClient) throw new Error("Groq client not initialized");
     this.assertOutboundScopes('groq', userMessage, imagePaths);
 
-    await this.rateLimiters.groq.acquire();
+    try {
+      await this.rateLimiters.groq.acquire(abortSignal);
+    } catch (err: any) {
+      if (abortSignal?.aborted) return;
+      throw err;
+    }
 
     const messages: any[] = [];
     if (systemPrompt) {
@@ -4087,7 +4097,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         if (params.abortSignal?.aborted) return;
-        await this.rateLimiters.openai.acquire();
+        try {
+          await this.rateLimiters.openai.acquire(params.abortSignal);
+        } catch (err: any) {
+          if (params.abortSignal?.aborted) return;
+          throw err;
+        }
 
         const request: OpenAiStreamRequest = {
           model: resolvedModel,
@@ -4170,7 +4185,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (!this.claudeClient) throw new Error("Claude client not initialized");
     this.assertOutboundScopes('claude', userMessage);
 
-    await this.rateLimiters.claude.acquire();
+    try {
+      await this.rateLimiters.claude.acquire(abortSignal);
+    } catch (err: any) {
+      if (abortSignal?.aborted) return;
+      throw err;
+    }
 
     // Use explicit override, then currentModelId if it's a Claude model, else baseline constant
     const model = modelId || (this.isClaudeModel(this.currentModelId) ? this.currentModelId : CLAUDE_MODEL);
@@ -4205,7 +4225,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (!this.deepseekClient) throw new Error("DeepSeek client not initialized");
     this.assertOutboundScopes('deepseek', userMessage);
 
-    await this.rateLimiters.deepseek.acquire();
+    try {
+      await this.rateLimiters.deepseek.acquire(abortSignal);
+    } catch (err: any) {
+      if (abortSignal?.aborted) return;
+      throw err;
+    }
 
     const model = modelId || (this.isDeepseekModel(this.currentModelId) ? this.currentModelId : DEEPSEEK_MODEL);
 
@@ -4275,7 +4300,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (!this.claudeClient) throw new Error("Claude client not initialized");
     this.assertOutboundScopes('claude', userMessage, imagePaths);
 
-    await this.rateLimiters.claude.acquire();
+    try {
+      await this.rateLimiters.claude.acquire(abortSignal);
+    } catch (err: any) {
+      if (abortSignal?.aborted) return;
+      throw err;
+    }
 
     // Use explicit override, then currentModelId if it's a Claude model, else baseline constant
     const model = modelId || (this.isClaudeModel(this.currentModelId) ? this.currentModelId : CLAUDE_MODEL);
@@ -4345,7 +4375,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (!this.client) throw new Error("Gemini client not initialized");
     this.assertOutboundScopes('gemini', fullMessage, imagePaths);
 
-    await this.rateLimiters.gemini.acquire();
+    try {
+      await this.rateLimiters.gemini.acquire(abortSignal);
+    } catch (err: any) {
+      if (abortSignal?.aborted) return;
+      throw err;
+    }
     if (abortSignal?.aborted) return;
 
     const contents: any[] = [{ text: fullMessage }];

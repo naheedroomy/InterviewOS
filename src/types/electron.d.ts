@@ -538,6 +538,9 @@ export interface ElectronAPI {
   getTechnicalInterviewVisionFirst: () => Promise<boolean>;
   setTechnicalInterviewVisionFirst: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onTechnicalInterviewVisionFirstChanged: (callback: (enabled: boolean) => void) => () => void;
+  getSpeculativeInferenceEnabled?: () => Promise<boolean>;
+  setSpeculativeInferenceEnabled?: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  onSpeculativeInferenceEnabledChanged?: (callback: (enabled: boolean) => void) => () => void;
   /** @deprecated alias retained for older renderer builds — maps to technicalInterviewVisionFirst */
   getTechnicalInterviewDirectVision: () => Promise<boolean>;
   /** @deprecated alias retained for older renderer builds — maps to technicalInterviewVisionFirst */

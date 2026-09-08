@@ -1144,6 +1144,23 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  safeHandle('get-speculative-inference-enabled', async () => {
+    return SettingsManager.getInstance().get('speculativeInferenceEnabled') ?? true;
+  });
+  safeHandle('set-speculative-inference-enabled', async (_, enabled: boolean) => {
+    if (typeof enabled !== 'boolean') {
+      return { success: false, error: 'invalid_value' };
+    }
+    SettingsManager.getInstance().set('speculativeInferenceEnabled', enabled);
+    appState.intelligenceManager?.setSpeculativeInferenceEnabled(enabled);
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send('speculative-inference-enabled-changed', enabled);
+      }
+    });
+    return { success: true };
+  });
+
   safeHandle('get-log-file-path', async () => {
     try {
       return path.join(app.getPath('documents'), DEBUG_LOG_FILE_NAME);
