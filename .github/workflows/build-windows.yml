@@ -62,6 +62,7 @@ jobs:
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: answercue-windows-x64-installer
           path: |
