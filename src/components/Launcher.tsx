@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, RefreshCw, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight, ArrowUp, Brain, Mic, ShieldCheck, Paperclip, X, Speaker, Pencil, KeyRound, Monitor, HelpCircle } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
@@ -6,6 +6,7 @@ import { ModelSelector } from './ui/ModelSelector';
 import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
 import HelpAssistant from './help/HelpAssistant';
+import ContextDocumentsPanel from './ContextDocumentsPanel';
 import { motion, AnimatePresence } from 'framer-motion';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
 import { useShortcuts } from '../hooks/useShortcuts';
@@ -1083,21 +1084,15 @@ interface InterviewPrepPanelProps {
     liveTranscript: LiveTranscriptSegment[];
     messages: PrepMessage[];
     draft: string;
-    availableDocs: InterviewContextDocument[];
     selectedDocs: InterviewContextDocument[];
-    selectedDocIds: string[];
     contextMarkdown: string;
     conversationState: ConversationState;
     errorMessage: string | null;
-    isUploadingDoc: boolean;
-    docError: string | null;
     onDraftChange: (value: string) => void;
     onSubmit: () => void;
     onStartInterview: () => void;
     onPrepareNextRun: () => void;
-    onUploadDoc: () => void;
-    onToggleDoc: (id: string) => void;
-    onDeleteDoc: (id: string) => void;
+    onRemoveDoc?: (id: string) => void;
 }
 
 const InterviewPrepPanel: React.FC<InterviewPrepPanelProps> = ({
@@ -1107,40 +1102,22 @@ const InterviewPrepPanel: React.FC<InterviewPrepPanelProps> = ({
     liveTranscript,
     messages,
     draft,
-    availableDocs,
     selectedDocs,
-    selectedDocIds,
     contextMarkdown,
     conversationState,
     errorMessage,
-    isUploadingDoc,
-    docError,
     onDraftChange,
     onSubmit,
     onStartInterview,
     onPrepareNextRun,
-    onUploadDoc,
-    onToggleDoc,
-    onDeleteDoc,
+    onRemoveDoc,
 }) => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const docMenuRef = useRef<HTMLDivElement>(null);
-    const [isDocMenuOpen, setIsDocMenuOpen] = useState(false);
     const [selectedScreenshotPreview, setSelectedScreenshotPreview] = useState<ScreenshotPreviewAttachment | null>(null);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }, [messages, liveTranscript, meeting?.id, conversationState]);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (docMenuRef.current && !docMenuRef.current.contains(event.target as Node)) {
-                setIsDocMenuOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
 
     const userNoteCount = messages.filter(message => message.role === 'user').length;
     const preparedCharCount = contextMarkdown.trim().length;
@@ -1417,9 +1394,11 @@ const InterviewPrepPanel: React.FC<InterviewPrepPanelProps> = ({
                                         {doc.contextKind && <span className="shrink-0 font-semibold">{documentKindLabels[doc.contextKind]}:</span>}
                                         <span className="truncate">{doc.name}</span>
                                         <button
-                                            onClick={() => onToggleDoc(doc.id)}
+                                            type="button"
+                                            onClick={() => onRemoveDoc?.(doc.id)}
                                             className={`h-4 w-4 shrink-0 rounded-full inline-flex items-center justify-center ${isLight ? 'hover:bg-slate-200' : 'hover:bg-white/12'}`}
                                             title="Remove document"
+                                            aria-label={`Remove document ${doc.name}`}
                                         >
                                             <X size={10} />
                                         </button>
@@ -1442,94 +1421,12 @@ const InterviewPrepPanel: React.FC<InterviewPrepPanelProps> = ({
                             className="block w-full resize-none bg-transparent outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0 px-4 pt-3 pb-1 text-[14px] leading-5 text-text-primary placeholder:text-text-tertiary max-h-28"
                         />
                         <div className="h-10 px-3 pb-2 flex items-center justify-between">
-                            <div className="min-w-0 flex items-center gap-2" ref={docMenuRef}>
-                                <div className="relative">
-                                    <button
-                                        onClick={() => setIsDocMenuOpen(prev => !prev)}
-                                        className={`relative h-7 w-7 rounded-md inline-flex items-center justify-center transition-colors ${isDocMenuOpen ? isLight ? 'bg-slate-100 text-text-primary' : 'bg-white/10 text-text-primary' : 'text-text-tertiary hover:text-text-primary'}`}
-                                        title="Add context documents"
-                                    >
-                                        <Plus size={17} strokeWidth={2} />
-                                    </button>
-
-                                    {isDocMenuOpen && (
-                                        <div className={`absolute left-0 bottom-[calc(100%+10px)] z-[80] w-[340px] rounded-xl border shadow-2xl overflow-hidden ${isLight ? 'bg-white border-border-muted shadow-[0_16px_40px_rgba(0,0,0,0.16)]' : 'bg-[#202023] border-white/10 shadow-[0_18px_48px_rgba(0,0,0,0.55)]'}`}>
-                                            <div className="p-2 border-b border-border-subtle">
-                                                <button
-                                                    onClick={() => {
-                                                        setIsDocMenuOpen(false);
-                                                        onUploadDoc();
-                                                    }}
-                                                    disabled={isUploadingDoc}
-                                                    className={`w-full min-h-9 rounded-lg px-3 flex items-center gap-2 text-left text-[13px] font-medium transition-colors ${isLight ? 'hover:bg-slate-100 text-text-primary' : 'hover:bg-white/8 text-text-primary'}`}
-                                                >
-                                                    {isUploadingDoc ? <RefreshCw size={15} className="animate-spin shrink-0" /> : <Paperclip size={15} className="shrink-0 text-text-secondary" />}
-                                                    <span className="min-w-0 flex-1">Add document</span>
-                                                </button>
-                                                {docError && <p className="mt-2 px-3 text-[11px] leading-relaxed text-red-400">{docError}</p>}
-                                            </div>
-
-                                            <div className="max-h-[260px] overflow-y-auto custom-scrollbar p-2 space-y-1">
-                                                {availableDocs.length === 0 ? (
-                                                    <div className="px-3 py-3 text-[12px] text-text-tertiary">No documents yet.</div>
-                                                ) : (
-                                                    availableDocs.map(doc => {
-                                                        const selected = selectedDocIds.includes(doc.id);
-                                                        return (
-                                                            <div
-                                                                key={doc.id}
-                                                                className={`group rounded-lg px-2.5 py-2 transition-colors ${selected ? isLight ? 'bg-accent-secondary' : 'bg-accent-secondary' : isLight ? 'hover:bg-slate-100' : 'hover:bg-white/8'}`}
-                                                            >
-                                                                <div className="flex items-center gap-2">
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setIsDocMenuOpen(false);
-                                                                            onToggleDoc(doc.id);
-                                                                        }}
-                                                                        className={`h-4 w-4 shrink-0 rounded border flex items-center justify-center ${selected ? 'bg-accent-primary border-accent-primary text-white' : 'border-border-muted text-transparent'}`}
-                                                                        title={selected ? 'Remove from interview context' : 'Use in interview context'}
-                                                                    >
-                                                                        <Check size={11} strokeWidth={3} />
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setIsDocMenuOpen(false);
-                                                                            onToggleDoc(doc.id);
-                                                                        }}
-                                                                        className="min-w-0 flex-1 text-left"
-                                                                    >
-                                                                        <p className="truncate text-[12px] font-medium text-text-primary">{doc.name}</p>
-                                                                        <p className="text-[10.5px] text-text-tertiary">
-                                                                            {doc.fileType.toUpperCase()} · {formatBytes(doc.sizeBytes)}
-                                                                            {doc.contextKind ? ` · ${documentKindLabels[doc.contextKind]}` : ''}
-                                                                        </p>
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={(event) => {
-                                                                            event.stopPropagation();
-                                                                            onDeleteDoc(doc.id);
-                                                                        }}
-                                                                        className={`h-6 w-6 shrink-0 rounded-md opacity-0 group-hover:opacity-100 flex items-center justify-center text-text-tertiary hover:text-red-400 ${isLight ? 'hover:bg-red-50' : 'hover:bg-red-500/10'}`}
-                                                                        title="Delete document"
-                                                                    >
-                                                                        <X size={12} />
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="min-w-0 flex items-center gap-1.5 text-[11px] text-text-tertiary">
-                                    <Brain size={13} className="shrink-0 text-accent-primary" />
+                            <div className="min-w-0 flex items-center gap-1.5 text-[11px] text-text-tertiary">
+                                <Brain size={13} className="shrink-0 text-accent-primary" />
                                 <span className="truncate">
                                     {userNoteCount} note{userNoteCount === 1 ? '' : 's'} · {selectedDocs.length} doc{selectedDocs.length === 1 ? '' : 's'}
                                     {preparedCharCount > 0 ? ` · ${preparedCharCount.toLocaleString()} chars prepared` : ''}
                                 </span>
-                                </div>
                             </div>
                             <button
                                 onClick={onSubmit}
@@ -3080,15 +2977,22 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         resetWorkspaceStreamBuffer();
     };
 
-    const selectedDocs = interviewDocs.filter(doc => selectedDocIds.includes(doc.id));
-    const attachedDocIds = new Set(
+    const selectedDocs = useMemo(() => {
+        const selectedSet = new Set(selectedDocIds);
+        return interviewDocs.filter(doc => selectedSet.has(doc.id));
+    }, [interviewDocs, selectedDocIds]);
+    const attachedDocIds = useMemo(() => new Set(
         prepMessages.flatMap(message => message.attachments?.map(doc => doc.id) || []),
-    );
-    const contextDocs = interviewDocs.filter(doc =>
-        selectedDocIds.includes(doc.id) ||
-        workspaceContextDocIds.includes(doc.id) ||
-        attachedDocIds.has(doc.id)
-    );
+    ), [prepMessages]);
+    const contextDocs = useMemo(() => {
+        const selectedSet = new Set(selectedDocIds);
+        const workspaceSet = new Set(workspaceContextDocIds);
+        return interviewDocs.filter(doc =>
+            selectedSet.has(doc.id) ||
+            workspaceSet.has(doc.id) ||
+            attachedDocIds.has(doc.id)
+        );
+    }, [interviewDocs, selectedDocIds, workspaceContextDocIds, attachedDocIds]);
     const docDetailsTarget = interviewDocs.find(doc => doc.id === docDetailsTargetId) || null;
     const prepContextMarkdown = buildInterviewContextMarkdown(prepMessages, contextDocs);
 
@@ -3363,6 +3267,19 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                 return;
             }
             setInterviewDocs(prev => [result.document, ...prev]);
+            setSelectedDocIds(prev => {
+                const next = prev.includes(result.document.id) ? prev : [...prev, result.document.id];
+                if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+                    void window.electronAPI.interviewWorkspaceUpdateDocuments({
+                        workspaceId: workspaceStateId,
+                        documentIds: next,
+                    });
+                }
+                persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
+                    console.error('[Launcher] Failed to persist uploaded document:', error);
+                });
+                return next;
+            });
             setDocDetailsTargetId(result.document.id);
             setDocDetailsMode('upload');
             setDocDetailsError(null);
@@ -3375,11 +3292,53 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         }
     };
 
+    const handleAttachExistingDoc = (docId: string) => {
+        setSelectedDocIds(prev => {
+            if (prev.includes(docId)) return prev;
+            const next = [...prev, docId];
+            if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+                void window.electronAPI.interviewWorkspaceUpdateDocuments({
+                    workspaceId: workspaceStateId,
+                    documentIds: next,
+                });
+            }
+            persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
+                console.error('[Launcher] Failed to persist attached document:', error);
+            });
+            return next;
+        });
+    };
+
+    const handleRemoveInterviewDoc = (docId: string) => {
+        setSelectedDocIds(prev => {
+            const next = prev.filter(id => id !== docId);
+            if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+                void window.electronAPI.interviewWorkspaceUpdateDocuments({
+                    workspaceId: workspaceStateId,
+                    documentIds: next,
+                });
+            }
+            persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
+                console.error('[Launcher] Failed to persist document removal:', error);
+            });
+            return next;
+        });
+    };
+
     const handleDeleteInterviewDoc = async (id: string) => {
         const result = await window.electronAPI?.interviewDocsDelete?.(id);
         if (result?.success) {
             setInterviewDocs(prev => prev.filter(doc => doc.id !== id));
-            setSelectedDocIds(prev => prev.filter(docId => docId !== id));
+            setSelectedDocIds(prev => {
+                const next = prev.filter(docId => docId !== id);
+                if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+                    void window.electronAPI.interviewWorkspaceUpdateDocuments({
+                        workspaceId: workspaceStateId,
+                        documentIds: next,
+                    });
+                }
+                return next;
+            });
             setWorkspaceContextDocIds(prev => prev.filter(docId => docId !== id));
             if (docDetailsTargetId === id) {
                 setDocDetailsTargetId(null);
@@ -3394,6 +3353,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             const next = prev.includes(id)
                 ? prev.filter(docId => docId !== id)
                 : [...prev, id];
+            if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+                void window.electronAPI.interviewWorkspaceUpdateDocuments({
+                    workspaceId: workspaceStateId,
+                    documentIds: next,
+                });
+            }
             persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
                 console.error('[Launcher] Failed to persist selected document:', error);
             });
@@ -3416,6 +3381,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             setInterviewDocs(prev => prev.map(doc => doc.id === result.document.id ? result.document : doc));
             setSelectedDocIds(prev => {
                 const next = prev.includes(result.document.id) ? prev : [...prev, result.document.id];
+                if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+                    void window.electronAPI.interviewWorkspaceUpdateDocuments({
+                        workspaceId: workspaceStateId,
+                        documentIds: next,
+                    });
+                }
                 persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
                     console.error('[Launcher] Failed to persist document details:', error);
                 });
@@ -4663,21 +4634,15 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                     liveTranscript={liveTranscript}
                                                     messages={prepMessages}
                                                     draft={prepDraft}
-                                                    availableDocs={interviewDocs}
                                                     selectedDocs={selectedDocs}
-                                                    selectedDocIds={selectedDocIds}
                                                     contextMarkdown={prepContextMarkdown}
                                                     conversationState={workspaceConversationState}
                                                     errorMessage={workspaceErrorMessage}
-                                                    isUploadingDoc={isUploadingDoc}
-                                                    docError={docError}
                                                     onDraftChange={setPrepDraft}
                                                     onSubmit={submitPrepMessage}
                                                     onStartInterview={startPreparedInterview}
                                                     onPrepareNextRun={handlePrepareNextRun}
-                                                    onUploadDoc={handleUploadInterviewDoc}
-                                                    onToggleDoc={toggleSelectedDoc}
-                                                    onDeleteDoc={handleDeleteInterviewDoc}
+                                                    onRemoveDoc={handleRemoveInterviewDoc}
                                                 />
 		                                    </div>
                                 </main>
@@ -4704,6 +4669,18 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                 </div>
                                             </section>
                                         )}
+
+                                        <ContextDocumentsPanel
+                                            isLight={isLight}
+                                            workspaceId={workspaceStateId}
+                                            documentIds={selectedDocIds}
+                                            availableDocs={interviewDocs}
+                                            onUploadDoc={handleUploadInterviewDoc}
+                                            onRemoveDoc={handleRemoveInterviewDoc}
+                                            onAttachExistingDoc={handleAttachExistingDoc}
+                                            isUploadingDoc={isUploadingDoc}
+                                            docError={docError}
+                                        />
 
                                         <section className={`rounded-lg border border-border-subtle ${isLight ? 'bg-bg-elevated' : 'bg-bg-secondary'} p-3`}>
                                             <div className="flex items-center justify-between gap-2 mb-3">
