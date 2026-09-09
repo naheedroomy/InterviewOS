@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronDown, Check, Cloud, Terminal, Monitor, Server, Plus } from 'lucide-react';
+import { ChevronDown, Check, Cloud, Terminal, Monitor, Server, Bot } from 'lucide-react';
 import { getCodexCliModelDisplayName, isAllowedStandardCloudModel, isAllowedGeminiModel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 
 interface ModelSelectorProps {
     currentModel: string;
     onSelectModel: (model: string) => void;
     placement?: 'up' | 'down';
+    align?: 'left' | 'right';
     className?: string;
+    triggerClassName?: string;
 }
 
 interface CustomProvider {
@@ -15,7 +17,14 @@ interface CustomProvider {
     curlCommand: string;
 }
 
-export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSelectModel, placement = 'up', className = '' }) => {
+export const ModelSelector: React.FC<ModelSelectorProps> = ({
+    currentModel,
+    onSelectModel,
+    placement = 'up',
+    align = 'left',
+    className = '',
+    triggerClassName = '',
+}) => {
     const [isOpen, setIsOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'cloud' | 'custom' | 'local'>('cloud');
     const [ollamaModels, setOllamaModels] = useState<string[]>([]);
@@ -66,6 +75,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                             const geminiResult = await window.electronAPI?.fetchProviderModels('gemini', '');
                             if (geminiResult?.success && geminiResult.models) {
                                 for (const m of geminiResult.models) {
+                                    if (m.id.toLowerCase().includes('banana') || m.id.toLowerCase().includes('nano') || (m.label && (m.label.toLowerCase().includes('banana') || m.label.toLowerCase().includes('nano')))) continue;
                                     if (!cModels.some(cm => cm.id === m.id)) {
                                         cModels.push({
                                             id: m.id,
@@ -117,6 +127,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                     const geminiResult = await window.electronAPI?.fetchProviderModels('gemini', '');
                     if (geminiResult?.success && geminiResult.models && mounted) {
                         for (const m of geminiResult.models) {
+                            if (m.id.toLowerCase().includes('banana') || m.id.toLowerCase().includes('nano') || (m.label && (m.label.toLowerCase().includes('banana') || m.label.toLowerCase().includes('nano')))) continue;
                             if (!models.some(cm => cm.id === m.id)) {
                                 models.push({ id: m.id, name: m.label || m.id, desc: 'Google • Gemini', provider: 'gemini' });
                             }
@@ -184,32 +195,38 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
     return (
         <div className="relative" ref={dropdownRef}>
             <button
+                type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className={`flex items-center gap-2 px-3 py-1.5 bg-bg-input hover:bg-bg-elevated border border-border-subtle rounded-lg transition-colors text-xs font-medium text-text-primary max-w-[150px] ${className}`}
+                className={triggerClassName || `inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-border-subtle bg-bg-card hover:bg-bg-elevated text-text-primary transition-all duration-150 shrink-0 select-none cursor-pointer max-w-[200px] ${className}`}
+                title="Active AI Model for this interview (Click to switch)"
             >
+                <Bot size={12} className="text-amber-500 shrink-0" />
                 <span className="truncate">{getModelDisplayName(currentModel)}</span>
-                <ChevronDown size={14} className={`shrink-0 text-text-secondary transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown size={11} className={`shrink-0 text-text-secondary transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {isOpen && (
-                <div className={`absolute left-0 w-64 bg-bg-item-surface border border-border-subtle rounded-xl shadow-xl z-50 overflow-hidden animated fadeIn ${placement === 'down' ? 'top-full mt-2' : 'bottom-full mb-2'}`}>
+                <div className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} w-64 bg-bg-card border border-border-subtle rounded-xl shadow-2xl z-[120] overflow-hidden ${placement === 'down' ? 'top-full mt-2' : 'bottom-full mb-2'}`}>
                     {/* Tabs */}
-                    <div className="flex border-b border-border-subtle bg-bg-input/50">
+                    <div className="flex border-b border-border-subtle bg-black/20">
                         <button
+                            type="button"
                             onClick={() => setActiveTab('cloud')}
-                            className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${activeTab === 'cloud' ? 'text-accent-primary bg-bg-item-surface border-t-2 border-t-accent-primary' : 'text-text-secondary hover:text-text-primary'}`}
+                            className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${activeTab === 'cloud' ? 'text-amber-400 bg-bg-card border-b-2 border-b-amber-500' : 'text-text-secondary hover:text-text-primary'}`}
                         >
                             Cloud
                         </button>
                         <button
+                            type="button"
                             onClick={() => setActiveTab('custom')}
-                            className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${activeTab === 'custom' ? 'text-accent-primary bg-bg-item-surface border-t-2 border-t-accent-primary' : 'text-text-secondary hover:text-text-primary'}`}
+                            className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${activeTab === 'custom' ? 'text-amber-400 bg-bg-card border-b-2 border-b-amber-500' : 'text-text-secondary hover:text-text-primary'}`}
                         >
                             Custom
                         </button>
                         <button
+                            type="button"
                             onClick={() => setActiveTab('local')}
-                            className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${activeTab === 'local' ? 'text-accent-primary bg-bg-item-surface border-t-2 border-t-accent-primary' : 'text-text-secondary hover:text-text-primary'}`}
+                            className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${activeTab === 'local' ? 'text-amber-400 bg-bg-card border-b-2 border-b-amber-500' : 'text-text-secondary hover:text-text-primary'}`}
                         >
                             Local
                         </button>
@@ -314,18 +331,19 @@ interface ModelOptionProps {
 
 const ModelOption: React.FC<ModelOptionProps> = ({ name, desc, icon, selected, onSelect }) => (
     <button
+        type="button"
         onClick={onSelect}
-        className={`w-full flex items-center justify-between p-2 rounded-lg transition-colors group ${selected ? 'bg-accent-secondary' : 'hover:bg-bg-input'}`}
+        className={`w-full flex items-center justify-between p-2 rounded-lg transition-colors group cursor-pointer ${selected ? 'bg-amber-500/15 text-amber-300' : 'hover:bg-white/5 text-text-primary'}`}
     >
-        <div className="flex items-center gap-3">
-            <div className={`p-1.5 rounded-md ${selected ? 'bg-accent-secondary text-accent-primary' : 'bg-bg-elevated text-text-secondary group-hover:text-text-primary'}`}>
+        <div className="flex items-center gap-2.5 min-w-0">
+            <div className={`p-1.5 rounded-md shrink-0 ${selected ? 'bg-amber-500/20 text-amber-400' : 'bg-bg-elevated text-text-secondary group-hover:text-text-primary'}`}>
                 {icon}
             </div>
-            <div className="text-left">
-                <div className={`text-xs font-medium truncate max-w-[140px] ${selected ? 'text-accent-primary' : 'text-text-primary'}`}>{name}</div>
-                <div className="text-[10px] text-text-tertiary">{desc}</div>
+            <div className="text-left min-w-0">
+                <div className={`text-xs font-medium truncate max-w-[150px] ${selected ? 'text-amber-300 font-semibold' : 'text-text-primary'}`}>{name}</div>
+                <div className="text-[10px] text-text-tertiary truncate">{desc}</div>
             </div>
         </div>
-        {selected && <Check size={14} className="text-accent-primary" />}
+        {selected && <Check size={14} className="text-amber-400 shrink-0 ml-2" />}
     </button>
 );

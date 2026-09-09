@@ -53,6 +53,7 @@ export interface InterviewWorkspace {
   hasCustomOverrides?: boolean;
   candidateBackgroundOverride?: string;
   aiPersonaOverride?: string;
+  modelOverride?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -169,6 +170,9 @@ function normalizeWorkspace(raw: any, existing?: InterviewWorkspace): InterviewW
     aiPersonaOverride: typeof (raw?.aiPersonaOverride ?? existing?.aiPersonaOverride) === 'string'
       ? (raw?.aiPersonaOverride ?? existing?.aiPersonaOverride)
       : '',
+    modelOverride: typeof (raw?.modelOverride ?? existing?.modelOverride) === 'string' && (raw?.modelOverride ?? existing?.modelOverride).trim()
+      ? (raw?.modelOverride ?? existing?.modelOverride).trim()
+      : undefined,
     createdAt: existing?.createdAt || normalizeString(raw?.createdAt) || now,
     updatedAt: normalizeString(raw?.updatedAt || existing?.updatedAt).trim() || now,
   };
@@ -580,6 +584,29 @@ export class InterviewWorkspaceStateManager {
     if (overrides.aiPersonaOverride !== undefined) {
       existing.aiPersonaOverride = String(overrides.aiPersonaOverride ?? '');
     }
+    existing.updatedAt = new Date().toISOString();
+    return this.tryReplaceInStore(store, existing);
+  }
+
+  /**
+   * Updates preferred AI model override for a workspace.
+   */
+  public async updateModelOverride(
+    workspaceId: string,
+    modelOverride?: string
+  ): Promise<InterviewWorkspace> {
+    const wsId = normalizeString(workspaceId).trim();
+    if (!wsId) {
+      throw new Error('Missing workspaceId');
+    }
+    const store = this.readStore();
+    const existing = store.workspaces.find((w) => w.id === wsId);
+    if (!existing) {
+      throw new Error(`Workspace ${workspaceId} not found`);
+    }
+    existing.modelOverride = typeof modelOverride === 'string' && modelOverride.trim()
+      ? modelOverride.trim()
+      : undefined;
     existing.updatedAt = new Date().toISOString();
     return this.tryReplaceInStore(store, existing);
   }

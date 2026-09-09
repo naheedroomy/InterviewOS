@@ -228,6 +228,8 @@ export function isAllowedGeminiModel(id: string): boolean {
         'tuned',
         'robotics',
         'learnlm',
+        'banana',
+        'nano',
     ];
 
     return !excludePatterns.some(p => clean.includes(p));
@@ -253,6 +255,10 @@ export function processGeminiModels(rawModels: any[]): ProviderModel[] {
 
         const id: string = m.name || '';
         if (!id || seen.has(id)) continue;
+        const lowerId = id.toLowerCase();
+        const lowerDisplay = (m.displayName || '').toLowerCase();
+        if (lowerId.includes('banana') || lowerDisplay.includes('banana')) continue;
+        if (lowerId.includes('nano') || lowerDisplay.includes('nano')) continue;
         if (!isAllowedGeminiModel(id)) continue;
         seen.add(id);
 

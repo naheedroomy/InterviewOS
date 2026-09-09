@@ -257,6 +257,32 @@ test('computes document usage across multiple workspaces', async () => {
   }
 });
 
+test('persists and updates model override for a workspace', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-model-override-'));
+  try {
+    const statePath = path.join(tmpDir, 'workspaces.json');
+    InterviewWorkspaceStateManager.__setTestStatePath(statePath);
+    const manager = InterviewWorkspaceStateManager.getInstance();
+
+    const ws = await manager.createWorkspace({ title: 'Anthropic Interview' });
+    assert.strictEqual(ws.modelOverride, undefined);
+
+    const updated = await manager.updateModelOverride(ws.id, 'claude-3-5-sonnet-20241022');
+    assert.strictEqual(updated.modelOverride, 'claude-3-5-sonnet-20241022');
+
+    // Verify persistence across reload
+    const reloaded = await manager.getWorkspaceById(ws.id);
+    assert.strictEqual(reloaded.modelOverride, 'claude-3-5-sonnet-20241022');
+
+    // Reset override
+    const cleared = await manager.updateModelOverride(ws.id, undefined);
+    assert.strictEqual(cleared.modelOverride, undefined);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+
 
 
 

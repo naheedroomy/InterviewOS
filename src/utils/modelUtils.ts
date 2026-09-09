@@ -76,6 +76,8 @@ export const isAllowedGeminiModel = (modelId: string): boolean => {
         'tuned',
         'robotics',
         'learnlm',
+        'banana',
+        'nano',
     ];
 
     return !excludePatterns.some(p => clean.includes(p));

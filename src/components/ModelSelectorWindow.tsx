@@ -85,6 +85,7 @@ const ModelSelectorWindow = () => {
                             const geminiResult = await window.electronAPI?.fetchProviderModels('gemini', '');
                             if (geminiResult?.success && geminiResult.models) {
                                 for (const m of geminiResult.models) {
+                                    if (m.id.toLowerCase().includes('banana') || m.id.toLowerCase().includes('nano') || (m.label && (m.label.toLowerCase().includes('banana') || m.label.toLowerCase().includes('nano')))) continue;
                                     if (!models.some(ex => ex.id === m.id)) {
                                         models.push({ id: m.id, name: m.label || m.id, type: 'cloud', provider: 'gemini' });
                                     }

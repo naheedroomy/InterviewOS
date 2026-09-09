@@ -226,77 +226,70 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
     const showResults = state === 'results' && query.trim();
 
     return (
-        <>
-            {/* Backdrop blur overlay */}
+        <div className="relative">
+            {/* Compact In-Header Trigger */}
+            <button
+                type="button"
+                onClick={open}
+                className={`h-7 w-40 md:w-48 flex items-center justify-between px-2.5 rounded-lg border transition-colors select-none text-left cursor-pointer ${
+                    isLight
+                        ? 'bg-black/5 hover:bg-black/10 border-border-subtle text-text-tertiary'
+                        : 'bg-zinc-800/60 hover:bg-zinc-800/90 border-white/[0.07] text-text-tertiary'
+                }`}
+                title="Search meetings or ask AI (⌘K)"
+            >
+                <div className="flex items-center gap-1.5 min-w-0">
+                    <Search size={13} className="shrink-0 text-text-tertiary" />
+                    <span className="text-[11.5px] truncate text-text-secondary">Search or ask...</span>
+                </div>
+                <kbd className="text-[9.5px] font-mono px-1 py-0.5 rounded bg-black/10 dark:bg-zinc-900 border border-border-subtle text-text-tertiary shrink-0">
+                    ⌘K
+                </kbd>
+            </button>
+
+            {/* Spotlight Modal Overlay */}
             {createPortal(
                 <AnimatePresence>
                     {isExpanded && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.15 }}
-                            className="fixed inset-0 bg-black/30 backdrop-blur-[8px] z-[90]"
-                            onClick={close}
-                        />
-                    )}
-                </AnimatePresence>,
-                document.body
-            )}
+                        <div className="fixed inset-0 z-[250] flex items-start justify-center pt-12 px-4">
+                            {/* Backdrop blur overlay */}
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: 0.15 }}
+                                className="fixed inset-0 bg-black/40 backdrop-blur-[6px]"
+                                onClick={close}
+                            />
 
-            {/* Search Pill Container */}
-            <div
-                ref={containerRef}
-                className="absolute left-1/2 -translate-x-1/2 top-[7px] no-drag z-40"
-            >
-                <div className="relative">
-                    <motion.div
-                        initial={false}
-                        animate={{
-                            width: isExpanded ? 480 : 340,
-                        }}
-                        transition={{
-                            type: "spring",
-                            stiffness: 150,
-                            damping: 25
-                        }}
-                        className="relative transform-gpu"
-                    >
-                        {/* Main Pill */}
-                        <div className="relative">
-                            <div
-                                className={`
-                                    relative overflow-hidden
-                                    ${isLight ? 'bg-[#F2F2F7]/90' : 'bg-[#161618]/90'}
-                                    backdrop-blur-xl backdrop-saturate-150
-                                    rounded-2xl
-                                    shadow-sm
-                                `}
+                            {/* Search Modal Box */}
+                            <motion.div
+                                ref={containerRef}
+                                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                                className={`relative w-[480px] max-w-full rounded-xl border shadow-2xl overflow-hidden z-10 ${
+                                    isLight
+                                        ? 'bg-white border-border-muted text-text-primary'
+                                        : 'bg-[#16161a] border-white/[0.09] text-text-primary'
+                                } backdrop-blur-xl`}
                             >
                                 {/* Input Row */}
-                                <div
-                                    className="relative flex items-center"
-                                    onClick={() => state === 'idle' && open()}
-                                >
-                                    <div className="absolute left-3 flex items-center pointer-events-none">
-                                        <Search size={14} className="text-text-tertiary" />
-                                    </div>
+                                <div className="flex items-center gap-2.5 px-3.5 py-2.5 border-b border-border-subtle">
+                                    <Search size={15} className="shrink-0 text-amber-500" />
                                     <input
                                         ref={inputRef}
                                         type="text"
                                         value={query}
                                         onChange={handleInputChange}
-                                        onFocus={() => state === 'idle' && setState('focused')}
-                                        className={`
-                                        w-full bg-transparent
-                                        pl-9 pr-4 py-1
-                                        text-[13px] text-text-primary
-                                        placeholder-text-tertiary
-                                        focus:outline-none
-                                        ${state === 'idle' ? 'cursor-default' : 'cursor-text'}
-                                    `}
+                                        className="flex-1 bg-transparent text-[13px] text-text-primary placeholder:text-text-tertiary outline-none"
                                         placeholder="Search or ask anything..."
+                                        autoFocus
                                     />
+                                    <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/10 dark:bg-zinc-900 border border-border-subtle text-text-tertiary select-none">
+                                        ESC
+                                    </kbd>
                                 </div>
 
                                 {/* Results Panel */}
@@ -307,15 +300,13 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                             animate={{ height: 'auto', opacity: 1 }}
                                             exit={{ height: 0, opacity: 0 }}
                                             transition={{
-                                                type: "spring",
-                                                stiffness: 150,
-                                                damping: 25,
-                                                opacity: { duration: 0.3 }
+                                                duration: 0.18,
+                                                ease: [0.16, 1, 0.3, 1]
                                             }}
                                             className="overflow-hidden"
                                         >
-                                            <div className="w-[480px]">
-                                                <div className="border-t border-border-muted py-2">
+                                            <div className="w-full">
+                                                <div className="py-2">
                                                     {/* Explore Section */}
                                                     <div className="px-3 py-1">
                                                         <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">
@@ -323,42 +314,30 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                         </div>
 
                                                         {/* AI Query Option */}
-                                                        <motion.button
-                                                            initial={{ opacity: 0, scale: 0.95 }}
-                                                            animate={{ opacity: 1, scale: 1 }}
-                                                            transition={{ duration: 0.2 }}
-                                                            className={`
-                                                            w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left
-                                                            transition-colors duration-100
-                                                            ${selectedIndex === 0
-                                                                    ? 'bg-bg-item-active'
-                                                                    : 'hover:bg-bg-item-hover'
-                                                                }
-                                                        `}
+                                                        <button
+                                                            className={`w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition-colors duration-100 cursor-pointer ${
+                                                                selectedIndex === 0
+                                                                    ? 'bg-amber-500/15 text-amber-300'
+                                                                    : 'hover:bg-bg-item-hover text-text-primary'
+                                                            }`}
                                                             onClick={() => handleSelect(0)}
                                                             onMouseEnter={() => setSelectedIndex(0)}
                                                         >
-                                                            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shrink-0">
-                                                                <Sparkles size={12} className="text-white" />
+                                                            <div className="w-6 h-6 rounded-md bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0">
+                                                                <Sparkles size={12} />
                                                             </div>
-                                                            <span className="text-[13px] text-text-primary truncate">
+                                                            <span className="text-[13px] truncate">
                                                                 {query}
                                                             </span>
-                                                        </motion.button>
+                                                        </button>
 
                                                         {/* Literal Search Option */}
-                                                        <motion.button
-                                                            initial={{ opacity: 0, scale: 0.95 }}
-                                                            animate={{ opacity: 1, scale: 1 }}
-                                                            transition={{ duration: 0.2 }}
-                                                            className={`
-                                                            w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left
-                                                            transition-colors duration-100
-                                                            ${selectedIndex === 1
+                                                        <button
+                                                            className={`w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition-colors duration-100 cursor-pointer ${
+                                                                selectedIndex === 1
                                                                     ? 'bg-bg-item-active'
                                                                     : 'hover:bg-bg-item-hover'
-                                                                }
-                                                        `}
+                                                            }`}
                                                             onClick={() => handleSelect(1)}
                                                             onMouseEnter={() => setSelectedIndex(1)}
                                                         >
@@ -368,33 +347,25 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                             <span className="text-[13px] text-text-secondary">
                                                                 Search for <span className="text-text-primary">"{query}"</span>
                                                             </span>
-                                                        </motion.button>
+                                                        </button>
                                                     </div>
 
                                                     {/* Sessions Section */}
                                                     {sessionResults.length > 0 && (
-                                                        <div className="px-3 py-1 mt-1">
+                                                        <div className="px-3 py-1 mt-1 border-t border-border-subtle pt-2">
                                                             <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">
                                                                 Sessions
                                                             </div>
 
-                                                            <AnimatePresence initial={false} mode="popLayout">
+                                                            <div className="flex flex-col gap-0.5">
                                                                 {sessionResults.map((result, index) => (
-                                                                    <motion.button
-                                                                        layout="position"
+                                                                    <button
                                                                         key={result.id}
-                                                                        initial={{ opacity: 0, height: 0 }}
-                                                                        animate={{ opacity: 1, height: 'auto' }}
-                                                                        exit={{ opacity: 0, height: 0 }}
-                                                                        transition={{ duration: 0.2 }}
-                                                                        className={`
-                                                                        w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left
-                                                                        transition-colors duration-100
-                                                                        ${selectedIndex === index + 2
+                                                                        className={`w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition-colors duration-100 cursor-pointer ${
+                                                                            selectedIndex === index + 2
                                                                                 ? 'bg-bg-item-active'
                                                                                 : 'hover:bg-bg-item-hover'
-                                                                            }
-                                                                    `}
+                                                                        }`}
                                                                         onClick={() => handleSelect(index + 2)}
                                                                         onMouseEnter={() => setSelectedIndex(index + 2)}
                                                                     >
@@ -406,14 +377,14 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                                 {result.title}
                                                                             </div>
                                                                             {result.subtitle && (
-                                                                                <div className="text-[11px] text-text-tertiary">
+                                                                                <div className="text-[11px] text-text-tertiary font-mono tnum">
                                                                                     {result.subtitle}
                                                                                 </div>
                                                                             )}
                                                                         </div>
-                                                                    </motion.button>
+                                                                    </button>
                                                                 ))}
-                                                            </AnimatePresence>
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>
@@ -421,12 +392,13 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                         </motion.div>
                                     )}
                                 </AnimatePresence>
-                            </div>
+                            </motion.div>
                         </div>
-                    </motion.div>
-                </div >
-            </div >
-        </>
+                    )}
+                </AnimatePresence>,
+                document.body
+            )}
+        </div>
     );
 };
 

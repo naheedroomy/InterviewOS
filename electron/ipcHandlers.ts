@@ -2192,7 +2192,14 @@ export function initializeIpcHandlers(appState: AppState): void {
 
         const { fetchProviderModels } = require('./utils/modelFetcher');
         const models = await fetchProviderModels(provider, key);
-        return { success: true, models };
+        const filteredModels = provider === 'gemini' && Array.isArray(models)
+          ? models.filter((m: any) => {
+              const id = (m.id || '').toLowerCase();
+              const label = (m.label || '').toLowerCase();
+              return !id.includes('banana') && !label.includes('banana') && !id.includes('nano') && !label.includes('nano');
+            })
+          : models;
+        return { success: true, models: filteredModels };
       } catch (error: any) {
         console.error(`[IPC] Failed to fetch ${provider} models:`, error);
         const msg =
@@ -3420,6 +3427,23 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch (err: any) {
         console.error('[IPC] interview-workspace:update-persona-overrides error:', err?.message ?? err);
         return { success: false, error: err?.message || 'Failed to update persona overrides' };
+      }
+    }
+  );
+
+  safeHandle(
+    'interview-workspace:update-model-override',
+    async (_, payload: { workspaceId: string; modelOverride?: string }) => {
+      try {
+        if (!payload?.workspaceId) {
+          return { success: false, error: 'Missing workspaceId' };
+        }
+        const manager = InterviewWorkspaceStateManager.getInstance();
+        const ws = await manager.updateModelOverride(payload.workspaceId, payload.modelOverride);
+        return { success: true, workspace: ws };
+      } catch (err: any) {
+        console.error('[IPC] interview-workspace:update-model-override error:', err?.message ?? err);
+        return { success: false, error: err?.message || 'Failed to update model override' };
       }
     }
   );

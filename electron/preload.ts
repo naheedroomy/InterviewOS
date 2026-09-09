@@ -360,6 +360,10 @@ interface ElectronAPI {
     candidateBackgroundOverride?: string;
     aiPersonaOverride?: string;
   }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+  interviewWorkspaceUpdateModelOverride: (payload: {
+    workspaceId: string;
+    modelOverride?: string;
+  }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
   interviewWorkspaceSyncLlmContext: (payload: {
     workspaceId?: string;
     hasCustomOverrides?: boolean;
@@ -1504,6 +1508,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     candidateBackgroundOverride?: string;
     aiPersonaOverride?: string;
   }) => ipcRenderer.invoke('interview-workspace:update-persona-overrides', payload),
+  interviewWorkspaceUpdateModelOverride: (payload: {
+    workspaceId: string;
+    modelOverride?: string;
+  }) => ipcRenderer.invoke('interview-workspace:update-model-override', payload),
   interviewWorkspaceSyncLlmContext: (payload: {
     workspaceId?: string;
     hasCustomOverrides?: boolean;

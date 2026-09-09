@@ -82,6 +82,7 @@ export interface InterviewWorkspace {
   hasCustomOverrides?: boolean;
   candidateBackgroundOverride?: string;
   aiPersonaOverride?: string;
+  modelOverride?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -352,6 +353,10 @@ export interface ElectronAPI {
     hasCustomOverrides?: boolean;
     candidateBackgroundOverride?: string;
     aiPersonaOverride?: string;
+  }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceUpdateModelOverride: (payload: {
+    workspaceId: string;
+    modelOverride?: string;
   }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
   interviewWorkspaceSyncLlmContext: (payload: {
     workspaceId?: string;

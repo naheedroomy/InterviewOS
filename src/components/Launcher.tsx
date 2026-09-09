@@ -7,6 +7,7 @@ import GlobalChatOverlay from './GlobalChatOverlay';
 import HelpAssistant from './help/HelpAssistant';
 import { KnowledgeBankView } from './KnowledgeBankView';
 import { RolePersonaOverrideModal } from './RolePersonaOverrideModal';
+import { ModelSelector } from './ui/ModelSelector';
 import { motion, AnimatePresence } from 'framer-motion';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
 import { useShortcuts } from '../hooks/useShortcuts';
@@ -1882,6 +1883,13 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         setWorkspaceStateId(workspace.id);
         safeWriteWorkspacePointer(workspace.id);
 
+        if (workspace.modelOverride && window.electronAPI?.setModel) {
+            setCurrentModel(workspace.modelOverride);
+            window.electronAPI.setModel(workspace.modelOverride).catch((err: any) =>
+                console.error('[Launcher] Failed to set model from workspace override:', err)
+            );
+        }
+
         if (window.electronAPI?.interviewWorkspaceSyncLlmContext) {
             window.electronAPI.interviewWorkspaceSyncLlmContext({
                 workspaceId: workspace.id,
@@ -3114,6 +3122,34 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
 
     const handlePrepareNextRun = handleStartNextRound;
 
+    const handleModelSelect = useCallback(async (modelId: string) => {
+        setCurrentModel(modelId);
+        try {
+            await window.electronAPI?.setModel?.(modelId);
+        } catch (err) {
+            console.error('[Launcher] Failed to set active model:', err);
+        }
+
+        const ws = selectedWorkspaceRef.current;
+        if (ws) {
+            const updatedWs: InterviewWorkspace = { ...ws, modelOverride: modelId };
+            selectedWorkspaceRef.current = updatedWs;
+            setSelectedWorkspace(updatedWs);
+            setWorkspaces(prev => prev.map(w => w.id === ws.id ? updatedWs : w));
+
+            if (window.electronAPI?.interviewWorkspaceUpdateModelOverride) {
+                try {
+                    await window.electronAPI.interviewWorkspaceUpdateModelOverride({
+                        workspaceId: ws.id,
+                        modelOverride: modelId,
+                    });
+                } catch (err) {
+                    console.error('[Launcher] Failed to persist workspace model override:', err);
+                }
+            }
+        }
+    }, []);
+
     const beginRenameRound = useCallback((round: InterviewRound) => {
         setRenamingRoundId(round.id);
         setRoundRenameDraft(round.name || `Round ${round.roundNumber}`);
@@ -4315,7 +4351,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             {/* 1. Header (Static) */}
             <header className={`relative w-full h-[40px] shrink-0 flex items-center justify-between pl-0 drag-region select-none ${isLight ? 'bg-bg-primary' : 'bg-bg-secondary'} border-b border-border-subtle z-[200]`}>
                 {/* Left: Spacing for Traffic Lights + Navigation Arrows + Brand Logo + Segmented Switcher */}
-                <div className="flex items-center gap-2 no-drag">
+                <div className="flex items-center gap-2 no-drag shrink-0">
                     {isMac && <div className="w-[70px]" />} {/* Traffic Light Spacer (macOS only) */}
 
                     {/* Back Button */}
@@ -4395,26 +4431,28 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                 </div>
 
                 {/* Center: Spotlight-style Search Pill */}
-                <TopSearchPill
-                    meetings={meetings}
-                    onAIQuery={(query) => {
-                        analytics.trackCommandExecuted('ai_query_search');
-                        setSubmittedGlobalQuery(query);
-                        setIsGlobalChatOpen(true);
-                    }}
-                    onLiteralSearch={(query) => {
-                        analytics.trackCommandExecuted('literal_search');
-                        setSubmittedGlobalQuery(query);
-                        setIsGlobalChatOpen(true);
-                    }}
-                    onOpenMeeting={(meetingId) => {
-                        const meeting = meetings.find(m => m.id === meetingId);
-                        if (meeting) {
-                            handleOpenMeeting(meeting);
-                            analytics.trackCommandExecuted('open_meeting_from_search');
-                        }
-                    }}
-                />
+                <div className="flex-1 flex items-center justify-center min-w-0 px-2 no-drag">
+                    <TopSearchPill
+                        meetings={meetings}
+                        onAIQuery={(query) => {
+                            analytics.trackCommandExecuted('ai_query_search');
+                            setSubmittedGlobalQuery(query);
+                            setIsGlobalChatOpen(true);
+                        }}
+                        onLiteralSearch={(query) => {
+                            analytics.trackCommandExecuted('literal_search');
+                            setSubmittedGlobalQuery(query);
+                            setIsGlobalChatOpen(true);
+                        }}
+                        onOpenMeeting={(meetingId) => {
+                            const meeting = meetings.find(m => m.id === meetingId);
+                            if (meeting) {
+                                handleOpenMeeting(meeting);
+                                analytics.trackCommandExecuted('open_meeting_from_search');
+                            }
+                        }}
+                    />
+                </div>
 
                 {/* Right: Actions & Utility Status */}
                 <div className={`flex items-center gap-1 no-drag shrink-0 ${isMac ? 'mr-1' : ''}`}>
@@ -5169,6 +5207,14 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                                         : 'Role & Persona'}
                                                                 </span>
                                                             </button>
+                                                        )}
+                                                        {selectedWorkspace && (
+                                                            <ModelSelector
+                                                                currentModel={selectedWorkspace.modelOverride || currentModel}
+                                                                onSelectModel={handleModelSelect}
+                                                                placement="down"
+                                                                align="left"
+                                                            />
                                                         )}
                                                     </div>
                                                 )}
