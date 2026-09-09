@@ -1092,7 +1092,7 @@ interface InterviewPrepPanelProps {
     onDraftChange: (value: string) => void;
     onSubmit: () => void;
     onStartInterview: () => void;
-    onPrepareNextRun: () => void;
+    onStartNextRound: () => void;
     onRemoveDoc?: (id: string) => void;
 }
 
@@ -1110,7 +1110,7 @@ const InterviewPrepPanel: React.FC<InterviewPrepPanelProps> = ({
     onDraftChange,
     onSubmit,
     onStartInterview,
-    onPrepareNextRun,
+    onStartNextRound,
     onRemoveDoc,
 }) => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1321,11 +1321,11 @@ const InterviewPrepPanel: React.FC<InterviewPrepPanelProps> = ({
                 {meeting ? (
                     !isMeetingFinalizing(meeting) && (
                         <button
-                            onClick={onPrepareNextRun}
-                            className="h-9 px-4 rounded-md inline-flex items-center gap-2 text-[13px] font-semibold text-white bg-accent-primary hover:opacity-90 transition-colors"
+                            onClick={onStartNextRound}
+                            className="h-9 px-4 rounded-md inline-flex items-center gap-2 text-[13px] font-semibold text-white bg-accent-primary hover:opacity-90 transition-colors shadow-sm"
                         >
-                            <img src={icon} alt="" className="w-4 h-4 object-contain brightness-0 invert" />
-                            Prepare next run
+                            <Plus size={15} strokeWidth={2.4} />
+                            Start Next Round
                         </button>
                     )
                 ) : (
@@ -1811,30 +1811,6 @@ const TranscriptTimeline: React.FC<TranscriptTimelineProps> = ({ meeting, isLigh
 	    );
 };
 
-// Helper to format date groups
-const getGroupLabel = (dateStr: string) => {
-    if (dateStr === "Today") return "Today"; // Backward compatibility
-
-    const date = new Date(dateStr);
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    const checkDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-
-    if (checkDate.getTime() === today.getTime()) return "Today";
-    if (checkDate.getTime() === yesterday.getTime()) return "Yesterday";
-
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-};
-
-// Helper to format time (e.g. 3:14pm)
-const formatTime = (dateStr: string) => {
-    if (dateStr === "Today") return "Just now"; // Legacy
-    const date = new Date(dateStr);
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
-};
 
 const formatRelativeTime = (dateStr?: string | null) => {
     if (!dateStr) return 'Draft';
@@ -1867,6 +1843,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     const [workspaceRenameDraft, setWorkspaceRenameDraft] = useState('');
     const [isSavingWorkspaceRename, setIsSavingWorkspaceRename] = useState(false);
     const [workspaceRenameError, setWorkspaceRenameError] = useState<string | null>(null);
+    const [renamingRoundId, setRenamingRoundId] = useState<string | null>(null);
+    const [roundRenameDraft, setRoundRenameDraft] = useState('');
+    const [isSavingRoundRename, setIsSavingRoundRename] = useState(false);
+    const [isAddingRound, setIsAddingRound] = useState(false);
     const [isDetectable, setIsDetectable] = useState(false);
     const [isMeetingActive, setIsMeetingActive] = useState(false);
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
@@ -1928,6 +1908,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     const pendingOpenLatestInterviewRef = useRef(false);
     const selectedMeetingRef = useRef<Meeting | null>(null);
     const selectedWorkspaceRef = useRef<InterviewWorkspace | null>(null);
+    const activeMeetingRoundRef = useRef<{ workspaceId: string; roundId: string } | null>(null);
+    const prepMessagesRef = useRef<PrepMessage[]>([]);
     const workspaceGenerationRef = useRef(0);
     const readinessGenRef = useRef(0);
     const {
@@ -1944,6 +1926,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     const selectWorkspace = useCallback((workspace: InterviewWorkspace) => {
         setRenamingWorkspaceId(null);
         setWorkspaceRenameDraft('');
+        setRenamingRoundId(null);
+        setRoundRenameDraft('');
         selectedWorkspaceRef.current = workspace;
         setSelectedWorkspace(workspace);
         setWorkspaceStateId(workspace.id);
@@ -2129,6 +2113,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         selectedWorkspaceRef.current = selectedWorkspace;
     }, [selectedWorkspace]);
 
+    useEffect(() => {
+        prepMessagesRef.current = prepMessages;
+    }, [prepMessages]);
+
     const refreshSelectedMeetingDetails = useCallback(async (meetingId: string) => {
         if (!window.electronAPI?.getMeetingDetails) return;
 
@@ -2172,15 +2160,43 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
 
                     if (pendingOpenLatestInterviewRef.current && nextMeetings[0]) {
                         pendingOpenLatestInterviewRef.current = false;
+                        const completedMeeting = nextMeetings[0];
+                        const completedMeetingId = completedMeeting.id;
+
+                        // Link completed meeting to active round in workspace
+                        const targetWsId = activeMeetingRoundRef.current?.workspaceId || selectedWorkspaceRef.current?.id;
+                        const targetRoundId = activeMeetingRoundRef.current?.roundId
+                            || selectedWorkspaceRef.current?.rounds?.find(r => r.status === 'active')?.id
+                            || selectedWorkspaceRef.current?.activeRoundId;
+
+                        if (targetWsId && targetRoundId && window.electronAPI?.interviewWorkspaceFinishMeeting) {
+                            try {
+                                const finishRes = await window.electronAPI.interviewWorkspaceFinishMeeting({
+                                    workspaceId: targetWsId,
+                                    roundId: targetRoundId,
+                                    meetingId: completedMeetingId,
+                                });
+                                if (finishRes?.success && finishRes.workspace) {
+                                    const updatedWs = finishRes.workspace;
+                                    selectedWorkspaceRef.current = updatedWs;
+                                    setSelectedWorkspace(updatedWs);
+                                    setWorkspaces(prev => prev.map(w => w.id === updatedWs.id ? updatedWs : w));
+                                }
+                            } catch (err) {
+                                console.error("[Launcher] Failed to link finished meeting to round:", err);
+                            }
+                        }
+                        activeMeetingRoundRef.current = null;
+
                         try {
-                            const fullMeeting = await window.electronAPI?.getMeetingDetails?.(nextMeetings[0].id);
-                            const meetingToOpen = fullMeeting || nextMeetings[0];
+                            const fullMeeting = await window.electronAPI?.getMeetingDetails?.(completedMeetingId);
+                            const meetingToOpen = fullMeeting || completedMeeting;
                             selectMeeting(meetingToOpen);
                             await hydrateWorkspaceForMeeting(meetingToOpen.id);
                         } catch (error) {
                             console.error("[Launcher] Failed to open latest finished interview:", error);
-                            selectMeeting(nextMeetings[0]);
-                            await hydrateWorkspaceForMeeting(nextMeetings[0].id);
+                            selectMeeting(completedMeeting);
+                            await hydrateWorkspaceForMeeting(completedMeeting.id);
                         }
                         return;
                     }
@@ -2245,11 +2261,21 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                 : null;
             const roundId = currentWs?.activeRoundId || currentWs?.rounds?.[0]?.id;
             if (roundId) {
-                void window.electronAPI.interviewWorkspaceUpdateRoundPrep({
-                    workspaceId: id,
-                    roundId,
-                    messages: persistedMessages,
-                });
+                try {
+                    const prepRes = await window.electronAPI.interviewWorkspaceUpdateRoundPrep({
+                        workspaceId: id,
+                        roundId,
+                        messages: persistedMessages,
+                    });
+                    if (prepRes?.success && prepRes.workspace) {
+                        const updatedWs = prepRes.workspace;
+                        selectedWorkspaceRef.current = updatedWs;
+                        setSelectedWorkspace(updatedWs);
+                        setWorkspaces(prev => prev.map(w => w.id === updatedWs.id ? updatedWs : w));
+                    }
+                } catch (prepErr) {
+                    console.error('[Launcher] Failed to update round prep:', prepErr);
+                }
             }
         }
 
@@ -3072,16 +3098,112 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         }
     };
 
-    const handlePrepareNextRun = () => {
-        // Return to preparation for the SAME workspace:
-        // retain prep messages/docs, clear selected meeting and run-local UI.
-        selectMeeting(null);
-        setForwardMeeting(null);
-        setLiveTranscript([]);
-        setWorkspaceConversationState('idle');
-        setWorkspaceErrorMessage(null);
-        resetWorkspaceStreamBuffer();
-    };
+    const handleSwitchRound = useCallback(async (roundId: string) => {
+        const ws = selectedWorkspaceRef.current;
+        if (!ws || ws.activeRoundId === roundId) return;
+
+        try {
+            if (window.electronAPI?.interviewWorkspaceSetActiveRound) {
+                const res = await window.electronAPI.interviewWorkspaceSetActiveRound({
+                    workspaceId: ws.id,
+                    roundId,
+                });
+                if (res?.success && res.workspace) {
+                    const updatedWs = res.workspace;
+                    setWorkspaces(prev => prev.map(w => w.id === updatedWs.id ? updatedWs : w));
+                    selectWorkspace(updatedWs);
+                    analytics.trackCommandExecuted('switch_interview_round');
+                    return;
+                }
+            }
+            const fallbackWs: InterviewWorkspace = {
+                ...ws,
+                activeRoundId: roundId,
+            };
+            setWorkspaces(prev => prev.map(w => w.id === ws.id ? fallbackWs : w));
+            selectWorkspace(fallbackWs);
+        } catch (err) {
+            console.error('[Launcher] Failed to switch round:', err);
+        }
+    }, [selectWorkspace]);
+
+    const handleStartNextRound = useCallback(async () => {
+        const ws = selectedWorkspaceRef.current;
+        if (!ws || isAddingRound) return;
+
+        setIsAddingRound(true);
+        try {
+            if (window.electronAPI?.interviewWorkspaceAddRound) {
+                const res = await window.electronAPI.interviewWorkspaceAddRound(ws.id);
+                if (res?.success && res.workspace) {
+                    const updatedWs = res.workspace;
+                    setWorkspaces(prev => prev.map(w => w.id === updatedWs.id ? updatedWs : w));
+                    selectWorkspace(updatedWs);
+                    analytics.trackCommandExecuted('start_next_round');
+                    return;
+                }
+            }
+            // Fallback: reset run-local UI
+            selectMeeting(null);
+            setLiveTranscript([]);
+            setWorkspaceConversationState('idle');
+            setWorkspaceErrorMessage(null);
+            resetWorkspaceStreamBuffer();
+        } catch (err) {
+            console.error('[Launcher] Failed to start next round:', err);
+        } finally {
+            setIsAddingRound(false);
+        }
+    }, [isAddingRound, resetWorkspaceStreamBuffer, selectMeeting, selectWorkspace]);
+
+    const handlePrepareNextRun = handleStartNextRound;
+
+    const beginRenameRound = useCallback((round: InterviewRound) => {
+        setRenamingRoundId(round.id);
+        setRoundRenameDraft(round.name || `Round ${round.roundNumber}`);
+    }, []);
+
+    const cancelRenameRound = useCallback(() => {
+        setRenamingRoundId(null);
+        setRoundRenameDraft('');
+    }, []);
+
+    const saveRenameRound = useCallback(async () => {
+        const ws = selectedWorkspaceRef.current;
+        const roundId = renamingRoundId;
+        const trimmed = roundRenameDraft.trim();
+        if (!ws || !roundId || isSavingRoundRename) return;
+
+        const currentRound = ws.rounds?.find(r => r.id === roundId);
+        if (!trimmed || trimmed === currentRound?.name) {
+            cancelRenameRound();
+            return;
+        }
+
+        setIsSavingRoundRename(true);
+        try {
+            if (window.electronAPI?.interviewWorkspaceRenameRound) {
+                const res = await window.electronAPI.interviewWorkspaceRenameRound({
+                    workspaceId: ws.id,
+                    roundId,
+                    name: trimmed,
+                });
+                if (res?.success && res.workspace) {
+                    const updatedWs = res.workspace;
+                    selectedWorkspaceRef.current = updatedWs;
+                    setSelectedWorkspace(updatedWs);
+                    setWorkspaces(prev => prev.map(w => w.id === updatedWs.id ? updatedWs : w));
+                }
+            }
+            analytics.trackCommandExecuted('rename_interview_round');
+        } catch (err) {
+            console.error('[Launcher] Failed to rename round:', err);
+        } finally {
+            setIsSavingRoundRename(false);
+            setRenamingRoundId(null);
+            setRoundRenameDraft('');
+        }
+    }, [cancelRenameRound, isSavingRoundRename, renamingRoundId, roundRenameDraft]);
 
     const selectedDocs = useMemo(() => {
         const selectedSet = new Set(selectedDocIds);
@@ -3707,18 +3829,16 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             doneCleanup = window.electronAPI?.onGeminiStreamDone(() => {
                 const finalContent = getWorkspaceBufferedContent();
                 const finalAssistantContent = finalContent || "I couldn't generate a response from the available context.";
-                setPrepMessages(prev => {
-                    const updated = prev.map(message =>
-                        message.id === assistantMessageId
-                            ? { ...message, content: finalAssistantContent, isStreaming: false }
-                            : message
-                    );
-                    persistWorkspaceState({
-                        messages: updated,
-                        selectedDocumentIds: nextContextDocIds,
-                    }).catch(error => console.error('[LauncherWorkspaceChat] failed to persist assistant response:', error));
-                    return updated;
-                });
+                const updated = prepMessagesRef.current.map(message =>
+                    message.id === assistantMessageId
+                        ? { ...message, content: finalAssistantContent, isStreaming: false }
+                        : message
+                );
+                setPrepMessages(updated);
+                persistWorkspaceState({
+                    messages: updated,
+                    selectedDocumentIds: nextContextDocIds,
+                }).catch(error => console.error('[LauncherWorkspaceChat] failed to persist assistant response:', error));
                 setWorkspaceConversationState('idle');
                 resetWorkspaceStreamBuffer();
                 tokenCleanup?.();
@@ -3728,14 +3848,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
 
             errorCleanup = window.electronAPI?.onGeminiStreamError((error: string) => {
                 console.error('[LauncherWorkspaceChat] stream error:', error);
-                setPrepMessages(prev => {
-                    const updated = prev.filter(message => message.id !== assistantMessageId);
-                    persistWorkspaceState({
-                        messages: updated,
-                        selectedDocumentIds: nextContextDocIds,
-                    }).catch(saveError => console.error('[LauncherWorkspaceChat] failed to persist stream error state:', saveError));
-                    return updated;
-                });
+                const updated = prepMessagesRef.current.filter(message => message.id !== assistantMessageId);
+                setPrepMessages(updated);
+                persistWorkspaceState({
+                    messages: updated,
+                    selectedDocumentIds: nextContextDocIds,
+                }).catch(saveError => console.error('[LauncherWorkspaceChat] failed to persist stream error state:', saveError));
                 setWorkspaceErrorMessage("Couldn't answer from this interview workspace. Check your model settings and try again.");
                 setWorkspaceConversationState('error');
                 resetWorkspaceStreamBuffer();
@@ -3759,14 +3877,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             tokenCleanup?.();
             doneCleanup?.();
             errorCleanup?.();
-            setPrepMessages(prev => {
-                const updated = prev.filter(message => message.id !== assistantMessageId);
-                persistWorkspaceState({
-                    messages: updated,
-                    selectedDocumentIds: nextContextDocIds,
-                }).catch(saveError => console.error('[LauncherWorkspaceChat] failed to persist submit error state:', saveError));
-                return updated;
-            });
+            const updated = prepMessagesRef.current.filter(message => message.id !== assistantMessageId);
+            setPrepMessages(updated);
+            persistWorkspaceState({
+                messages: updated,
+                selectedDocumentIds: nextContextDocIds,
+            }).catch(saveError => console.error('[LauncherWorkspaceChat] failed to persist submit error state:', saveError));
             setWorkspaceErrorMessage("Couldn't answer from this interview workspace. Check your model settings and try again.");
             setWorkspaceConversationState('error');
             resetWorkspaceStreamBuffer();
@@ -3839,6 +3955,26 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             ...workspaceContextDocIds,
             ...prepMessages.flatMap(message => message.attachments?.map(doc => doc.id) || []),
         ]));
+
+        const currentWorkspace = selectedWorkspaceRef.current;
+        const currentRoundId = currentWorkspace?.activeRoundId || currentWorkspace?.rounds?.[0]?.id;
+        if (currentWorkspace && currentRoundId && window.electronAPI?.interviewWorkspaceStartMeeting) {
+            try {
+                activeMeetingRoundRef.current = { workspaceId: currentWorkspace.id, roundId: currentRoundId };
+                const startRes = await window.electronAPI.interviewWorkspaceStartMeeting({
+                    workspaceId: currentWorkspace.id,
+                    roundId: currentRoundId,
+                });
+                if (startRes?.success && startRes.workspace) {
+                    const updatedWs = startRes.workspace;
+                    selectedWorkspaceRef.current = updatedWs;
+                    setSelectedWorkspace(updatedWs);
+                    setWorkspaces(prev => prev.map(w => w.id === updatedWs.id ? updatedWs : w));
+                }
+            } catch (error) {
+                console.error('[Launcher] Failed to mark round meeting active:', error);
+            }
+        }
 
         // 1) Persist prep state and mark run active via V2 beginRun, or fallback
         if (window.electronAPI?.interviewWorkspaceBeginRun) {
@@ -4781,80 +4917,232 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                 </aside>
 
                                 <main className="min-h-0 flex flex-col">
-                                    <div className="h-[54px] px-5 flex items-center justify-between border-b border-border-subtle">
-	                                        <div className="min-w-0 flex-1">
-                                                {selectedMeeting && renamingMeetingId === selectedMeeting.id && renameOrigin === 'header' ? (
+                                    <div className="px-5 py-3 border-b border-border-subtle flex flex-col gap-2.5 shrink-0">
+                                        <div className="flex items-center justify-between gap-4">
+                                            <div className="min-w-0 flex-1">
+                                                {selectedWorkspace && renamingWorkspaceId === selectedWorkspace.id && renameOrigin === 'header' ? (
                                                     <div className="flex items-center gap-1.5 min-w-0">
                                                         <input
-                                                            value={renameDraft}
+                                                            value={workspaceRenameDraft}
                                                             onChange={(event) => {
-                                                                setRenameDraft(event.target.value);
-                                                                setRenameError(null);
+                                                                setWorkspaceRenameDraft(event.target.value);
+                                                                setWorkspaceRenameError(null);
                                                             }}
                                                             onKeyDown={(event) => {
                                                                 if (event.key === 'Enter') {
                                                                     event.preventDefault();
-                                                                    saveRenameMeeting();
+                                                                    void saveRenameWorkspace();
                                                                 } else if (event.key === 'Escape') {
                                                                     event.preventDefault();
-                                                                    cancelRenameMeeting();
+                                                                    cancelRenameWorkspace();
                                                                 }
                                                             }}
                                                             onFocus={(event) => event.currentTarget.select()}
-                                                            disabled={isSavingRename}
+                                                            disabled={isSavingWorkspaceRename}
                                                             autoFocus
-                                                            className={`h-8 min-w-0 flex-1 rounded-md border px-2.5 text-[14px] font-semibold outline-none transition-colors ${isLight ? 'bg-white border-border-muted text-text-primary focus:border-accent-primary' : 'bg-bg-input border-border-subtle text-text-primary focus:border-accent-primary'}`}
+                                                            className={`h-8 min-w-0 flex-1 max-w-[420px] rounded-md border px-2.5 text-[14px] font-semibold outline-none transition-colors ${
+                                                                isLight
+                                                                    ? 'bg-white border-border-muted text-text-primary focus:border-accent-primary'
+                                                                    : 'bg-bg-input border-border-subtle text-text-primary focus:border-accent-primary'
+                                                            }`}
                                                         />
                                                         <button
                                                             type="button"
-                                                            onClick={saveRenameMeeting}
-                                                            disabled={isSavingRename}
+                                                            onClick={() => void saveRenameWorkspace()}
+                                                            disabled={isSavingWorkspaceRename}
                                                             title="Save title"
-                                                            className={`h-8 w-8 rounded-md flex items-center justify-center text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50 ${isLight ? 'hover:bg-black/8' : 'hover:bg-white/10'}`}
+                                                            className={`h-8 w-8 rounded-md flex items-center justify-center text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50 ${
+                                                                isLight ? 'hover:bg-black/8' : 'hover:bg-white/10'
+                                                            }`}
                                                         >
-                                                            {isSavingRename ? <RefreshCw size={14} className="animate-spin" /> : <Check size={15} />}
+                                                            {isSavingWorkspaceRename ? <RefreshCw size={14} className="animate-spin" /> : <Check size={15} />}
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            onClick={cancelRenameMeeting}
-                                                            disabled={isSavingRename}
+                                                            onClick={cancelRenameWorkspace}
+                                                            disabled={isSavingWorkspaceRename}
                                                             title="Cancel rename"
-                                                            className={`h-8 w-8 rounded-md flex items-center justify-center text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50 ${isLight ? 'hover:bg-black/8' : 'hover:bg-white/10'}`}
+                                                            className={`h-8 w-8 rounded-md flex items-center justify-center text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50 ${
+                                                                isLight ? 'hover:bg-black/8' : 'hover:bg-white/10'
+                                                            }`}
                                                         >
                                                             <X size={15} />
                                                         </button>
                                                     </div>
                                                 ) : (
-                                                    <div className="flex items-center gap-1.5 min-w-0">
-                                                        <h1 className="min-w-0 text-[15px] font-semibold text-text-primary truncate">
-                                                            {selectedMeeting ? selectedMeeting.title : 'Current interview'}
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <h1
+                                                            className="min-w-0 text-[15px] font-semibold text-text-primary truncate cursor-pointer select-none"
+                                                            onDoubleClick={() => selectedWorkspace && beginRenameWorkspace(selectedWorkspace, 'header')}
+                                                            title="Double-click to rename interview"
+                                                        >
+                                                            {selectedWorkspace ? selectedWorkspace.title : 'Current interview'}
                                                         </h1>
-                                                        {selectedMeeting && !isMeetingFinalizing(selectedMeeting) && (
+                                                        {selectedWorkspace && (
                                                             <button
                                                                 type="button"
-                                                                onClick={() => beginRenameMeeting(selectedMeeting, 'header')}
+                                                                onClick={() => beginRenameWorkspace(selectedWorkspace, 'header')}
                                                                 title="Rename interview"
-                                                                className={`h-7 w-7 shrink-0 rounded-md flex items-center justify-center text-text-tertiary hover:text-text-primary transition-colors ${isLight ? 'hover:bg-black/8' : 'hover:bg-white/10'}`}
+                                                                className={`h-6 w-6 shrink-0 rounded-md flex items-center justify-center text-text-tertiary hover:text-text-primary transition-colors ${
+                                                                    isLight ? 'hover:bg-black/8' : 'hover:bg-white/10'
+                                                                }`}
                                                             >
-                                                                <Pencil size={13} />
+                                                                <Pencil size={12} />
                                                             </button>
                                                         )}
                                                     </div>
                                                 )}
-                                                {renameError && selectedMeeting && renamingMeetingId === selectedMeeting.id && renameOrigin === 'header' ? (
-                                                    <p className="text-[11px] text-red-400 truncate">{renameError}</p>
+                                                {workspaceRenameError && selectedWorkspace && renamingWorkspaceId === selectedWorkspace.id && renameOrigin === 'header' ? (
+                                                    <p className="text-[11px] text-red-400 truncate mt-0.5">{workspaceRenameError}</p>
                                                 ) : (
-	                                            <p className="text-[11px] text-text-tertiary truncate">
-	                                                    {selectedMeeting
-	                                                        ? `${new Date(selectedMeeting.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${formatDurationPill(selectedMeeting.duration)}`
-	                                                        : readinessSummary}
-	                                                </p>
+                                                    <p className="text-[11px] text-text-tertiary truncate mt-0.5">
+                                                        {selectedWorkspace ? (
+                                                            <>
+                                                                {selectedWorkspace.rounds?.length || 1}{' '}
+                                                                {(selectedWorkspace.rounds?.length || 1) === 1 ? 'round' : 'rounds'} ·{' '}
+                                                                {selectedMeeting && isMeetingFinalizing(selectedMeeting) ? (
+                                                                    'Processing...'
+                                                                ) : selectedMeeting ? (
+                                                                    `${new Date(selectedMeeting.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${formatDurationPill(selectedMeeting.duration)}`
+                                                                ) : (
+                                                                    formatRelativeTime(selectedWorkspace.updatedAt)
+                                                                )}
+                                                            </>
+                                                        ) : (
+                                                            readinessSummary
+                                                        )}
+                                                    </p>
                                                 )}
-		                                        </div>
-	                                    </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Round Pill Bar */}
+                                        {selectedWorkspace && Array.isArray(selectedWorkspace.rounds) && (
+                                            <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pt-0.5 pb-0.5">
+                                                {selectedWorkspace.rounds.map((round) => {
+                                                    const isActive = round.id === (selectedWorkspace.activeRoundId || selectedWorkspace.rounds[0]?.id);
+                                                    const isCompleted = round.status === 'completed' || Boolean(round.meetingId);
+                                                    const isLive = round.status === 'active' || (isActive && isMeetingActive);
+                                                    const isRenaming = renamingRoundId === round.id;
+
+                                                    return (
+                                                        <div
+                                                            key={round.id}
+                                                            onClick={() => {
+                                                                if (!isRenaming) {
+                                                                    void handleSwitchRound(round.id);
+                                                                }
+                                                            }}
+                                                            onKeyDown={(e) => {
+                                                                if (!isRenaming && (e.key === 'Enter' || e.key === ' ')) {
+                                                                    e.preventDefault();
+                                                                    void handleSwitchRound(round.id);
+                                                                }
+                                                            }}
+                                                            onDoubleClick={(e) => {
+                                                                e.stopPropagation();
+                                                                beginRenameRound(round);
+                                                            }}
+                                                            className={`group relative inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[12px] font-medium transition-all duration-150 shrink-0 border select-none cursor-pointer ${
+                                                                isActive
+                                                                    ? isLight
+                                                                        ? 'bg-accent-secondary border-accent-primary text-accent-primary font-semibold shadow-xs'
+                                                                        : 'bg-accent-primary/15 border-accent-primary text-accent-primary font-semibold shadow-xs'
+                                                                    : isCompleted
+                                                                    ? isLight
+                                                                        ? 'bg-white border-border-muted text-text-secondary hover:border-text-tertiary hover:text-text-primary shadow-2xs'
+                                                                        : 'bg-bg-secondary border-border-subtle text-text-secondary hover:border-text-tertiary hover:text-text-primary'
+                                                                    : isLight
+                                                                    ? 'bg-slate-50 border-border-subtle text-text-tertiary hover:text-text-primary hover:border-border-muted'
+                                                                    : 'bg-bg-secondary/60 border-border-subtle text-text-tertiary hover:text-text-primary'
+                                                            }`}
+                                                            title={isRenaming ? undefined : `${round.name} (Double-click to rename)`}
+                                                        >
+                                                            {isLive ? (
+                                                                <span className="relative flex h-2 w-2 shrink-0">
+                                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                                                </span>
+                                                            ) : isCompleted ? (
+                                                                <Check size={12} className="text-emerald-500 shrink-0" strokeWidth={2.5} />
+                                                            ) : (
+                                                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-accent-primary' : 'bg-text-tertiary/50'}`} />
+                                                            )}
+
+                                                            {isRenaming ? (
+                                                                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                                                    <input
+                                                                        type="text"
+                                                                        value={roundRenameDraft}
+                                                                        onChange={(e) => setRoundRenameDraft(e.target.value)}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter') {
+                                                                                e.preventDefault();
+                                                                                void saveRenameRound();
+                                                                            } else if (e.key === 'Escape') {
+                                                                                e.preventDefault();
+                                                                                cancelRenameRound();
+                                                                            }
+                                                                        }}
+                                                                        onBlur={() => void saveRenameRound()}
+                                                                        autoFocus
+                                                                        disabled={isSavingRoundRename}
+                                                                        className={`h-5 px-1.5 min-w-[80px] max-w-[140px] text-[12px] rounded border outline-none ${
+                                                                            isLight
+                                                                                ? 'bg-white border-accent-primary text-text-primary'
+                                                                                : 'bg-bg-input border-accent-primary text-text-primary'
+                                                                        }`}
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center gap-1 min-w-0">
+                                                                    <span className="truncate max-w-[160px]">{round.name}</span>
+                                                                    {isActive && (
+                                                                        <span className={`text-[10.5px] opacity-75 shrink-0 ${isActive ? 'font-normal' : ''}`}>
+                                                                            (Current)
+                                                                        </span>
+                                                                    )}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            beginRenameRound(round);
+                                                                        }}
+                                                                        title="Rename round"
+                                                                        className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/15"
+                                                                    >
+                                                                        <Pencil size={10} className="text-text-tertiary hover:text-text-primary" />
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleStartNextRound()}
+                                                    disabled={isAddingRound}
+                                                    className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[12px] font-medium transition-colors shrink-0 border border-dashed border-border-subtle hover:border-accent-primary hover:text-accent-primary disabled:opacity-50 ${
+                                                        isLight
+                                                            ? 'bg-slate-50/70 hover:bg-white text-text-secondary'
+                                                            : 'bg-bg-secondary/40 hover:bg-bg-secondary text-text-secondary'
+                                                    }`}
+                                                    title="Add next round"
+                                                >
+                                                    {isAddingRound ? (
+                                                        <RefreshCw size={12} className="animate-spin" />
+                                                    ) : (
+                                                        <Plus size={12} strokeWidth={2.4} />
+                                                    )}
+                                                    <span>Next Round</span>
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
 			                                    <div className="flex-1 min-h-0 p-5 overflow-hidden">
 		                                        <InterviewPrepPanel
-                                                    key={selectedMeeting?.id || 'current-interview-workspace'}
+                                                    key={`${selectedWorkspace?.id || 'workspace'}-${selectedWorkspace?.activeRoundId || 'round'}-${selectedMeeting?.id || 'draft'}`}
                                                     isLight={isLight}
                                                     isMeetingActive={isMeetingActive}
                                                     meeting={selectedMeeting}
@@ -4868,7 +5156,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                     onDraftChange={setPrepDraft}
                                                     onSubmit={submitPrepMessage}
                                                     onStartInterview={startPreparedInterview}
-                                                    onPrepareNextRun={handlePrepareNextRun}
+                                                    onStartNextRound={handleStartNextRound}
                                                     onRemoveDoc={handleRemoveInterviewDoc}
                                                 />
 		                                    </div>
