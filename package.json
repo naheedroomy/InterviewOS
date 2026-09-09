@@ -149,7 +149,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "FarzamHejaziK",
+        "owner": "naheedroomy",
         "repo": "AnswerCue",
         "releaseType": "release"
       }
