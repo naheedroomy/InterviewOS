@@ -2,7 +2,7 @@
   "name": "interviewos",
   "version": "2.9.0",
   "main": "dist-electron/electron/main.js",
-  "description": "AnswerCue is a live interview assistant that helps prepare context, transcribe conversations, and generate AI-guided answers.",
+  "description": "InterviewOS is a live interview assistant that helps prepare context, transcribe conversations, and generate AI-guided answers.",
   "scripts": {
     "clean": "rimraf dist dist-electron",
     "dev": "vite",

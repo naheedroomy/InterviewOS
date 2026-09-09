@@ -340,22 +340,22 @@ function formatPermissionMessage(reason: PermissionReason, extra?: { device?: st
         : 'System audio capture is unavailable. Interviewer audio will not be captured. Check your audio device routing in Settings and restart the meeting.';
     case 'mac-screen-recording-restricted':
       if (!isMac) return formatPermissionMessage('system-audio-stuck');
-      return 'Screen Recording is restricted by device policy. Interviewer audio will not be captured. Contact your administrator to allow screen capture for AnswerCue.';
+      return `Screen Recording is restricted by device policy. Interviewer audio will not be captured. Contact your administrator to allow screen capture for ${APP_NAME}.`;
     case 'mac-screen-recording-revoked-rebuild':
       // Defense-in-depth: even though all call sites must be darwin-gated
       // (the `mac-` prefix marks this constraint), if a future contributor
       // calls this from a cross-platform path we degrade gracefully rather
       // than leak macOS UI strings to Windows users.
       if (!isMac) return formatPermissionMessage('system-audio-stuck');
-      return 'System audio is being captured but every sample is silent. This usually means macOS Screen Recording permission needs to be re-granted to this build of AnswerCue. Open System Settings → Privacy & Security → Screen Recording, toggle AnswerCue off and back on, then restart the app. (If you recently rebuilt or updated, the previous grant may not apply.)';
+      return `System audio is being captured but every sample is silent. This usually means macOS Screen Recording permission needs to be re-granted to this build of ${APP_NAME}. Open System Settings → Privacy & Security → Screen Recording, toggle ${APP_NAME} off and back on, then restart the app. (If you recently rebuilt or updated, the previous grant may not apply.)`;
     case 'mic-denied':
       return isMac
-        ? 'Microphone access denied. Please allow microphone access in System Settings → Privacy & Security → Microphone, then restart AnswerCue.'
-        : 'Microphone access denied. Please allow microphone access in Settings → Privacy → Microphone, then restart AnswerCue.';
+        ? `Microphone access denied. Please allow microphone access in System Settings → Privacy & Security → Microphone, then restart ${APP_NAME}.`
+        : `Microphone access denied. Please allow microphone access in Settings → Privacy → Microphone, then restart ${APP_NAME}.`;
     case 'mic-zero-fill':
       return isMac
-        ? 'Microphone is producing silent audio. Check that the device is unmuted and that macOS Microphone permission is granted to AnswerCue in System Settings → Privacy & Security → Microphone.'
-        : 'Microphone is producing silent audio. Check that the device is unmuted and that AnswerCue has microphone access in Settings → Privacy → Microphone.';
+        ? `Microphone is producing silent audio. Check that the device is unmuted and that macOS Microphone permission is granted to ${APP_NAME} in System Settings → Privacy & Security → Microphone.`
+        : `Microphone is producing silent audio. Check that the device is unmuted and that ${APP_NAME} has microphone access in Settings → Privacy → Microphone.`;
     case 'mac-same-device-input-output':
       // Defense-in-depth: see comment on `mac-screen-recording-revoked-rebuild`.
       // The CoreAudio Process Tap same-device limitation is macOS-specific;
@@ -365,7 +365,7 @@ function formatPermissionMessage(reason: PermissionReason, extra?: { device?: st
     case 'system-audio-stuck':
       return 'No audio detected on system output for 12s. If your meeting app is using a different output device (Bluetooth headset, virtual cable, second monitor), switch it to your default output, or restart the meeting after switching.';
     case 'system-audio-output-mismatch':
-      return 'No audio detected on the selected output device. AnswerCue is listening to an output that is different from the Windows default, so the meeting audio may be playing somewhere else. In AnswerCue Settings choose Default Speakers, or set the meeting app to the selected output, then restart the meeting.';
+      return `No audio detected on the selected output device. ${APP_NAME} is listening to an output that is different from the Windows default, so the meeting audio may be playing somewhere else. In ${APP_NAME} Settings choose Default Speakers, or set the meeting app to the selected output, then restart the meeting.`;
   }
 }
 
@@ -2042,7 +2042,7 @@ export class AppState {
           this.systemAudioCapture = null;
           this.sendAudioCaptureFailed({
             channel: 'system',
-            message: 'System audio capture failed to initialize. The native audio module could not allocate the capture device. Restarting AnswerCue may help; if the problem persists, file a bug.',
+            message: `System audio capture failed to initialize. The native audio module could not allocate the capture device. Restarting ${APP_NAME} may help; if the problem persists, file a bug.`,
             attempt: 0,
             maxAttempts: 0,
             terminal: true,
@@ -2065,7 +2065,7 @@ export class AppState {
           this.microphoneCapture = null;
           this.sendAudioCaptureFailed({
             channel: 'mic',
-            message: 'Microphone capture failed to initialize. The native audio module could not open the default input device. Check that the device is connected and not in exclusive use by another app, then restart AnswerCue.',
+            message: `Microphone capture failed to initialize. The native audio module could not open the default input device. Check that the device is connected and not in exclusive use by another app, then restart ${APP_NAME}.`,
             attempt: 0,
             maxAttempts: 0,
             terminal: true,
@@ -5203,7 +5203,7 @@ async function initializeApp() {
             console.warn('[Init] Microphone is restricted by device policy at startup.');
             appState.sendAudioCaptureFailed({
               channel: 'mic',
-              message: 'Microphone is restricted by device policy. Contact your administrator to enable microphone access for AnswerCue.',
+              message: `Microphone is restricted by device policy. Contact your administrator to enable microphone access for ${APP_NAME}.`,
               attempt: 0,
               maxAttempts: 0,
               terminal: true,
