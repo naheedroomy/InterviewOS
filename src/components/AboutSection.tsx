@@ -16,7 +16,7 @@ import packageJson from '../../package.json';
 
 interface AboutSectionProps { }
 
-const REPO_URL = 'https://github.com/FarzamHejaziK/AnswerCue';
+const REPO_URL = 'https://github.com/naheedroomy/AnswerCue';
 
 export const AboutSection: React.FC<AboutSectionProps> = () => {
     const handleOpenLink = (event: React.MouseEvent<HTMLAnchorElement>, url: string) => {

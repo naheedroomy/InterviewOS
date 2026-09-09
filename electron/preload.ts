@@ -339,18 +339,28 @@ interface ElectronAPI {
   interviewDocsUpload: () => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>;
   interviewDocsUpdateMetadata: (id: string, metadata: { contextKind: 'resume' | 'project' | 'other'; contextDescription?: string }) => Promise<{ success: boolean; document?: any; error?: string }>;
   interviewDocsDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
+  // Interview Workspace & Multi-Round APIs
+  interviewWorkspaceList: () => Promise<{ success: boolean; workspaces?: any[]; error?: string }>;
+  interviewWorkspaceCreate: (payload?: { title?: string; initialDocIds?: string[] }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
   interviewWorkspaceGetById: (id: string) => Promise<any | null>;
+  interviewWorkspaceRename: (payload: { id: string; title: string } | string, maybeTitle?: string) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+  interviewWorkspaceDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
+  interviewWorkspaceAddRound: (payload: { workspaceId: string; name?: string } | string, name?: string) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+  interviewWorkspaceRenameRound: (payload: { workspaceId: string; roundId: string; name: string }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+  interviewWorkspaceSetActiveRound: (payload: { workspaceId: string; roundId: string }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+  interviewWorkspaceUpdateRoundPrep: (payload: { workspaceId: string; roundId: string; messages: any[] }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+  interviewWorkspaceUpdateDocuments: (payload: { workspaceId: string; documentIds: string[] }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+  interviewWorkspaceStartMeeting: (payload: { workspaceId: string; roundId: string }) => Promise<{ success: boolean; workspace?: any; meetingId?: string; error?: string }>;
+  interviewWorkspaceFinishMeeting: (payload: { workspaceId: string; roundId: string; meetingId: string }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+
+  // Backward Compatibility Workspace APIs
   interviewWorkspaceGetByMeeting: (meetingId: string) => Promise<any | null>;
   interviewWorkspaceSave: (state: any) => Promise<{ success: boolean; state?: any; error?: string }>;
-
-  // V2 workspace APIs
   interviewWorkspaceResolveDraft: (options?: { preferredId?: string; forceNew?: boolean }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
   interviewWorkspaceUpdatePrep: (payload: { id: string; messages?: any[]; contextMarkdown?: string; selectedDocumentIds?: string[] }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
   interviewWorkspaceBeginRun: (id: string) => Promise<{ success: boolean; workspace?: any; error?: string }>;
   interviewWorkspaceFinishRun: (payload: { id: string; meetingId: string }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
   interviewWorkspaceCancelRun: (id: string) => Promise<{ success: boolean; workspace?: any; error?: string }>;
-  interviewWorkspaceList: () => Promise<{ success: boolean; workspaces?: any[]; error?: string }>;
-  interviewWorkspaceDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
   startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string }>;
   endMeeting: () => Promise<{ success: boolean; error?: string }>;
   finalizeMicSTT: () => Promise<void>;
@@ -1431,11 +1441,43 @@ contextBridge.exposeInMainWorld('electronAPI', {
   interviewDocsUpload: () => ipcRenderer.invoke('interview-docs:upload'),
   interviewDocsUpdateMetadata: (id: string, metadata: { contextKind: 'resume' | 'project' | 'other'; contextDescription?: string }) => ipcRenderer.invoke('interview-docs:update-metadata', id, metadata),
   interviewDocsDelete: (id: string) => ipcRenderer.invoke('interview-docs:delete', id),
-  interviewWorkspaceGetById: (id: string) => ipcRenderer.invoke('interview-workspace:get-by-id', id),
+  // Interview Workspace & Multi-Round APIs
+  interviewWorkspaceList: () =>
+    ipcRenderer.invoke('interview-workspace:list'),
+  interviewWorkspaceCreate: (payload?: { title?: string; initialDocIds?: string[] }) =>
+    ipcRenderer.invoke('interview-workspace:create', payload),
+  interviewWorkspaceGetById: (id: string) =>
+    ipcRenderer.invoke('interview-workspace:get-by-id', id),
+  interviewWorkspaceRename: (payloadOrId: { id: string; title: string } | string, maybeTitle?: string) => {
+    const payload = typeof payloadOrId === 'string'
+      ? { id: payloadOrId, title: maybeTitle || '' }
+      : payloadOrId;
+    return ipcRenderer.invoke('interview-workspace:rename', payload);
+  },
+  interviewWorkspaceDelete: (id: string) =>
+    ipcRenderer.invoke('interview-workspace:delete', id),
+  interviewWorkspaceAddRound: (payloadOrWorkspaceId: { workspaceId: string; name?: string } | string, name?: string) => {
+    const payload = typeof payloadOrWorkspaceId === 'string'
+      ? { workspaceId: payloadOrWorkspaceId, name }
+      : payloadOrWorkspaceId;
+    return ipcRenderer.invoke('interview-workspace:add-round', payload);
+  },
+  interviewWorkspaceRenameRound: (payload: { workspaceId: string; roundId: string; name: string }) =>
+    ipcRenderer.invoke('interview-workspace:rename-round', payload),
+  interviewWorkspaceSetActiveRound: (payload: { workspaceId: string; roundId: string }) =>
+    ipcRenderer.invoke('interview-workspace:set-active-round', payload),
+  interviewWorkspaceUpdateRoundPrep: (payload: { workspaceId: string; roundId: string; messages: any[] }) =>
+    ipcRenderer.invoke('interview-workspace:update-round-prep', payload),
+  interviewWorkspaceUpdateDocuments: (payload: { workspaceId: string; documentIds: string[] }) =>
+    ipcRenderer.invoke('interview-workspace:update-documents', payload),
+  interviewWorkspaceStartMeeting: (payload: { workspaceId: string; roundId: string }) =>
+    ipcRenderer.invoke('interview-workspace:start-meeting', payload),
+  interviewWorkspaceFinishMeeting: (payload: { workspaceId: string; roundId: string; meetingId: string }) =>
+    ipcRenderer.invoke('interview-workspace:finish-meeting', payload),
+
+  // Backward Compatibility Workspace APIs
   interviewWorkspaceGetByMeeting: (meetingId: string) => ipcRenderer.invoke('interview-workspace:get-by-meeting', meetingId),
   interviewWorkspaceSave: (state: any) => ipcRenderer.invoke('interview-workspace:save', state),
-
-  // V2 workspace APIs
   interviewWorkspaceResolveDraft: (options?: { preferredId?: string; forceNew?: boolean }) =>
     ipcRenderer.invoke('interview-workspace:resolve-draft', options),
   interviewWorkspaceUpdatePrep: (payload: { id: string; messages?: any[]; contextMarkdown?: string; selectedDocumentIds?: string[] }) =>
@@ -1446,10 +1488,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('interview-workspace:finish-run', payload),
   interviewWorkspaceCancelRun: (id: string) =>
     ipcRenderer.invoke('interview-workspace:cancel-run', id),
-  interviewWorkspaceList: () =>
-    ipcRenderer.invoke('interview-workspace:list'),
-  interviewWorkspaceDelete: (id: string) =>
-    ipcRenderer.invoke('interview-workspace:delete', id),
 
   startMeeting: (metadata?: any) => ipcRenderer.invoke('start-meeting', metadata),
   endMeeting: () => ipcRenderer.invoke('end-meeting'),

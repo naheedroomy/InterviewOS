@@ -1132,6 +1132,13 @@ export class AppState {
     })
 
     autoUpdater.on("update-available", async (info) => {
+      const currentVersion = app.getVersion();
+      const newVersion = (info?.version || '').replace(/^v/, '');
+      if (!this.isVersionNewer(currentVersion, newVersion)) {
+        console.log(`[AutoUpdater] Ignoring update ${info?.version} because current ${currentVersion} is newer or equal.`);
+        return;
+      }
+
       console.log("[AutoUpdater] Update available:", info.version)
       this.updateAvailable = true
 
