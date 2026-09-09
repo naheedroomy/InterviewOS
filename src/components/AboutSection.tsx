@@ -42,39 +42,39 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                 <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">What's New in v{packageJson.version}</h4>
                 <div className="bg-bg-item-surface rounded-xl border border-border-subtle overflow-hidden">
                     <FeatureRow
-                        icon={<LayoutGrid size={20} />}
-                        color="text-indigo-400"
-                        bg="bg-indigo-500/10"
-                        title="Interview-first workspace"
-                        description="The launcher now follows a three-pane interview flow with prep chat, selected documents, transcript history, and post-interview chat separated clearly."
+                        icon={<Database size={20} />}
+                        color="text-amber-400"
+                        bg="bg-amber-500/10"
+                        title="Dedicated Knowledge Bank Hub"
+                        description="A central master portfolio for reusable resumes, technical cheat sheets, and job specs with cross-interview usage tracking badges."
                     />
                     <FeatureRow
-                        icon={<Volume2 size={20} />}
-                        color="text-blue-400"
-                        bg="bg-blue-500/10"
-                        title="Local transcription"
-                        description="Audio setup is simplified around the Moonshine Base model downloaded during setup, with input and output device controls shown where users need them."
+                        icon={<LayoutGrid size={20} />}
+                        color="text-amber-400"
+                        bg="bg-amber-500/10"
+                        title="Executive Charcoal & Warm Amber Theme"
+                        description="Complete design overhaul adhering to the Impeccable craft standard, purging slop anti-patterns in favor of crisp 1px hairline borders."
+                    />
+                    <FeatureRow
+                        icon={<Zap size={20} />}
+                        color="text-amber-400"
+                        bg="bg-amber-500/10"
+                        title="Inline Active Context Strip"
+                        description="Context documents are now managed directly underneath the Round Switcher with 1-click detachment and quick modal attachment."
                     />
                     <FeatureRow
                         icon={<Cpu size={20} />}
-                        color="text-purple-400"
-                        bg="bg-purple-500/10"
-                        title="Focused model support"
-                        description="AI provider setup now centers on OpenAI, Google Gemini, and Anthropic, with Claude limited to supported Opus and Sonnet 4.6 models."
-                    />
-                    <FeatureRow
-                        icon={<DownloadCloud size={20} />}
-                        color="text-sky-400"
-                        bg="bg-sky-500/10"
-                        title="Inline app updates"
-                        description="AnswerCue checks GitHub Releases and shows a quiet sidebar update row when a newer version is available."
+                        color="text-amber-400"
+                        bg="bg-amber-500/10"
+                        title="Role & Persona Overrides"
+                        description="Customize candidate background notes and AI prompt instructions per interview workspace with dynamic runtime LLM sync."
                         last
                     />
                 </div>
             </div>
 
             <div>
-                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">How AnswerCue Works</h4>
+                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">How InterviewOS Works</h4>
                 <div className="bg-bg-item-surface rounded-xl border border-border-subtle overflow-hidden">
                     <FeatureRow
                         icon={<Database size={20} />}
@@ -88,7 +88,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                         color="text-cyan-400"
                         bg="bg-cyan-500/10"
                         title="Live interview assistance"
-                        description="AnswerCue captures microphone and meeting audio, keeps interviewer and candidate transcript messages distinct, and generates fast answer support."
+                        description="InterviewOS captures microphone and meeting audio, keeps interviewer and candidate transcript messages distinct, and generates fast answer support."
                     />
                     <FeatureRow
                         icon={<Zap size={20} />}
@@ -112,7 +112,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     <InfoRow
                         icon={<MicOff size={16} className="text-red-400 mt-0.5" />}
                         title="No always-on recording"
-                        description="AnswerCue listens only during active interview flows and does not take screenshots or analyze the screen without an explicit command."
+                        description="InterviewOS listens only during active interview flows and does not take screenshots or analyze the screen without an explicit command."
                     />
                 </div>
             </div>
@@ -134,7 +134,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                         onOpen={handleOpenLink}
                         icon={<Star size={20} className="transition-all group-hover:fill-current" />}
                         title="Star on GitHub"
-                        description="Follow AnswerCue development and releases."
+                        description="Follow InterviewOS development and releases."
                         color="text-yellow-500"
                         bg="bg-yellow-500/10"
                     />

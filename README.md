@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/readme/answercue-banner.png" alt="AnswerCue Interview Assistant" width="100%">
+  <img src="assets/readme/answercue-banner.png" alt="InterviewOS Desktop Workspace" width="100%">
 </p>
 
 # InterviewOS
@@ -21,8 +21,8 @@ InterviewOS is a desktop interview workspace for preparing context, transcribing
 It is designed around one flow:
 
 1. Configure your AI provider, audio devices, and permissions.
-2. Create a new interview.
-3. Build context in the prep chat and attach reusable documents.
+2. Create a new interview workspace.
+3. Build context in the prep chat and attach reusable documents from the Knowledge Bank.
 4. Start the live interview when your meeting app is ready.
 5. Review transcript, AI answers, and follow-up chat after the interview ends.
 
@@ -32,26 +32,27 @@ Installers are published from GitHub Releases.
 
 | Platform | Download | Notes |
 | --- | --- | --- |
-| Windows 10/11 x64 | [Latest release assets](https://github.com/FarzamHejaziK/AnswerCue/releases/latest) | NSIS installer. Current builds are configured for Azure Artifact Signing through the repository signing secrets. |
-| macOS Apple Silicon | [Latest release assets](https://github.com/FarzamHejaziK/AnswerCue/releases/latest) | Use the Apple Silicon ZIP/DMG artifact when available. |
-| macOS Intel | [Latest release assets](https://github.com/FarzamHejaziK/AnswerCue/releases/latest) | Use the Intel DMG/ZIP artifact when available. |
+| Windows 10/11 x64 | [Latest release assets](https://github.com/naheedroomy/InterviewOS/releases/latest) | NSIS installer. Current builds are configured for Azure Artifact Signing through the repository signing secrets. |
+| macOS Apple Silicon | [Latest release assets](https://github.com/naheedroomy/InterviewOS/releases/latest) | Use the Apple Silicon ZIP/DMG artifact when available. |
+| macOS Intel | [Latest release assets](https://github.com/naheedroomy/InterviewOS/releases/latest) | Use the Intel DMG/ZIP artifact when available. |
 
-If your operating system warns about an unsigned or newly signed build, make sure you downloaded it from the official AnswerCue release page.
+If your operating system warns about an unsigned or newly signed build, make sure you downloaded it from the official InterviewOS release page.
 
-## Why AnswerCue?
+## Why InterviewOS?
 
 - **Interview-first flow:** prep chat, reusable docs, live interview transcript, AI answers, and post-interview follow-up all stay in one interview timeline.
+- **Dedicated Knowledge Bank:** manage resumes, cheat sheets, and job descriptions in one library with cross-interview usage badges.
+- **Role & Persona Overrides:** tune AI instructions and candidate background per interview workspace.
+- **Executive Charcoal & Amber UI:** minimalist, distraction-free desktop interface built to the Impeccable craft standard.
 - **Bring your own provider key:** OpenAI, Google Gemini, and Anthropic Claude are supported from Settings.
 - **Local transcription path:** Moonshine Base runs locally after setup, so live transcription works without a cloud speech provider; Google Cloud Speech-to-Text is also selectable in Settings when you prefer cloud transcription.
 - **Reusable document context:** Markdown, TXT, PDF, and DOCX files are ingested into Markdown locally and can be attached across interviews.
 - **Persistent interview memory:** prep chat, selected docs, transcript, AI responses, and post-interview chat are saved so you can reopen an interview later.
-- **Custom instructions and AI persona:** Settings includes Custom Instructions, with support for ingesting one local file, plus an AI Persona.
-- **Help assistant:** a persistent help chat backed by the in-app AnswerCue Help Guide and your selected main LLM.
-- **Light and dark UI:** the desktop app follows the AnswerCue visual system with both themes available.
+- **Help assistant:** a persistent help chat backed by the in-app InterviewOS Help Guide and your selected main LLM.
 
 ## Privacy
 
-AnswerCue is designed to keep interview data on your device by default: prep chat, documents, transcripts, AI responses, settings, and interview history are stored locally, and transcription uses the local Moonshine Base model by default (Google Cloud Speech-to-Text is selectable in Settings and sends audio to Google when selected). When you generate an answer, relevant prompt context — including transcripts, documents, or screenshots when included — is sent to the AI provider you configure and select. See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) for details.
+InterviewOS is designed to keep interview data on your device by default: prep chat, documents, transcripts, AI responses, settings, and interview history are stored locally, and transcription uses the local Moonshine Base model by default (Google Cloud Speech-to-Text is selectable in Settings and sends audio to Google when selected). When you generate an answer, relevant prompt context — including transcripts, documents, or screenshots when included — is sent to the AI provider you configure and select. See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) for details.
 
 ## Documentation
 
