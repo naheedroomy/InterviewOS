@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.1.0] - 2026-09-09
+
+### Summary
+
+InterviewOS v3.1.0 introduces a multi-file upload flow with document staging and classification, a non-intrusive compact search bar with a full-screen Spotlight overlay modal, a prominent per-interview AI model selector, and filtering of experimental Gemini banana/nano models.
+
+### What's New
+
+- **Multi-File Staged Upload Flow:** Candidates can now select multiple documents simultaneously in both the Knowledge Bank and chat area dropzones. A clean staging modal (`UploadStagingModal`) displays each selected file, pre-detects document types, and allows quick tagging (`Resume`, `Job Spec`, `Cover Letter`, `Interview Prep Kit`, `Cheat Sheet`, `Notes`, `Portfolio`) along with custom descriptions before batch uploading.
+- **Spotlight Search Overlay (⌘K):** The top search bar has been redesigned from a wide fixed-width element into an in-flow compact pill that never overlaps navigation switcher tabs. Clicking or pressing `⌘K` triggers a centered Spotlight overlay modal with backdrop blur, instant query highlighting, and keyboard navigation.
+- **Prominent Per-Interview AI Model Selector:** Restored a dedicated model selector directly adjacent to `[ ⚡ Role & Persona ]` in the interview view header. Selected models persist per interview (`modelOverride`) and restore automatically on workspace switch.
+- **Gemini Model Filtering:** Stripped experimental Google Gemini preview models containing `banana` or `nano` across model fetchers, IPC handlers, and renderer selector lists.
+
+### Improvements & Polish
+
+- **Full Rebrand Cleanups:** Purged remaining legacy AnswerCue UI strings across update modals, dialogs, and the About view.
+- **macOS Permissions Script:** Updated `scripts/reset-mac-permissions.sh` and helper documentation to target `InterviewOS.app` and `com.interviewos.desktop`.
+- **Craft Floor Verification:** 0 React Doctor errors, 0 TypeScript errors, clean Electron builds, and 100% unit test pass rate.
+
 ## [3.0.0] - 2026-09-09
 
 ### Summary
