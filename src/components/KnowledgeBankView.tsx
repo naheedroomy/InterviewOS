@@ -18,13 +18,16 @@ import {
   Clock,
   Layers,
 } from 'lucide-react';
+import { UploadStagingModal } from './UploadStagingModal';
+import { StagedUploadFile, detectContextKindFromName } from '../utils/documentUploadUtils';
+import type { InterviewContextDocumentKind } from '../types/electron';
 
 export interface KnowledgeDocument {
   id: string;
   name: string;
   fileType: 'md' | 'txt' | 'pdf' | 'docx';
   markdown: string;
-  contextKind?: 'resume' | 'project' | 'other' | 'job_description' | 'notes';
+  contextKind?: InterviewContextDocumentKind;
   contextDescription?: string;
   sizeBytes: number;
   createdAt: string;
@@ -109,19 +112,25 @@ const formatDocKind = (kind?: string): string => {
   if (!kind) return 'Document';
   switch (kind.toLowerCase()) {
     case 'resume':
-      return 'Master Resume';
-    case 'project':
-      return 'System & Project';
+      return 'CV / Resume';
     case 'job_description':
     case 'jobdescription':
     case 'jd':
-      return 'Target Role Spec';
+      return 'Target Role Spec (JD)';
+    case 'cover_letter':
+    case 'coverletter':
+      return 'Cover Letter';
+    case 'prep_kit':
+    case 'prepkit':
+      return 'Interview Prep Kit';
+    case 'project':
+      return 'Project Portfolio';
     case 'notes':
     case 'note':
       return 'Cheat Sheet & Notes';
     case 'other':
     default:
-      return 'General Asset';
+      return 'General Reference';
   }
 };
 
@@ -138,11 +147,19 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
   const [usage, setUsage] = useState<Record<string, WorkspaceUsageItem[]>>({});
   const [workspaces, setWorkspaces] = useState<Array<{ id: string; title: string; documentIds?: string[] }>>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedKindFilter, setSelectedKindFilter] = useState<'all' | 'resume' | 'job_description' | 'project' | 'notes' | 'other'>('all');
+  const [selectedKindFilter, setSelectedKindFilter] = useState<
+    'all' | 'resume' | 'job_description' | 'cover_letter' | 'prep_kit' | 'project' | 'notes' | 'other'
+  >('all');
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+  // Staging upload modal state
+  const [stagedUploadFiles, setStagedUploadFiles] = useState<StagedUploadFile[]>([]);
+  const [isStagingModalOpen, setIsStagingModalOpen] = useState(false);
+  const [isBatchUploading, setIsBatchUploading] = useState(false);
+  const [stagingUploadError, setStagingUploadError] = useState<string | null>(null);
 
   // Modals state
   const [previewDoc, setPreviewDoc] = useState<KnowledgeDocument | null>(null);
@@ -207,7 +224,10 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (previewDoc) setPreviewDoc(null);
+        if (isStagingModalOpen && !isBatchUploading) {
+          setIsStagingModalOpen(false);
+          setStagedUploadFiles([]);
+        } else if (previewDoc) setPreviewDoc(null);
         else if (attachDoc) setAttachDoc(null);
         else if (deleteConfirmDoc) {
           setDeleteConfirmDoc(null);
@@ -218,7 +238,7 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [previewDoc, attachDoc, deleteConfirmDoc, onClose]);
+  }, [isStagingModalOpen, isBatchUploading, previewDoc, attachDoc, deleteConfirmDoc, onClose]);
 
   // Reset deleteError whenever deleteConfirmDoc modal is opened or closed
   useEffect(() => {
@@ -228,20 +248,44 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
   // Upload handler via native dialog
   const handleUploadFromDialog = async () => {
     setUploadError(null);
-    setIsUploading(true);
+    setStagingUploadError(null);
     try {
-      const result = await window.electronAPI?.interviewDocsUpload?.();
-      if (result?.cancelled) return;
-      if (!result?.success || !result.document) {
-        setUploadError(result?.error || 'Could not upload document.');
-        return;
-      }
-      await loadData();
+      const result = await window.electronAPI?.interviewDocsSelectFiles?.();
+      if (result?.cancelled || !result?.files?.length) return;
+      const newStaged: StagedUploadFile[] = result.files.map((file, idx) => ({
+        id: `${Date.now()}-${idx}-${file.name}`,
+        filePath: file.path,
+        name: file.name,
+        sizeBytes: file.size,
+        fileType: file.ext,
+        contextKind: detectContextKindFromName(file.name),
+        contextDescription: '',
+      }));
+      setStagedUploadFiles(prev => [...prev, ...newStaged]);
+      setIsStagingModalOpen(true);
     } catch (err: any) {
-      console.error('[KnowledgeBankView] Upload error:', err);
-      setUploadError(err?.message || 'Could not upload document.');
-    } finally {
-      setIsUploading(false);
+      console.error('[KnowledgeBankView] File selection error:', err);
+      setUploadError(err?.message || 'Failed to select files.');
+    }
+  };
+
+  const handleAddMoreFiles = async () => {
+    try {
+      const result = await window.electronAPI?.interviewDocsSelectFiles?.();
+      if (result?.cancelled || !result?.files?.length) return;
+      const newStaged: StagedUploadFile[] = result.files.map((file, idx) => ({
+        id: `${Date.now()}-${idx}-${file.name}`,
+        filePath: file.path,
+        name: file.name,
+        sizeBytes: file.size,
+        fileType: file.ext,
+        contextKind: detectContextKindFromName(file.name),
+        contextDescription: '',
+      }));
+      setStagedUploadFiles(prev => [...prev, ...newStaged]);
+    } catch (err: any) {
+      console.error('[KnowledgeBankView] Add more files error:', err);
+      setStagingUploadError(err?.message || 'Failed to select additional files.');
     }
   };
 
@@ -263,39 +307,96 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
     e.stopPropagation();
     setIsDraggingOver(false);
     setUploadError(null);
+    setStagingUploadError(null);
 
     const files = Array.from(e.dataTransfer.files);
     if (!files.length) return;
 
-    setIsUploading(true);
-    try {
-      const uploadPromises = files.map(async file => {
-        const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-        if (!['.pdf', '.docx', '.txt', '.md', '.markdown'].includes(ext)) {
-          return { success: false, error: `Unsupported format "${ext}". Please drop .pdf, .docx, .txt, or .md files.` };
-        }
-
-        const filePath = window.electronAPI?.getPathForFile?.(file) || (file as any).path;
-        if (filePath && window.electronAPI?.interviewDocsUploadFromPath) {
-          return window.electronAPI.interviewDocsUploadFromPath(filePath);
-        } else {
-          return window.electronAPI?.interviewDocsUpload?.();
-        }
-      });
-
-      const results = await Promise.all(uploadPromises);
-      const firstError = results.find(r => r && !r.success && !r.cancelled);
-      if (firstError?.error) {
-        setUploadError(firstError.error);
+    const newStaged: StagedUploadFile[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const ext = file.name.substring(file.name.lastIndexOf('.')).replace('.', '').toLowerCase();
+      if (!['pdf', 'docx', 'txt', 'md', 'markdown'].includes(ext)) {
+        continue;
       }
-      await loadData();
-    } catch (err: any) {
-      console.error('[KnowledgeBankView] Drop upload failed:', err);
-      setUploadError(err?.message || 'Failed to upload dropped files.');
-    } finally {
-      setIsUploading(false);
+      const filePath = window.electronAPI?.getPathForFile?.(file) || (file as any).path;
+      if (filePath) {
+        newStaged.push({
+          id: `${Date.now()}-${i}-${file.name}`,
+          filePath,
+          name: file.name,
+          sizeBytes: file.size,
+          fileType: ext === 'markdown' ? 'md' : ext,
+          contextKind: detectContextKindFromName(file.name),
+          contextDescription: '',
+        });
+      }
+    }
+
+    if (newStaged.length > 0) {
+      setStagedUploadFiles(prev => [...prev, ...newStaged]);
+      setIsStagingModalOpen(true);
+    } else {
+      setUploadError('Unsupported format. Please drop .pdf, .docx, .txt, or .md files.');
     }
   };
+
+  const handleConfirmBatchUpload = async (filesToUpload: StagedUploadFile[]) => {
+    if (!filesToUpload.length) return;
+    setIsBatchUploading(true);
+    setStagingUploadError(null);
+    try {
+      const items = filesToUpload.map(f => ({
+        filePath: f.filePath,
+        contextKind: f.contextKind,
+        contextDescription: f.contextDescription.trim() || undefined,
+      }));
+      const res = await window.electronAPI?.interviewDocsBatchUpload?.(items);
+      if (!res?.success) {
+        setStagingUploadError(res?.error || 'Failed to upload documents.');
+        return;
+      }
+
+      if (currentWorkspaceId && res.documents?.length && window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+        const newDocIds = res.documents.map((d: any) => d.id);
+        const currentWs = workspaces.find(w => w.id === currentWorkspaceId);
+        const currentIds = currentWs?.documentIds || [];
+        const mergedIds = Array.from(new Set([...currentIds, ...newDocIds]));
+        await window.electronAPI.interviewWorkspaceUpdateDocuments({
+          workspaceId: currentWorkspaceId,
+          documentIds: mergedIds,
+        });
+      }
+
+      await loadData();
+      setIsStagingModalOpen(false);
+      setStagedUploadFiles([]);
+    } catch (err: any) {
+      console.error('[KnowledgeBankView] Batch upload failed:', err);
+      setStagingUploadError(err?.message || 'Failed to upload documents.');
+    } finally {
+      setIsBatchUploading(false);
+    }
+  };
+
+  const handleUpdateStagedFile = (
+    id: string,
+    updates: Partial<Pick<StagedUploadFile, 'contextKind' | 'contextDescription'>>
+  ) => {
+    setStagedUploadFiles(prev =>
+      prev.map(f => (f.id === id ? { ...f, ...updates } : f))
+    );
+  };
+
+  const handleRemoveStagedFile = (id: string) => {
+    setStagedUploadFiles(prev => prev.filter(f => f.id !== id));
+  };
+
+  useEffect(() => {
+    if (isStagingModalOpen && stagedUploadFiles.length === 0) {
+      setIsStagingModalOpen(false);
+    }
+  }, [isStagingModalOpen, stagedUploadFiles.length]);
 
   // Delete document handler
   const handleDeleteDocument = async (id: string) => {
@@ -387,6 +488,10 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
       if (selectedKindFilter === 'resume') return doc.contextKind === 'resume';
       if (selectedKindFilter === 'job_description')
         return ['job_description', 'jobdescription', 'jd'].includes(doc.contextKind || '');
+      if (selectedKindFilter === 'cover_letter')
+        return ['cover_letter', 'coverletter'].includes(doc.contextKind || '');
+      if (selectedKindFilter === 'prep_kit')
+        return ['prep_kit', 'prepkit'].includes(doc.contextKind || '');
       if (selectedKindFilter === 'project') return doc.contextKind === 'project';
       if (selectedKindFilter === 'notes') return ['notes', 'note'].includes(doc.contextKind || '');
       if (selectedKindFilter === 'other') return !doc.contextKind || doc.contextKind === 'other';
@@ -541,6 +646,28 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
           </button>
           <button
             type="button"
+            onClick={() => setSelectedKindFilter('cover_letter')}
+            className={`px-2.5 py-1 rounded-md transition-colors ${
+              selectedKindFilter === 'cover_letter'
+                ? 'bg-amber-500/15 text-amber-300 font-medium border border-amber-500/30'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]'
+            }`}
+          >
+            Cover Letters
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedKindFilter('prep_kit')}
+            className={`px-2.5 py-1 rounded-md transition-colors ${
+              selectedKindFilter === 'prep_kit'
+                ? 'bg-amber-500/15 text-amber-300 font-medium border border-amber-500/30'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]'
+            }`}
+          >
+            Prep Kits
+          </button>
+          <button
+            type="button"
             onClick={() => setSelectedKindFilter('project')}
             className={`px-2.5 py-1 rounded-md transition-colors ${
               selectedKindFilter === 'project'
@@ -560,6 +687,17 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
             }`}
           >
             Cheat Sheets & Notes
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedKindFilter('other')}
+            className={`px-2.5 py-1 rounded-md transition-colors ${
+              selectedKindFilter === 'other'
+                ? 'bg-amber-500/15 text-amber-300 font-medium border border-amber-500/30'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]'
+            }`}
+          >
+            General
           </button>
         </div>
       </header>
@@ -1144,6 +1282,24 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Multi-File Upload Staging & Metadata Modal */}
+      <UploadStagingModal
+        isOpen={isStagingModalOpen}
+        isLight={isLight}
+        stagedFiles={stagedUploadFiles}
+        isUploading={isBatchUploading}
+        uploadError={stagingUploadError}
+        onClose={() => {
+          setIsStagingModalOpen(false);
+          setStagedUploadFiles([]);
+          setStagingUploadError(null);
+        }}
+        onConfirmUpload={handleConfirmBatchUpload}
+        onUpdateFile={handleUpdateStagedFile}
+        onRemoveFile={handleRemoveStagedFile}
+        onAddMoreFiles={handleAddMoreFiles}
+      />
     </div>
   );
 };

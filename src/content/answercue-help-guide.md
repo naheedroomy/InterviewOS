@@ -1,10 +1,10 @@
-# AnswerCue Help Guide
+# InterviewOS Help Guide
 
-This is the in-app knowledge base for the AnswerCue Help Assistant. The help chat should answer from this guide first, then use recent help-chat history for continuity.
+This is the in-app knowledge base for the InterviewOS Help Assistant. The help chat should answer from this guide first, then use recent help-chat history for continuity.
 
 ## Mental Model
 
-AnswerCue has three phases:
+InterviewOS has three phases:
 
 1. **Prepare interview:** chat with the assistant, add notes, and attach selected documents.
 2. **Live interview:** capture interviewer audio, user audio, and generated AI help.
@@ -45,26 +45,26 @@ If only one provider key is saved, the active model should come from that provid
 
 ## Audio And Transcription
 
-AnswerCue uses the local Moonshine Base model for transcription after it is downloaded during setup. Users should not need to select a transcription model.
+InterviewOS uses the local Moonshine Base model for transcription after it is downloaded during setup. Users should not need to select a transcription model.
 
-AnswerCue needs two audio paths:
+InterviewOS needs two audio paths:
 
 - **Input device:** your microphone.
 - **Output/system audio device:** the device where the interviewer audio is playing.
 
-For Zoom, Teams, Google Meet, or similar apps, match the AnswerCue output/system audio device to the meeting app output.
+For Zoom, Teams, Google Meet, or similar apps, match the InterviewOS output/system audio device to the meeting app output.
 
 Examples:
 
-- If Zoom plays through Mac mini Speakers, choose Mac mini Speakers in AnswerCue.
-- If Meet plays through AirPods, choose AirPods in AnswerCue.
-- If Teams plays through Studio Display Speakers, choose Studio Display Speakers in AnswerCue.
+- If Zoom plays through Mac mini Speakers, choose Mac mini Speakers in InterviewOS.
+- If Meet plays through AirPods, choose AirPods in InterviewOS.
+- If Teams plays through Studio Display Speakers, choose Studio Display Speakers in InterviewOS.
 
 If your voice appears but the interviewer does not, check output/system audio. If the interviewer appears but your voice does not, check microphone input.
 
 ## Permissions
 
-On macOS, AnswerCue may need:
+On macOS, InterviewOS may need:
 
 - Microphone permission.
 - Screen Recording permission for system audio and screen-aware features.
@@ -80,7 +80,7 @@ When permissions are missing, setup warnings should appear in the right panel. I
 
 ## Main Layout
 
-AnswerCue uses a three-column desktop layout:
+InterviewOS uses a three-column desktop layout:
 
 - **Left panel:** interviews list and New Interview.
 - **Middle panel:** the active interview conversation, transcript, prep chat, and post-interview chat.
@@ -102,7 +102,7 @@ Expected behavior:
 
 ## Prep Chat
 
-Before the live interview starts, use prep chat to tell AnswerCue:
+Before the live interview starts, use prep chat to tell InterviewOS:
 
 - What role this interview is for.
 - What company or team it is with.
@@ -118,7 +118,7 @@ The prompt should ask:
 
 Every prep-chat message should receive an assistant response.
 
-Prep chat is an intake/context-building space by default. If the user uploads a job description, resume, project notes, or other documents, AnswerCue should acknowledge the material, extract useful interview context, and ask a few targeted setup questions. It should not generate practice questions, mock interviews, answer drills, or study plans unless the user explicitly asks for those.
+Prep chat is an intake/context-building space by default. If the user uploads a job description, resume, project notes, or other documents, InterviewOS should acknowledge the material, extract useful interview context, and ask a few targeted setup questions. It should not generate practice questions, mock interviews, answer drills, or study plans unless the user explicitly asks for those.
 
 ## Documents
 
@@ -131,7 +131,7 @@ Supported files:
 
 New uploads are ingested locally into Markdown. Uploaded documents can be reused in future interviews.
 
-When adding a new document, AnswerCue asks what type it is:
+When adding a new document, InterviewOS asks what type it is:
 
 - Resume
 - Project
@@ -139,13 +139,13 @@ When adding a new document, AnswerCue asks what type it is:
 
 If `Other` is selected, the user provides a short description. If the user cancels this dialog, the document should not be added.
 
-When selecting an already uploaded document, AnswerCue should attach it immediately without asking for the document type again.
+When selecting an already uploaded document, InterviewOS should attach it immediately without asking for the document type again.
 
 Attached documents should be visible in the chat message history, not only in the composer. After a message is sent, attached documents should clear from the composer.
 
 ## Live Interview
 
-When the user clicks **Start interview**, AnswerCue enters the live phase.
+When the user clicks **Start interview**, InterviewOS enters the live phase.
 
 The live transcript should clearly distinguish:
 
@@ -183,7 +183,7 @@ The interview preparation context must be available to the live **What to answer
 
 ## Live Interview Actions
 
-The live shell quick actions are the main way users interact with AnswerCue during an interview. The user can click the visible buttons in the overlay or use global shortcuts when another app is focused.
+The live shell quick actions are the main way users interact with InterviewOS during an interview. The user can click the visible buttons in the overlay or use global shortcuts when another app is focused.
 
 Default shortcuts use `Cmd` on macOS and `Ctrl` on Windows. Users can change shortcuts in Settings > Hotkeys.
 
@@ -332,7 +332,7 @@ After the boundary, the user can continue chatting with the assistant. The post-
 
 ## Saved State
 
-AnswerCue should persist:
+InterviewOS should persist:
 
 - Interview title.
 - Prep chat.

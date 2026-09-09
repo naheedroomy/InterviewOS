@@ -53,7 +53,7 @@ const MockAppInterface = () => {
                         <div className="w-8 h-8 rounded-full bg-bg-item-active flex items-center justify-center border border-border-muted overflow-hidden">
                             <img
                                 src={answercueIcon}
-                                alt="AnswerCue"
+                                alt="InterviewOS"
                                 className="w-[20px] h-[20px] object-contain"
                                 style={{ filter: isLight ? 'brightness(0)' : 'brightness(0) invert(1)', opacity: 0.9 }}
                             />
@@ -422,8 +422,8 @@ const MockPermissionsAnim = () => {
                 </div>
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
-                        <img src={answercueIcon} alt="AnswerCue" className="w-6 h-6 object-contain rounded drop-shadow-sm opacity-90" />
-                        <span className="text-text-primary text-sm font-medium">AnswerCue</span>
+                        <img src={answercueIcon} alt="InterviewOS" className="w-6 h-6 object-contain rounded drop-shadow-sm opacity-90" />
+                        <span className="text-text-primary text-sm font-medium">InterviewOS</span>
                     </div>
 
                     <motion.div
@@ -441,8 +441,8 @@ const MockPermissionsAnim = () => {
             </div>
             <div className="text-xs text-text-secondary text-center max-w-[280px]">
                 {isMac
-                    ? 'AnswerCue requires Accessibility and Screen Recording permissions to analyze screen context.'
-                    : 'AnswerCue will ask for microphone access the first time you start a meeting.'}
+                    ? 'InterviewOS requires Accessibility and Screen Recording permissions to analyze screen context.'
+                    : 'InterviewOS will ask for microphone access the first time you start a meeting.'}
             </div>
         </div>
     );
@@ -729,7 +729,7 @@ const SetupGuide = () => {
         {
             title: 'Grant Permissions',
             desc: isMac
-                ? 'Enable Screen Recording and Accessibility for AnswerCue in macOS Privacy & Security.'
+                ? 'Enable Screen Recording and Accessibility for InterviewOS in macOS Privacy & Security.'
                 : 'Approve the microphone prompt the first time you start a meeting (Settings → Privacy → Microphone).',
         },
         {
@@ -762,7 +762,7 @@ const SetupGuide = () => {
         <div className="mb-10">
             <div className="mb-7">
                 <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">Quick Start</h3>
-                <p className="text-[13px] text-text-tertiary mt-0.5">Get AnswerCue running in four steps.</p>
+                <p className="text-[13px] text-text-tertiary mt-0.5">Get InterviewOS running in four steps.</p>
             </div>
 
             <div>
@@ -834,7 +834,7 @@ export const HelpSettings: React.FC = () => {
                     Help & Setup Guide
                 </h2>
                 <p className={`text-sm text-text-secondary mt-3 max-w-2xl`}>
-                    Learn how to deeply configure AnswerCue. Everything from providing the right API scopes to executing conversational interviews seamlessly is covered below.
+                    Learn how to deeply configure InterviewOS. Everything from providing the right API scopes to executing conversational interviews seamlessly is covered below.
                 </p>
                 <button
                     type="button"
@@ -859,8 +859,8 @@ export const HelpSettings: React.FC = () => {
                     <div className="space-y-4">
                         <p>
                             {isMac
-                                ? 'AnswerCue operates entirely on-device, but requires OS permissions to tap into your screen context and global keystrokes. Here is how your system should look:'
-                                : 'AnswerCue operates entirely on-device. Windows will prompt you for microphone access the first time you start a meeting — no other OS permissions are required.'}
+                                ? 'InterviewOS operates entirely on-device, but requires OS permissions to tap into your screen context and global keystrokes. Here is how your system should look:'
+                                : 'InterviewOS operates entirely on-device. Windows will prompt you for microphone access the first time you start a meeting — no other OS permissions are required.'}
                         </p>
                         {isMac && <MockPermissionsAnim />}
                         <div className="space-y-3 mt-4">
@@ -871,7 +871,7 @@ export const HelpSettings: React.FC = () => {
                                     <Mic size={14} className="text-accent-primary" /> Microphone & Speaker Loopback Selection
                                 </h5>
                                 <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                    AnswerCue can capture both what you say and what you hear globally. At the top of the Audio Settings, use the Dropdowns to explicitly select your hardware Input (e.g. your physical microphone) and Output capture (what the speakers play). By default, AnswerCue utilizes the <strong>System Default</strong>, so audio routing will automatically follow your OS preferences.
+                                    InterviewOS can capture both what you say and what you hear globally. At the top of the Audio Settings, use the Dropdowns to explicitly select your hardware Input (e.g. your physical microphone) and Output capture (what the speakers play). By default, InterviewOS utilizes the <strong>System Default</strong>, so audio routing will automatically follow your OS preferences.
                                 </p>
                             </div>
 
@@ -901,7 +901,7 @@ export const HelpSettings: React.FC = () => {
                                     <Globe size={14} className="text-green-500" /> Language & Regional Accents
                                 </h5>
                                 <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                    AnswerCue uses the local Moonshine Base transcription model downloaded during setup. The main setup requirement is device routing: choose the microphone you speak into and the output device where meeting audio plays.
+                                    InterviewOS uses the local Moonshine Base transcription model downloaded during setup. The main setup requirement is device routing: choose the microphone you speak into and the output device where meeting audio plays.
                                 </p>
                             </div>
                         </div>
@@ -912,7 +912,7 @@ export const HelpSettings: React.FC = () => {
                                     <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
                                         <Monitor className="w-4 h-4 text-accent-primary" /> Screen Recording
                                     </h4>
-                                    <p className="text-xs opacity-90 mb-2">Provides AnswerCue the ability to read your screen temporarily when you capture context.</p>
+                                    <p className="text-xs opacity-90 mb-2">Provides InterviewOS the ability to read your screen temporarily when you capture context.</p>
                                     <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Screen Recording</p>
                                 </div>
 
@@ -920,7 +920,7 @@ export const HelpSettings: React.FC = () => {
                                     <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
                                         <Command className="w-4 h-4 text-purple-500" /> Accessibility
                                     </h4>
-                                    <p className="text-xs opacity-90 mb-2">Required for AnswerCue to detect the global keyboard shortcuts below, regardless of what window is focused.</p>
+                                    <p className="text-xs opacity-90 mb-2">Required for InterviewOS to detect the global keyboard shortcuts below, regardless of what window is focused.</p>
                                     <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Accessibility</p>
                                 </div>
                             </div>
@@ -940,7 +940,7 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="2. Audio Setup (Microphone and Meeting Audio)" icon={<Mic className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p>AnswerCue uses the local Moonshine Base model for transcription after it is downloaded during setup. In the Audio tab, configure the microphone and the output device where your meeting audio is playing.</p>
+                        <p>InterviewOS uses the local Moonshine Base model for transcription after it is downloaded during setup. In the Audio tab, configure the microphone and the output device where your meeting audio is playing.</p>
 
                         <MockProviderSelectionAnim />
 
@@ -1054,7 +1054,7 @@ export const HelpSettings: React.FC = () => {
                 <AccordionSection title="3. AI Providers & Prompt Engine" icon={<Key className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <p className="text-sm">
-                            AnswerCue uses your selected main LLM for prep chat, live interview answers, post-interview chat, and Help Assistant replies. Configure one provider first, confirm it works, then add another only if you want a backup.
+                            InterviewOS uses your selected main LLM for prep chat, live interview answers, post-interview chat, and Help Assistant replies. Configure one provider first, confirm it works, then add another only if you want a backup.
                         </p>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1124,7 +1124,7 @@ export const HelpSettings: React.FC = () => {
                                 { Icon: HelpCircle, color: 'teal', title: 'Follow Up', badge: null, bc: '', kbd: ['⌘', '4'], desc: 'Suggests the next logical question to keep conversation flowing gracefully.' },
                                 { Icon: RefreshCw, color: 'amber', title: 'Recap', badge: 'Interview OFF', bc: 'bg-red-500/10 text-red-400 border-red-500/30', kbd: ['⌘', '3'], desc: 'Condenses the last 5 minutes into bullet points when you lose the thread.' },
                                 { Icon: Monitor, color: 'rose', title: 'Screenshot', badge: null, bc: '', kbd: ['⌘', 'H'], desc: 'Captures the whole screen and attaches it to the current interview.' },
-                                { Icon: Sparkles, color: 'sky', title: 'Screenshot + Answer', badge: null, bc: '', kbd: ['⌘', '⇧', '↵'], desc: 'Captures the screen and immediately asks AnswerCue what to say.' },
+                                { Icon: Sparkles, color: 'sky', title: 'Screenshot + Answer', badge: null, bc: '', kbd: ['⌘', '⇧', '↵'], desc: 'Captures the screen and immediately asks InterviewOS what to say.' },
                                 { Icon: Code, color: 'slate', title: 'Screenshot + Code', badge: null, bc: '', kbd: ['⌘', '⇧', '6'], desc: 'Captures the screen and immediately produces a code solution.' },
                             ] as Array<{ Icon: React.ElementType; color: 'blue' | 'violet' | 'teal' | 'emerald' | 'indigo' | 'amber' | 'sky' | 'rose' | 'slate'; title: string; badge: string | null; bc: string; kbd: string[]; desc: string }>).map(({ Icon, color, title, badge, bc, kbd, desc }) => {
                                 const resolvedKbd = kbd.map(k =>
@@ -1137,7 +1137,7 @@ export const HelpSettings: React.FC = () => {
                                     blue: { bg: 'bg-accent-secondary', text: 'text-accent-primary', border: 'border-border-muted', glow: 'group-hover:shadow-[0_0_0_1px_rgba(249,115,22,0.16),0_4px_12px_rgba(249,115,22,0.06)]' },
                                     violet: { bg: 'bg-violet-500/10', text: 'text-violet-400', border: 'border-violet-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(139,92,246,0.2),0_4px_12px_rgba(139,92,246,0.07)]' },
                                     teal: { bg: 'bg-teal-500/10', text: 'text-teal-400', border: 'border-teal-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(20,184,166,0.2),0_4px_12px_rgba(20,184,166,0.07)]' },
-                                    emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(16,185,129,0.2),0_4px_12px_rgba(16,185,129,0.07)]' },
+                                    emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(16,185,129,0.2),0_4px_129_rgba(16,185,129,0.07)]' },
                                     indigo: { bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(99,102,241,0.2),0_4px_12px_rgba(99,102,241,0.07)]' },
                                     amber: { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(245,158,11,0.2),0_4px_12px_rgba(245,158,11,0.07)]' },
                                     sky: { bg: 'bg-sky-500/10', text: 'text-sky-400', border: 'border-sky-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(14,165,233,0.2),0_4px_12px_rgba(14,165,233,0.07)]' },
@@ -1187,7 +1187,7 @@ export const HelpSettings: React.FC = () => {
                                 <HelpCircle className="w-4 h-4 text-accent-primary" /> Live Interview Actions In Detail
                             </h4>
                             <p className="text-[12px] text-text-secondary leading-relaxed mb-4">
-                                These controls are the main way to work with AnswerCue during a live interview. Use the buttons when the overlay is visible, or use the global shortcuts when the overlay is hidden or another app is focused.
+                                These controls are the main way to work with InterviewOS during a live interview. Use the buttons when the overlay is visible, or use the global shortcuts when the overlay is hidden or another app is focused.
                             </p>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1201,13 +1201,13 @@ export const HelpSettings: React.FC = () => {
                                     {
                                         title: 'Solve Code',
                                         shortcut: `${isMac ? 'Cmd' : 'Ctrl'}+6`,
-                                        detail: 'Use when the visible problem is a coding challenge, code editor, bug, compiler error, SQL prompt, algorithm question, or take-home style task. If a screenshot is attached, AnswerCue treats the screenshot as the primary source.',
+                                        detail: 'Use when the visible problem is a coding challenge, code editor, bug, compiler error, SQL prompt, algorithm question, or take-home style task. If a screenshot is attached, InterviewOS treats the screenshot as the primary source.',
                                         result: 'Produces a full coding answer, not only a hint. The response should include the approach, working code, and key edge cases when relevant.',
                                     },
                                     {
                                         title: 'Clarify',
                                         shortcut: `${isMac ? 'Cmd' : 'Ctrl'}+2`,
-                                        detail: 'Use when the interviewer question is ambiguous or incomplete. Instead of answering too early, AnswerCue suggests concise clarifying questions you can ask first.',
+                                        detail: 'Use when the interviewer question is ambiguous or incomplete. Instead of answering too early, InterviewOS suggests concise clarifying questions you can ask first.',
                                         result: 'Best for system design scope, vague product prompts, missing constraints, unclear data definitions, or coding problems without enough input/output detail.',
                                     },
                                     {
@@ -1265,7 +1265,7 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="5. Interview History" icon={<Calendar className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">When an interview concludes, AnswerCue saves the prep chat, selected docs, transcript, AI responses, interview-finished boundary, and follow-up chat so the interview can be reopened later.</p>
+                        <p className="text-[13px]">When an interview concludes, InterviewOS saves the prep chat, selected docs, transcript, AI responses, interview-finished boundary, and follow-up chat so the interview can be reopened later.</p>
 
                         <MockMeetingInterfaceAnim />
 
@@ -1275,7 +1275,7 @@ export const HelpSettings: React.FC = () => {
                                     <FileText className="w-4 h-4 text-accent-primary group-hover:scale-110 transition-transform" /> Summary Execution
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    AnswerCue keeps the full interview transcript and makes it available to the post-interview chat. Generated responses should render Markdown cleanly.
+                                    InterviewOS keeps the full interview transcript and makes it available to the post-interview chat. Generated responses should render Markdown cleanly.
                                 </p>
                             </div>
 
@@ -1331,7 +1331,7 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="6. Global Search & Shortcuts" icon={<Search className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">Hit <span className={kbdClass}>{isMac ? 'Cmd+K' : 'Ctrl+K'}</span> anywhere on your computer to invoke the AnswerCue Global Palette. This acts as your Spotlight overlay for interacting directly with the system backbone.</p>
+                        <p className="text-[13px]">Hit <span className={kbdClass}>{isMac ? 'Cmd+K' : 'Ctrl+K'}</span> anywhere on your computer to invoke the InterviewOS Global Palette. This acts as your Spotlight overlay for interacting directly with the system backbone.</p>
 
                         <MockSearchPillAnim />
 
@@ -1357,7 +1357,7 @@ export const HelpSettings: React.FC = () => {
 
                         <div className="border-t border-border-subtle pt-6">
                             <h4 className="font-bold text-sm text-text-primary border-b border-border-subtle pb-1">Global System Shortcuts</h4>
-                            <p className="text-[11px] text-text-secondary mt-1 mb-3">These hotkeys work anywhere on your operating system, regardless of whether AnswerCue is focused or completely hidden. Change them via <strong>Settings &gt; Hotkeys</strong>.</p>
+                            <p className="text-[11px] text-text-secondary mt-1 mb-3">These hotkeys work anywhere on your operating system, regardless of whether InterviewOS is focused or completely hidden. Change them via <strong>Settings &gt; Hotkeys</strong>.</p>
 
                             <div className="grid gap-3">
                                 <div className="flex items-center justify-between p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
@@ -1397,7 +1397,7 @@ export const HelpSettings: React.FC = () => {
                                         </div>
                                         <div>
                                             <div className="font-semibold text-sm text-text-primary">Process Captured Context (Execute)</div>
-                                            <div className="text-xs text-text-secondary mt-1">Triggers AnswerCue to analyze the captured screenshots and text from the rolling buffer.</div>
+                                            <div className="text-xs text-text-secondary mt-1">Triggers InterviewOS to analyze the captured screenshots and text from the rolling buffer.</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -1412,7 +1412,7 @@ export const HelpSettings: React.FC = () => {
                                         </div>
                                         <div>
                                             <div className="font-semibold text-sm text-text-primary">Screenshot + Answer Immediately</div>
-                                            <div className="text-xs text-text-secondary mt-1">Captures a screenshot and immediately asks AnswerCue what to say.</div>
+                                            <div className="text-xs text-text-secondary mt-1">Captures a screenshot and immediately asks InterviewOS what to say.</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -1525,7 +1525,7 @@ export const HelpSettings: React.FC = () => {
                                     <Calendar size={14} /> What is Calendar Intelligence?
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    By connecting your Google Calendar directly to AnswerCue, the AI automatically gains context on your upcoming meetings, syncs the event data, and reads attendee lists to hyper-personalize your interactions.
+                                    By connecting your Google Calendar directly to InterviewOS, the AI automatically gains context on your upcoming meetings, syncs the event data, and reads attendee lists to hyper-personalize your interactions.
                                 </p>
                             </div>
 
@@ -1535,13 +1535,13 @@ export const HelpSettings: React.FC = () => {
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                         <li>Navigate to the <strong>Calendar</strong> tab in settings.</li>
                                         <li>Click <strong>Connect Google Calendar</strong> and authenticate securely.</li>
-                                        <li>AnswerCue will quietly background-sync your schedule.</li>
+                                        <li>InterviewOS will quietly background-sync your schedule.</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary">Follow-Up System</h4>
                                     <p className="text-[11px] text-text-secondary">
-                                        When tracking live meetings, AnswerCue uses the connected calendar context to instantly figure out <strong>who you are talking to</strong>. This powers the Follow-Up Email system, letting you auto-draft post-meeting notes to confirmed attendees.
+                                        When tracking live meetings, InterviewOS uses the connected calendar context to instantly figure out <strong>who you are talking to</strong>. This powers the Follow-Up Email system, letting you auto-draft post-meeting notes to confirmed attendees.
                                     </p>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
@@ -1587,10 +1587,10 @@ export const HelpSettings: React.FC = () => {
                     <div className="space-y-4">
                         <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl mb-2">
                             <h4 className="text-[13px] font-semibold text-sky-400 flex items-center gap-2 mb-1">
-                                <Smartphone size={14} /> Stream AnswerCue to Your Phone
+                                <Smartphone size={14} /> Stream InterviewOS to Your Phone
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Phone Mirror spins up a small local web server so you can watch AnswerCue's live transcript and AI answers from your phone or tablet — handy when your screen is being shared and you don't want the overlay visible.
+                                Phone Mirror spins up a small local web server so you can watch InterviewOS's live transcript and AI answers from your phone or tablet — handy when your screen is being shared and you don't want the overlay visible.
                             </p>
                         </div>
 
@@ -1630,7 +1630,7 @@ export const HelpSettings: React.FC = () => {
                                 <Ghost size={14} /> Process Disguise & Undetectability
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                AnswerCue is heavily geared towards power users seeking minimalistic operation. The process completely disguises itself and remains undetectable/invisible to standard screen-recording applications and desktop sharing utilities.
+                                InterviewOS is heavily geared towards power users seeking minimalistic operation. The process completely disguises itself and remains undetectable/invisible to standard screen-recording applications and desktop sharing utilities.
                             </p>
                         </div>
 
@@ -1653,7 +1653,7 @@ export const HelpSettings: React.FC = () => {
                                 </p>
                                 <div className="p-2 border border-orange-500/20 bg-orange-500/5 rounded-lg">
                                     <p className="text-[10px] text-orange-400 m-0">
-                                        <strong>⚠️ Warning:</strong> This renders the AnswerCue overlay completely unclickable. You MUST memorize the Global Hotkeys (e.g. <strong>{isMac ? 'Cmd' : 'Ctrl'}+Shift+Arrows</strong> to move, <strong>{isMac ? 'Cmd' : 'Ctrl'}+B</strong> to hide, <strong>{isMac ? 'Cmd' : 'Ctrl'}+1</strong> for What to Answer, <strong>{isMac ? 'Cmd' : 'Ctrl'}+6</strong> for Solve Code, and <strong>{isMac ? 'Cmd' : 'Ctrl'}+Shift+6</strong> for Screenshot + Code) to control the application once this is active.
+                                        <strong>⚠️ Warning:</strong> This renders the InterviewOS overlay completely unclickable. You MUST memorize the Global Hotkeys (e.g. <strong>{isMac ? 'Cmd' : 'Ctrl'}+Shift+Arrows</strong> to move, <strong>{isMac ? 'Cmd' : 'Ctrl'}+B</strong> to hide, <strong>{isMac ? 'Cmd' : 'Ctrl'}+1</strong> for What to Answer, <strong>{isMac ? 'Cmd' : 'Ctrl'}+6</strong> for Solve Code, and <strong>{isMac ? 'Cmd' : 'Ctrl'}+Shift+6</strong> for Screenshot + Code) to control the application once this is active.
                                     </p>
                                 </div>
                             </div>

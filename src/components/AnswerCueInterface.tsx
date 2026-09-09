@@ -100,7 +100,7 @@ import TopPill from './ui/TopPill';
 const REMARK_PLUGINS = [remarkGfm, remarkMath];
 const REHYPE_PLUGINS = [rehypeKatex];
 
-const SOLVE_CODE_SYSTEM_PROMPT = `You are AnswerCue's coding interview code solver.
+const SOLVE_CODE_SYSTEM_PROMPT = `You are InterviewOS's coding interview code solver.
 
 The user clicked "Solve Code" in the live interview overlay. They may have attached a screenshot of a coding problem, partial solution, compiler error, or code editor.
 
@@ -4491,7 +4491,7 @@ Provide only the answer, nothing else.`;
                     : 'Vision failed';
                   const failureTitleMap: Record<string, string> = {
                     no_vision_provider:
-                      'No vision-capable provider is configured. Add an AnswerCue API, OpenAI, Claude, Gemini, or Groq key — or configure a local Ollama vision model.',
+                      'No vision-capable provider is configured. Add an InterviewOS API, OpenAI, Claude, Gemini, or Groq key — or configure a local Ollama vision model.',
                     all_vision_failed:
                       'All configured vision providers failed for this turn. Check provider quotas and try again.',
                     privacy_blocked:
@@ -4920,7 +4920,7 @@ Provide only the answer, nothing else.`;
                   >
                     <span className="overlay-text-primary flex-1">
                       Stealth typing needs Accessibility access. Grant it in System Settings, then
-                      restart AnswerCue.
+                      restart InterviewOS.
                     </span>
                     <button
                       onClick={() => window.electronAPI.stealthTapOpenSettings()}

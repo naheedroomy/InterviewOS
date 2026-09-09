@@ -138,17 +138,14 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
                     {/* Typography Architecture (High-Fidelity) */}
                     <motion.h1
                         variants={itemVariants}
-                        className="text-[44px] font-semibold tracking-[-0.5px] text-center mb-3"
+                        className="text-[44px] font-semibold tracking-[-0.5px] text-center mb-3 text-text-primary"
                         style={{
-                            background: 'linear-gradient(180deg, #2f2f34 0%, #50505a 100%)',
-                            WebkitBackgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
                             lineHeight: '1.2',
                             fontFamily: FONTS.interMedium,
                             fontWeight: 500
                         }}
                     >
-                        Welcome to AnswerCue
+                        Welcome to InterviewOS
                     </motion.h1>
 
                     <motion.p

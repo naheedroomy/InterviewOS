@@ -255,7 +255,7 @@ const RolePersonaOverrideContent: React.FC<RolePersonaOverrideModalProps> = ({
                                             isLoadingGlobals
                                                 ? 'Loading active settings...'
                                                 : globalAiPersona.trim() ||
-                                                  '(Default AnswerCue assistant persona. You can customize in Settings > Profile Intelligence or enable overrides above.)'
+                                                  '(Default InterviewOS assistant persona. You can customize in Settings > Profile Intelligence or enable overrides above.)'
                                         }
                                         rows={4}
                                         className="w-full rounded-lg bg-zinc-900/40 border border-white/[0.05] px-3 py-2 text-[13px] text-zinc-400 resize-none leading-relaxed cursor-not-allowed font-normal select-text focus:outline-none"

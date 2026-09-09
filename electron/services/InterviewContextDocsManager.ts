@@ -4,7 +4,24 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 
-export type InterviewContextDocumentKind = 'resume' | 'project' | 'other';
+export type InterviewContextDocumentKind =
+  | 'resume'
+  | 'job_description'
+  | 'cover_letter'
+  | 'prep_kit'
+  | 'project'
+  | 'notes'
+  | 'other';
+
+export const VALID_DOCUMENT_KINDS: readonly InterviewContextDocumentKind[] = [
+  'resume',
+  'job_description',
+  'cover_letter',
+  'prep_kit',
+  'project',
+  'notes',
+  'other',
+] as const;
 
 export interface InterviewContextDocument {
   id: string;
@@ -164,7 +181,7 @@ export class InterviewContextDocsManager {
     if (index < 0) return null;
 
     const contextKind = metadata.contextKind;
-    if (contextKind && !['resume', 'project', 'other'].includes(contextKind)) {
+    if (contextKind && !VALID_DOCUMENT_KINDS.includes(contextKind)) {
       throw new Error('Unsupported document type.');
     }
 
@@ -185,7 +202,10 @@ export class InterviewContextDocsManager {
     return nextDoc;
   }
 
-  public async addDocumentFromFile(filePath: string): Promise<InterviewContextDocument> {
+  public async addDocumentFromFile(
+    filePath: string,
+    metadata?: { contextKind?: InterviewContextDocumentKind; contextDescription?: string },
+  ): Promise<InterviewContextDocument> {
     const { fileName, fileType, markdown, sizeBytes } = await ingestMarkdownDocument(filePath);
 
     const now = new Date().toISOString();
@@ -194,6 +214,8 @@ export class InterviewContextDocsManager {
       name: fileName,
       fileType,
       markdown,
+      contextKind: metadata?.contextKind,
+      contextDescription: metadata?.contextDescription?.trim() || undefined,
       sizeBytes,
       createdAt: now,
       updatedAt: now,
@@ -202,6 +224,31 @@ export class InterviewContextDocsManager {
     const docs = this.listDocuments();
     this.saveDocuments([doc, ...docs]);
     return doc;
+  }
+
+  public async addDocumentsFromFiles(
+    items: Array<{ filePath: string; contextKind?: InterviewContextDocumentKind; contextDescription?: string }>,
+  ): Promise<InterviewContextDocument[]> {
+    const newDocs: InterviewContextDocument[] = [];
+    for (const item of items) {
+      const { fileName, fileType, markdown, sizeBytes } = await ingestMarkdownDocument(item.filePath);
+      const now = new Date().toISOString();
+      newDocs.push({
+        id: crypto.randomUUID(),
+        name: fileName,
+        fileType,
+        markdown,
+        contextKind: item.contextKind,
+        contextDescription: item.contextDescription?.trim() || undefined,
+        sizeBytes,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const docs = this.listDocuments();
+    this.saveDocuments([...newDocs, ...docs]);
+    return newDocs;
   }
 
   private saveDocuments(documents: InterviewContextDocument[]): void {

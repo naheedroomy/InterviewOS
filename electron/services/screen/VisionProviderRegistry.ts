@@ -61,7 +61,7 @@ function natively(creds: CredentialsManager, _inputs: VisionProviderBuildInputs)
   const apiKey = creds.getAnswerCueApiKey();
   return {
     id: 'natively',
-    displayName: 'AnswerCue API',
+    displayName: 'InterviewOS API',
     modelId: 'natively',
     isLocal: false,
     isConfigured: !!apiKey,

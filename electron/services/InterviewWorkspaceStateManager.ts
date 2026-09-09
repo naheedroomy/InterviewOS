@@ -12,13 +12,15 @@ try {
 }
 
 export type InterviewWorkspacePhase = 'before' | 'during' | 'after';
+import { InterviewContextDocumentKind } from './InterviewContextDocsManager';
+
 export type InterviewWorkspaceStatus = 'draft' | 'active' | 'complete';
 
 export interface InterviewWorkspaceAttachment {
   id: string;
   name: string;
   fileType: 'md' | 'txt' | 'pdf' | 'docx';
-  contextKind?: 'resume' | 'project' | 'other';
+  contextKind?: InterviewContextDocumentKind;
   sizeBytes: number;
 }
 

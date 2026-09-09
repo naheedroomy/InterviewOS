@@ -22,11 +22,11 @@ const DISMISSED_STORAGE_KEY = 'answercue_help_assistant_dismissed_v1';
 const SHOW_HELP_ASSISTANT_EVENT = 'answercue-help-assistant-show';
 const MAX_STORED_MESSAGES = 80;
 
-const HELP_ASSISTANT_SYSTEM_PROMPT = `You are the AnswerCue Help Assistant.
+const HELP_ASSISTANT_SYSTEM_PROMPT = `You are the InterviewOS Help Assistant.
 
-You provide product support for the AnswerCue desktop app.
+You provide product support for the InterviewOS desktop app.
 
-Use the supplied AnswerCue Help Guide as your primary source of truth. Also use the recent help chat history for continuity.
+Use the supplied InterviewOS Help Guide as your primary source of truth. Also use the recent help chat history for continuity.
 
 Rules:
 - Be concise, practical, and step-by-step.
@@ -110,9 +110,9 @@ const buildHelpContext = (history: HelpMessage[]) => {
         .join('\n\n');
 
     return [
-        '<answercue_help_guide>',
+        '<interviewos_help_guide>',
         helpGuideMarkdown,
-        '</answercue_help_guide>',
+        '</interviewos_help_guide>',
         recentHistory ? '<recent_help_chat>' : '',
         recentHistory,
         recentHistory ? '</recent_help_chat>' : '',
@@ -336,7 +336,7 @@ export const HelpAssistant: React.FC = () => {
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-secondary text-accent-primary">
                 <HelpCircle size={24} />
             </div>
-            <h3 className="mb-2 text-base font-semibold text-text-primary">Ask about AnswerCue</h3>
+            <h3 className="mb-2 text-base font-semibold text-text-primary">Ask about InterviewOS</h3>
             <p className="max-w-[300px] text-xs leading-relaxed text-text-secondary">
                 Setup, audio, permissions, models, live interview actions, shortcuts, transcripts, documents, and troubleshooting.
             </p>
@@ -477,7 +477,7 @@ export const HelpAssistant: React.FC = () => {
                             <div className="flex shrink-0 items-center justify-between border-b border-border-subtle px-4 py-2">
                                 <div className="flex items-center gap-2 text-xs font-semibold text-text-primary">
                                     <BookOpen size={14} />
-                                    AnswerCue Guide
+                                    InterviewOS Guide
                                 </div>
                                 <button
                                     type="button"

@@ -72,7 +72,7 @@ const ModelSelectorWindow = () => {
                 const models: ModelOption[] = [];
 
                 if (creds?.hasAnswerCueKey) {
-                    models.push({ id: 'natively', name: 'AnswerCue API', type: 'cloud', provider: 'natively' });
+                    models.push({ id: 'natively', name: 'InterviewOS API', type: 'cloud', provider: 'natively' });
                 }
 
                 // Cloud Models — standard models + unique preferred models

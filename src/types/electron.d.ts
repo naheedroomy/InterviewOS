@@ -36,11 +36,20 @@ export interface DynamicActionPayload {
 // Mirrors electron/services/InterviewWorkspaceStateManager.ts types.
 // Kept as structural interfaces to preserve the main↔renderer type boundary.
 
+export type InterviewContextDocumentKind =
+  | 'resume'
+  | 'job_description'
+  | 'cover_letter'
+  | 'prep_kit'
+  | 'project'
+  | 'notes'
+  | 'other';
+
 export interface InterviewWorkspaceAttachment {
   id: string;
   name: string;
   fileType: 'md' | 'txt' | 'pdf' | 'docx';
-  contextKind?: 'resume' | 'project' | 'other';
+  contextKind?: InterviewContextDocumentKind;
   sizeBytes: number;
 }
 
@@ -319,9 +328,11 @@ export interface ElectronAPI {
   modesRemoveAllNoteSections: (modeId: string) => Promise<{ success: boolean; error?: string }>
 
   // Meeting Lifecycle
-  interviewDocsList: () => Promise<Array<{ id: string; name: string; fileType: 'md' | 'txt' | 'pdf' | 'docx'; markdown: string; contextKind?: 'resume' | 'project' | 'other'; contextDescription?: string; sizeBytes: number; createdAt: string; updatedAt: string }>>
+  interviewDocsList: () => Promise<Array<{ id: string; name: string; fileType: 'md' | 'txt' | 'pdf' | 'docx'; markdown: string; contextKind?: InterviewContextDocumentKind; contextDescription?: string; sizeBytes: number; createdAt: string; updatedAt: string }>>
+  interviewDocsSelectFiles: () => Promise<{ success: boolean; cancelled: boolean; files: Array<{ path: string; name: string; size: number; ext: string }>; error?: string }>
+  interviewDocsBatchUpload: (items: Array<{ filePath: string; contextKind?: InterviewContextDocumentKind; contextDescription?: string }>) => Promise<{ success: boolean; documents?: any[]; error?: string }>
   interviewDocsUpload: () => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>
-  interviewDocsUpdateMetadata: (id: string, metadata: { contextKind: 'resume' | 'project' | 'other'; contextDescription?: string }) => Promise<{ success: boolean; document?: any; error?: string }>
+  interviewDocsUpdateMetadata: (id: string, metadata: { contextKind: InterviewContextDocumentKind; contextDescription?: string }) => Promise<{ success: boolean; document?: any; error?: string }>
   interviewDocsDelete: (id: string) => Promise<{ success: boolean; error?: string }>
   // Interview Workspace & Multi-Round APIs
   interviewWorkspaceList: () => Promise<{ success: boolean; workspaces?: InterviewWorkspace[]; error?: string }>
@@ -353,7 +364,7 @@ export interface ElectronAPI {
     usage: Record<string, Array<{ workspaceId: string; workspaceTitle: string }>>;
     error?: string;
   }>
-  interviewDocsUploadFromPath: (filePath: string) => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>
+  interviewDocsUploadFromPath: (filePath: string, metadata?: { contextKind?: InterviewContextDocumentKind; contextDescription?: string }) => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>
   getPathForFile?: (file: File) => string
 
   // Backward Compatibility Workspace APIs

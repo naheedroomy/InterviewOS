@@ -330,14 +330,16 @@ interface ElectronAPI {
     name: string;
     fileType: 'md' | 'txt' | 'pdf' | 'docx';
     markdown: string;
-    contextKind?: 'resume' | 'project' | 'other';
+    contextKind?: 'resume' | 'job_description' | 'cover_letter' | 'prep_kit' | 'project' | 'notes' | 'other';
     contextDescription?: string;
     sizeBytes: number;
     createdAt: string;
     updatedAt: string;
   }>>;
+  interviewDocsSelectFiles: () => Promise<{ success: boolean; cancelled: boolean; files: Array<{ path: string; name: string; size: number; ext: string }>; error?: string }>;
+  interviewDocsBatchUpload: (items: Array<{ filePath: string; contextKind?: string; contextDescription?: string }>) => Promise<{ success: boolean; documents?: any[]; error?: string }>;
   interviewDocsUpload: () => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>;
-  interviewDocsUpdateMetadata: (id: string, metadata: { contextKind: 'resume' | 'project' | 'other'; contextDescription?: string }) => Promise<{ success: boolean; document?: any; error?: string }>;
+  interviewDocsUpdateMetadata: (id: string, metadata: { contextKind: string; contextDescription?: string }) => Promise<{ success: boolean; document?: any; error?: string }>;
   interviewDocsDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
   // Interview Workspace & Multi-Round APIs
   interviewWorkspaceList: () => Promise<{ success: boolean; workspaces?: any[]; error?: string }>;
@@ -369,7 +371,7 @@ interface ElectronAPI {
     usage: Record<string, Array<{ workspaceId: string; workspaceTitle: string }>>;
     error?: string;
   }>;
-  interviewDocsUploadFromPath: (filePath: string) => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>;
+  interviewDocsUploadFromPath: (filePath: string, metadata?: { contextKind?: string; contextDescription?: string }) => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>;
   getPathForFile: (file: File) => string;
 
   // Backward Compatibility Workspace APIs
@@ -1457,8 +1459,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Meeting Lifecycle
   interviewDocsList: () => ipcRenderer.invoke('interview-docs:list'),
+  interviewDocsSelectFiles: () => ipcRenderer.invoke('interview-docs:select-files'),
+  interviewDocsBatchUpload: (items: Array<{ filePath: string; contextKind?: string; contextDescription?: string }>) =>
+    ipcRenderer.invoke('interview-docs:batch-upload', items),
   interviewDocsUpload: () => ipcRenderer.invoke('interview-docs:upload'),
-  interviewDocsUpdateMetadata: (id: string, metadata: { contextKind: 'resume' | 'project' | 'other'; contextDescription?: string }) => ipcRenderer.invoke('interview-docs:update-metadata', id, metadata),
+  interviewDocsUpdateMetadata: (id: string, metadata: { contextKind: string; contextDescription?: string }) => ipcRenderer.invoke('interview-docs:update-metadata', id, metadata),
   interviewDocsDelete: (id: string) => ipcRenderer.invoke('interview-docs:delete', id),
   // Interview Workspace & Multi-Round APIs
   interviewWorkspaceList: () =>
@@ -1506,7 +1511,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     aiPersonaOverride?: string;
   }) => ipcRenderer.invoke('interview-workspace:sync-llm-context', payload),
   knowledgeBankGetDocumentUsage: () => ipcRenderer.invoke('knowledge-bank:get-document-usage'),
-  interviewDocsUploadFromPath: (filePath: string) => ipcRenderer.invoke('interview-docs:upload-from-path', filePath),
+  interviewDocsUploadFromPath: (filePath: string, metadata?: { contextKind?: string; contextDescription?: string }) =>
+    ipcRenderer.invoke('interview-docs:upload-from-path', filePath, metadata),
   getPathForFile: (file: File) => {
     try {
       return webUtils.getPathForFile(file);

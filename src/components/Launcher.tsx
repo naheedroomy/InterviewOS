@@ -22,7 +22,9 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import type { InterviewWorkspace, InterviewRound } from '../types/electron';
+import type { InterviewWorkspace, InterviewRound, InterviewContextDocumentKind } from '../types/electron';
+import { UploadStagingModal } from './UploadStagingModal';
+import { StagedUploadFile, detectContextKindFromName, DOCUMENT_KIND_OPTIONS } from '../utils/documentUploadUtils';
 
 interface Meeting {
     id: string;
@@ -145,7 +147,7 @@ const providerLabels: Record<string, string> = {
     gemini: 'Gemini',
     custom: 'Custom',
     'codex-cli': 'Codex CLI',
-    natively: 'AnswerCue API',
+    natively: 'InterviewOS API',
     groq: 'Groq',
     openai: 'OpenAI',
     claude: 'Claude',
@@ -159,7 +161,7 @@ const sttProviderLabels: Record<string, string> = {
 
 const inferProviderLabel = (provider: string | undefined, model: string | undefined) => {
     const modelId = (model || '').toLowerCase();
-    if (modelId === 'natively') return 'AnswerCue API';
+    if (modelId === 'natively') return 'InterviewOS API';
     if (modelId === 'chat-latest' || modelId.includes('gpt') || modelId.includes('openai')) return 'OpenAI';
     if (modelId.includes('claude')) return 'Claude';
     if (modelId.includes('deepseek')) return 'DeepSeek';
@@ -600,12 +602,15 @@ interface ConversationMessage {
 }
 
 type ConversationState = 'idle' | 'waiting' | 'streaming' | 'error';
-type InterviewContextDocumentKind = 'resume' | 'project' | 'other';
 
 const documentKindLabels: Record<InterviewContextDocumentKind, string> = {
-    resume: 'Resume',
-    project: 'Project',
-    other: 'Other',
+    resume: 'CV / Resume',
+    job_description: 'Target Role Spec (JD)',
+    cover_letter: 'Cover Letter',
+    prep_kit: 'Interview Prep Kit',
+    project: 'Project Portfolio',
+    notes: 'Cheat Sheet & Notes',
+    other: 'General Reference',
 };
 
 interface InterviewContextDocument {
@@ -1531,8 +1536,8 @@ const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                                 <ChevronDown size={14} className={`shrink-0 text-text-tertiary transition-transform ${isKindMenuOpen ? 'rotate-180' : ''}`} />
                             </button>
                             {isKindMenuOpen && (
-                                <div className={`absolute left-0 right-0 top-[calc(100%+6px)] z-[510] rounded-md border p-1 shadow-xl ${isLight ? 'bg-white border-border-muted' : 'bg-bg-primary border-white/10'}`}>
-                                    {(['resume', 'project', 'other'] as InterviewContextDocumentKind[]).map(kind => (
+                                <div className={`absolute left-0 right-0 top-[calc(100%+6px)] z-[510] rounded-md border p-1 shadow-xl max-h-60 overflow-y-auto custom-scrollbar ${isLight ? 'bg-white border-border-muted' : 'bg-bg-primary border-white/10'}`}>
+                                    {DOCUMENT_KIND_OPTIONS.map(({ kind, label }) => (
                                         <button
                                             key={kind}
                                             type="button"
@@ -1550,7 +1555,7 @@ const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                                                         : 'text-text-secondary hover:bg-white/8 hover:text-text-primary'
                                             }`}
                                         >
-                                            <span>{documentKindLabels[kind]}</span>
+                                            <span>{label}</span>
                                             {contextKind === kind && <Check size={12} strokeWidth={2.5} />}
                                         </button>
                                     ))}
@@ -1805,6 +1810,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     const [isDraggingOverChat, setIsDraggingOverChat] = useState(false);
     const [isChatUploadingDoc, setIsChatUploadingDoc] = useState(false);
     const [chatUploadError, setChatUploadError] = useState<string | null>(null);
+    const [chatStagedFiles, setChatStagedFiles] = useState<StagedUploadFile[]>([]);
+    const [isChatStagingModalOpen, setIsChatStagingModalOpen] = useState(false);
+    const [isChatBatchUploading, setIsChatBatchUploading] = useState(false);
+    const [chatBatchUploadError, setChatBatchUploadError] = useState<string | null>(null);
     const [docDetailsTargetId, setDocDetailsTargetId] = useState<string | null>(null);
     const [docDetailsMode, setDocDetailsMode] = useState<'upload' | 'select' | null>(null);
     const [docDetailsError, setDocDetailsError] = useState<string | null>(null);
@@ -3222,43 +3231,70 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         setIsDraggingOverChat(false);
     }, []);
 
-    const handleChatDrop = useCallback(async (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDraggingOverChat(false);
+    const handleChatUploadFromDialog = async () => {
         setChatUploadError(null);
-
-        const files = Array.from(e.dataTransfer.files);
-        if (!files.length) return;
-
-        setIsChatUploadingDoc(true);
+        setChatBatchUploadError(null);
         try {
-            const newDocIds: string[] = [];
-            for (const file of files) {
-                const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-                if (!['.pdf', '.docx', '.txt', '.md', '.markdown'].includes(ext)) {
-                    continue;
-                }
+            const result = await window.electronAPI?.interviewDocsSelectFiles?.();
+            if (result?.cancelled || !result?.files?.length) return;
+            const newStaged: StagedUploadFile[] = result.files.map((file, idx) => ({
+                id: `${Date.now()}-${idx}-${file.name}`,
+                filePath: file.path,
+                name: file.name,
+                sizeBytes: file.size,
+                fileType: file.ext,
+                contextKind: detectContextKindFromName(file.name),
+                contextDescription: '',
+            }));
+            setChatStagedFiles(prev => [...prev, ...newStaged]);
+            setIsChatStagingModalOpen(true);
+        } catch (err: any) {
+            console.error('[Launcher] File selection error:', err);
+            setChatUploadError(err?.message || 'Failed to select files.');
+        }
+    };
 
-                const filePath = window.electronAPI?.getPathForFile?.(file) || (file as any).path;
-                let result: any = null;
-                if (filePath && window.electronAPI?.interviewDocsUploadFromPath) {
-                    result = await window.electronAPI.interviewDocsUploadFromPath(filePath);
-                } else if (window.electronAPI?.interviewDocsUpload) {
-                    result = await window.electronAPI.interviewDocsUpload();
-                }
+    const handleChatAddMoreFiles = async () => {
+        try {
+            const result = await window.electronAPI?.interviewDocsSelectFiles?.();
+            if (result?.cancelled || !result?.files?.length) return;
+            const newStaged: StagedUploadFile[] = result.files.map((file, idx) => ({
+                id: `${Date.now()}-${idx}-${file.name}`,
+                filePath: file.path,
+                name: file.name,
+                sizeBytes: file.size,
+                fileType: file.ext,
+                contextKind: detectContextKindFromName(file.name),
+                contextDescription: '',
+            }));
+            setChatStagedFiles(prev => [...prev, ...newStaged]);
+        } catch (err: any) {
+            console.error('[Launcher] Add more files error:', err);
+            setChatBatchUploadError(err?.message || 'Failed to select additional files.');
+        }
+    };
 
-                if (result && !result.success) {
-                    setChatUploadError(result.error || 'Failed to upload document');
-                }
-
-                if (result?.success && result.document) {
-                    setInterviewDocs(prev => [result.document, ...prev.filter(d => d.id !== result.document.id)]);
-                    newDocIds.push(result.document.id);
-                }
+    const handleConfirmChatBatchUpload = async (filesToUpload: StagedUploadFile[]) => {
+        if (!filesToUpload.length) return;
+        setIsChatBatchUploading(true);
+        setChatBatchUploadError(null);
+        try {
+            const items = filesToUpload.map(f => ({
+                filePath: f.filePath,
+                contextKind: f.contextKind,
+                contextDescription: f.contextDescription.trim() || undefined,
+            }));
+            const res = await window.electronAPI?.interviewDocsBatchUpload?.(items);
+            if (!res?.success || !res.documents) {
+                setChatBatchUploadError(res?.error || 'Failed to upload documents.');
+                return;
             }
 
-            if (newDocIds.length > 0 && selectedWorkspace) {
+            const uploadedDocs = res.documents;
+            setInterviewDocs(prev => [...uploadedDocs, ...prev.filter(d => !uploadedDocs.some((ud: any) => ud.id === d.id))]);
+
+            if (selectedWorkspace) {
+                const newDocIds = uploadedDocs.map((d: any) => d.id);
                 const nextDocIds = Array.from(new Set([...selectedDocIds, ...newDocIds]));
                 setSelectedDocIds(nextDocIds);
                 setWorkspaceContextDocIds(nextDocIds);
@@ -3272,13 +3308,62 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                 setWorkspaces(prev => prev.map(w => w.id === workspaceStateId ? { ...w, documentIds: nextDocIds } : w));
                 void persistWorkspaceState({ selectedDocumentIds: nextDocIds });
             }
+
+            setIsChatStagingModalOpen(false);
+            setChatStagedFiles([]);
         } catch (err: any) {
-            console.error('[Launcher] Chat drop upload failed:', err);
-            setChatUploadError(err?.message || 'Failed to upload and attach document.');
+            console.error('[Launcher] Batch upload error:', err);
+            setChatBatchUploadError(err?.message || 'Failed to upload documents.');
         } finally {
-            setIsChatUploadingDoc(false);
+            setIsChatBatchUploading(false);
         }
-    }, [selectedWorkspace, selectedDocIds, workspaceStateId, persistWorkspaceState]);
+    };
+
+    const handleChatDrop = useCallback(async (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDraggingOverChat(false);
+        setChatUploadError(null);
+        setChatBatchUploadError(null);
+
+        const files = Array.from(e.dataTransfer.files);
+        if (!files.length) return;
+
+        const newStaged: StagedUploadFile[] = [];
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const ext = file.name.substring(file.name.lastIndexOf('.')).replace('.', '').toLowerCase();
+            if (!['pdf', 'docx', 'txt', 'md', 'markdown'].includes(ext)) {
+                continue;
+            }
+
+            const filePath = window.electronAPI?.getPathForFile?.(file) || (file as any).path;
+            if (filePath) {
+                newStaged.push({
+                    id: `${Date.now()}-${i}-${file.name}`,
+                    filePath,
+                    name: file.name,
+                    sizeBytes: file.size,
+                    fileType: ext === 'markdown' ? 'md' : ext,
+                    contextKind: detectContextKindFromName(file.name),
+                    contextDescription: '',
+                });
+            }
+        }
+
+        if (newStaged.length > 0) {
+            setChatStagedFiles(prev => [...prev, ...newStaged]);
+            setIsChatStagingModalOpen(true);
+        } else {
+            setChatUploadError('Unsupported format. Please drop .pdf, .docx, .txt, or .md files.');
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isChatStagingModalOpen && chatStagedFiles.length === 0) {
+            setIsChatStagingModalOpen(false);
+        }
+    }, [isChatStagingModalOpen, chatStagedFiles.length]);
 
     const handleNewInterview = async () => {
         try {
@@ -4213,7 +4298,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         {
             key: 'accessibility',
             label: 'Accessibility (optional)',
-            detail: 'Only needed for stealth typing without focusing AnswerCue.',
+            detail: 'Only needed for stealth typing without focusing InterviewOS.',
             status: readiness.accessibilityPermission,
             icon: ShieldCheck,
             actionLabel: readiness.accessibilityPermission === 'granted' ? 'Granted' : 'Open Settings',
@@ -4496,7 +4581,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                     </div>
                                                     <h1 className="text-[28px] leading-tight font-semibold text-text-primary">Download local transcription</h1>
                                                     <p className="mt-3 text-[15px] leading-relaxed text-text-secondary">
-                                                        AnswerCue transcribes interviews on this computer. Download Distil Large v3 once and it stays cached across app updates.
+                                                        InterviewOS transcribes interviews on this computer. Download Distil Large v3 once and it stays cached across app updates.
                                                     </p>
                                                 </div>
                                                 <p className="text-[12px] leading-relaxed text-text-tertiary">
@@ -4529,7 +4614,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                                             style={{ width: `${Math.max(2, Math.min(100, localSttModel.progress))}%` }}
                                                                         />
                                                                     </div>
-                                                                    <p className="mt-2 text-[11px] text-text-tertiary">Keep AnswerCue open until the download finishes.</p>
+                                                                    <p className="mt-2 text-[11px] text-text-tertiary">Keep InterviewOS open until the download finishes.</p>
                                                                 </div>
                                                             )}
 
@@ -5304,6 +5389,21 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                     <Plus size={11} strokeWidth={2.4} />
                                                     <span>Attach from Knowledge Bank</span>
                                                 </button>
+
+                                                {/* Upload Files button */}
+                                                <button
+                                                    type="button"
+                                                    onClick={handleChatUploadFromDialog}
+                                                    className={`inline-flex items-center gap-1 h-6 px-2 rounded-md text-[11px] font-medium shrink-0 border border-dashed transition-colors ${
+                                                        isLight
+                                                            ? 'border-border-subtle bg-slate-50/70 hover:bg-white text-text-secondary hover:border-accent-primary hover:text-accent-primary'
+                                                            : 'border-border-subtle bg-bg-secondary/40 hover:bg-bg-secondary text-text-secondary hover:border-accent-primary hover:text-accent-primary'
+                                                    }`}
+                                                    title="Upload new documents to this interview"
+                                                >
+                                                    <UploadCloud size={11} strokeWidth={2.4} />
+                                                    <span>Upload Files</span>
+                                                </button>
                                             </div>
                                         )}
                                     </div>
@@ -5559,6 +5659,28 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                 error={docDetailsError}
                 onClose={cancelDocDetails}
                 onSave={saveDocDetails}
+            />
+
+            {/* Chat Document Staging Upload Modal */}
+            <UploadStagingModal
+                isOpen={isChatStagingModalOpen}
+                isLight={isLight}
+                stagedFiles={chatStagedFiles}
+                isUploading={isChatBatchUploading}
+                uploadError={chatBatchUploadError}
+                onClose={() => {
+                    setIsChatStagingModalOpen(false);
+                    setChatStagedFiles([]);
+                    setChatBatchUploadError(null);
+                }}
+                onConfirmUpload={handleConfirmChatBatchUpload}
+                onUpdateFile={(id, updates) => {
+                    setChatStagedFiles(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
+                }}
+                onRemoveFile={(id) => {
+                    setChatStagedFiles(prev => prev.filter(f => f.id !== id));
+                }}
+                onAddMoreFiles={handleChatAddMoreFiles}
             />
 
             {selectedWorkspace && (

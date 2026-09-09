@@ -3182,10 +3182,44 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('interview-docs:select-files', async () => {
+    try {
+      const result: any = await dialog.showOpenDialog({
+        properties: ['openFile', 'multiSelections'],
+        filters: [
+          { name: 'Interview Documents', extensions: ['md', 'markdown', 'txt', 'pdf', 'docx'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      });
+
+      if (result.canceled || !result.filePaths.length) {
+        return { success: true, cancelled: true, files: [] };
+      }
+
+      const files = result.filePaths.map((fp: string) => {
+        let size = 0;
+        try {
+          size = fs.statSync(fp).size;
+        } catch { /* ignore */ }
+        return {
+          path: fp,
+          name: path.basename(fp),
+          size,
+          ext: path.extname(fp).replace('.', '').toLowerCase(),
+        };
+      });
+
+      return { success: true, cancelled: false, files };
+    } catch (error: any) {
+      console.error('[IPC] interview-docs:select-files error:', error?.message ?? error);
+      return { success: false, cancelled: false, files: [], error: error?.message || 'Failed to open file picker.' };
+    }
+  });
+
   safeHandle('interview-docs:upload', async () => {
     try {
       const result: any = await dialog.showOpenDialog({
-        properties: ['openFile'],
+        properties: ['openFile', 'multiSelections'],
         filters: [
           { name: 'Interview Documents', extensions: ['md', 'markdown', 'txt', 'pdf', 'docx'] },
           { name: 'All Files', extensions: ['*'] },
@@ -3207,16 +3241,29 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('interview-docs:upload-from-path', async (_, filePath: string) => {
+  safeHandle('interview-docs:upload-from-path', async (_, filePath: string, metadata?: { contextKind?: any; contextDescription?: string }) => {
     try {
       if (!filePath || typeof filePath !== 'string') {
         return { success: false, error: 'Invalid file path' };
       }
-      const document = await InterviewContextDocsManager.getInstance().addDocumentFromFile(filePath);
+      const document = await InterviewContextDocsManager.getInstance().addDocumentFromFile(filePath, metadata);
       return { success: true, document };
     } catch (error: any) {
       console.error('[IPC] interview-docs:upload-from-path error:', error?.message ?? error);
       return { success: false, error: error?.message || 'Could not read document.' };
+    }
+  });
+
+  safeHandle('interview-docs:batch-upload', async (_, items: Array<{ filePath: string; contextKind?: any; contextDescription?: string }>) => {
+    try {
+      if (!Array.isArray(items) || items.length === 0) {
+        return { success: false, error: 'No files provided for batch upload.' };
+      }
+      const documents = await InterviewContextDocsManager.getInstance().addDocumentsFromFiles(items);
+      return { success: true, documents };
+    } catch (error: any) {
+      console.error('[IPC] interview-docs:batch-upload error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Batch upload failed.' };
     }
   });
 
