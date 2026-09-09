@@ -6,6 +6,7 @@ import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
 import HelpAssistant from './help/HelpAssistant';
 import { KnowledgeBankView } from './KnowledgeBankView';
+import { RolePersonaOverrideModal } from './RolePersonaOverrideModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
 import { useShortcuts } from '../hooks/useShortcuts';
@@ -1772,6 +1773,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [workspaces, setWorkspaces] = useState<InterviewWorkspace[]>([]);
     const [selectedWorkspace, setSelectedWorkspace] = useState<InterviewWorkspace | null>(null);
+    const [isRolePersonaModalOpen, setIsRolePersonaModalOpen] = useState(false);
     const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<string | null>(null);
     const [workspaceRenameDraft, setWorkspaceRenameDraft] = useState('');
     const [isSavingWorkspaceRename, setIsSavingWorkspaceRename] = useState(false);
@@ -1870,6 +1872,15 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         setSelectedWorkspace(workspace);
         setWorkspaceStateId(workspace.id);
         safeWriteWorkspacePointer(workspace.id);
+
+        if (window.electronAPI?.interviewWorkspaceSyncLlmContext) {
+            window.electronAPI.interviewWorkspaceSyncLlmContext({
+                workspaceId: workspace.id,
+                hasCustomOverrides: workspace.hasCustomOverrides,
+                candidateBackgroundOverride: workspace.candidateBackgroundOverride,
+                aiPersonaOverride: workspace.aiPersonaOverride,
+            }).catch((err) => console.error('[Launcher] Failed to sync LLM context on workspace select:', err));
+        }
 
         const docIds = Array.isArray(workspace.documentIds) ? workspace.documentIds : [];
         setSelectedDocIds(docIds);
@@ -5049,6 +5060,31 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                                 <Pencil size={12} />
                                                             </button>
                                                         )}
+                                                        {selectedWorkspace && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setIsRolePersonaModalOpen(true)}
+                                                                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all duration-150 shrink-0 border select-none cursor-pointer ${
+                                                                    selectedWorkspace.hasCustomOverrides
+                                                                        ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25 hover:border-amber-500/60 shadow-2xs'
+                                                                        : isLight
+                                                                        ? 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:bg-zinc-200/80 hover:text-zinc-900'
+                                                                        : 'bg-zinc-800/70 border-white/[0.07] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                                                                }`}
+                                                                title={
+                                                                    selectedWorkspace.hasCustomOverrides
+                                                                        ? 'Custom persona active for this interview (Click to tune)'
+                                                                        : 'Tune candidate background and AI persona for this interview'
+                                                                }
+                                                            >
+                                                                <span className="text-[11px] leading-none">⚡</span>
+                                                                <span>
+                                                                    {selectedWorkspace.hasCustomOverrides
+                                                                        ? 'Custom Persona Active'
+                                                                        : 'Role & Persona'}
+                                                                </span>
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 )}
                                                 {workspaceRenameError && selectedWorkspace && renamingWorkspaceId === selectedWorkspace.id && renameOrigin === 'header' ? (
@@ -5524,6 +5560,27 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                 onClose={cancelDocDetails}
                 onSave={saveDocDetails}
             />
+
+            {selectedWorkspace && (
+                <RolePersonaOverrideModal
+                    isOpen={isRolePersonaModalOpen}
+                    onClose={() => setIsRolePersonaModalOpen(false)}
+                    workspace={selectedWorkspace}
+                    onSave={(updatedWs) => {
+                        setSelectedWorkspace(updatedWs);
+                        selectedWorkspaceRef.current = updatedWs;
+                        setWorkspaces((prev) => prev.map((w) => (w.id === updatedWs.id ? updatedWs : w)));
+                        if (window.electronAPI?.interviewWorkspaceSyncLlmContext) {
+                            window.electronAPI.interviewWorkspaceSyncLlmContext({
+                                workspaceId: updatedWs.id,
+                                hasCustomOverrides: updatedWs.hasCustomOverrides,
+                                candidateBackgroundOverride: updatedWs.candidateBackgroundOverride,
+                                aiPersonaOverride: updatedWs.aiPersonaOverride,
+                            }).catch((err) => console.error('[Launcher] Failed to sync LLM context after saving overrides:', err));
+                        }
+                    }}
+                />
+            )}
 
             <HelpAssistant />
 

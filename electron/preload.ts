@@ -358,6 +358,12 @@ interface ElectronAPI {
     candidateBackgroundOverride?: string;
     aiPersonaOverride?: string;
   }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+  interviewWorkspaceSyncLlmContext: (payload: {
+    workspaceId?: string;
+    hasCustomOverrides?: boolean;
+    candidateBackgroundOverride?: string;
+    aiPersonaOverride?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
   knowledgeBankGetDocumentUsage: () => Promise<{
     success: boolean;
     usage: Record<string, Array<{ workspaceId: string; workspaceTitle: string }>>;
@@ -1493,6 +1499,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     candidateBackgroundOverride?: string;
     aiPersonaOverride?: string;
   }) => ipcRenderer.invoke('interview-workspace:update-persona-overrides', payload),
+  interviewWorkspaceSyncLlmContext: (payload: {
+    workspaceId?: string;
+    hasCustomOverrides?: boolean;
+    candidateBackgroundOverride?: string;
+    aiPersonaOverride?: string;
+  }) => ipcRenderer.invoke('interview-workspace:sync-llm-context', payload),
   knowledgeBankGetDocumentUsage: () => ipcRenderer.invoke('knowledge-bank:get-document-usage'),
   interviewDocsUploadFromPath: (filePath: string) => ipcRenderer.invoke('interview-docs:upload-from-path', filePath),
   getPathForFile: (file: File) => {

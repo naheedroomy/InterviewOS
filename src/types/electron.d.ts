@@ -342,6 +342,12 @@ export interface ElectronAPI {
     candidateBackgroundOverride?: string;
     aiPersonaOverride?: string;
   }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceSyncLlmContext: (payload: {
+    workspaceId?: string;
+    hasCustomOverrides?: boolean;
+    candidateBackgroundOverride?: string;
+    aiPersonaOverride?: string;
+  }) => Promise<{ success: boolean; error?: string }>
   knowledgeBankGetDocumentUsage: () => Promise<{
     success: boolean;
     usage: Record<string, Array<{ workspaceId: string; workspaceTitle: string }>>;

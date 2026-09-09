@@ -3377,6 +3377,45 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   );
 
+  safeHandle(
+    'interview-workspace:sync-llm-context',
+    async (
+      _,
+      payload: {
+        workspaceId?: string;
+        hasCustomOverrides?: boolean;
+        candidateBackgroundOverride?: string;
+        aiPersonaOverride?: string;
+      }
+    ) => {
+      try {
+        const llmHelper = appState.processingHelper?.getLLMHelper?.();
+        const orchestrator = appState.getKnowledgeOrchestrator?.() || llmHelper?.getKnowledgeOrchestrator?.();
+
+        if (payload?.hasCustomOverrides) {
+          const notes = payload.candidateBackgroundOverride || '';
+          const persona = payload.aiPersonaOverride || '';
+
+          if (llmHelper?.setCustomNotes) llmHelper.setCustomNotes(notes);
+          if (llmHelper?.setPersonaPrompt) llmHelper.setPersonaPrompt(persona);
+          if (orchestrator?.setCustomNotes) orchestrator.setCustomNotes(notes);
+        } else {
+          const globalNotes = DatabaseManager.getInstance().getCustomNotes() || '';
+          const globalPersona = DatabaseManager.getInstance().getPersona() || '';
+
+          if (llmHelper?.setCustomNotes) llmHelper.setCustomNotes(globalNotes);
+          if (llmHelper?.setPersonaPrompt) llmHelper.setPersonaPrompt(globalPersona);
+          if (orchestrator?.setCustomNotes) orchestrator.setCustomNotes(globalNotes);
+        }
+
+        return { success: true };
+      } catch (err: any) {
+        console.error('[IPC] interview-workspace:sync-llm-context error:', err?.message ?? err);
+        return { success: false, error: err?.message || 'Failed to sync LLM context' };
+      }
+    }
+  );
+
   safeHandle('knowledge-bank:get-document-usage', async () => {
     try {
       const manager = InterviewWorkspaceStateManager.getInstance();
