@@ -187,5 +187,32 @@ test('InterviewWorkspaceStateManager preserves updatedAt on store reads and reje
   assert.equal(afterFinish.rounds[0].meetingId, 'mtg-valid-1');
 });
 
+test('persists and updates persona and candidate background overrides', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-overrides-'));
+  const statePath = path.join(tmpDir, 'workspaces.json');
+  InterviewWorkspaceStateManager.__setTestStatePath(statePath);
+  const manager = InterviewWorkspaceStateManager.getInstance();
+
+  const ws = await manager.createWorkspace({ title: 'Stripe — Staff Infra' });
+  assert.strictEqual(ws.hasCustomOverrides, false);
+
+  const updated = await manager.updatePersonaOverrides(ws.id, {
+    hasCustomOverrides: true,
+    candidateBackgroundOverride: '10 years distributed systems, Go and Raft.',
+    aiPersonaOverride: 'Staff Engineer: focus on system bottlenecks first.'
+  });
+
+  assert.strictEqual(updated.hasCustomOverrides, true);
+  assert.strictEqual(updated.candidateBackgroundOverride, '10 years distributed systems, Go and Raft.');
+  assert.strictEqual(updated.aiPersonaOverride, 'Staff Engineer: focus on system bottlenecks first.');
+
+  // Verify reload from disk
+  const reloaded = await manager.getWorkspaceById(ws.id);
+  assert.strictEqual(reloaded.hasCustomOverrides, true);
+  assert.strictEqual(reloaded.candidateBackgroundOverride, '10 years distributed systems, Go and Raft.');
+  assert.strictEqual(reloaded.aiPersonaOverride, 'Staff Engineer: focus on system bottlenecks first.');
+});
+
+
 
 

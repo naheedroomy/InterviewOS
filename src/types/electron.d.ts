@@ -70,6 +70,9 @@ export interface InterviewWorkspace {
   documentIds: string[];
   rounds: InterviewRound[];
   activeRoundId: string;
+  hasCustomOverrides?: boolean;
+  candidateBackgroundOverride?: string;
+  aiPersonaOverride?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -333,6 +336,12 @@ export interface ElectronAPI {
   interviewWorkspaceUpdateDocuments: (payload: { workspaceId: string; documentIds: string[] }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
   interviewWorkspaceStartMeeting: (payload: { workspaceId: string; roundId: string }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; meetingId?: string; error?: string }>
   interviewWorkspaceFinishMeeting: (payload: { workspaceId: string; roundId: string; meetingId: string }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceUpdatePersonaOverrides: (payload: {
+    workspaceId: string;
+    hasCustomOverrides?: boolean;
+    candidateBackgroundOverride?: string;
+    aiPersonaOverride?: string;
+  }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
 
   // Backward Compatibility Workspace APIs
   interviewWorkspaceGetByMeeting: (meetingId: string) => Promise<any | null>

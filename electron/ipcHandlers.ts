@@ -3342,6 +3342,28 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle(
+    'interview-workspace:update-persona-overrides',
+    async (_, payload: {
+      workspaceId: string;
+      hasCustomOverrides?: boolean;
+      candidateBackgroundOverride?: string;
+      aiPersonaOverride?: string;
+    }) => {
+      try {
+        if (!payload?.workspaceId) {
+          return { success: false, error: 'Missing workspaceId' };
+        }
+        const manager = InterviewWorkspaceStateManager.getInstance();
+        const ws = await manager.updatePersonaOverrides(payload.workspaceId, payload);
+        return { success: true, workspace: ws };
+      } catch (err: any) {
+        console.error('[IPC] interview-workspace:update-persona-overrides error:', err?.message ?? err);
+        return { success: false, error: err?.message || 'Failed to update persona overrides' };
+      }
+    }
+  );
+
   // ─── Backward Compatibility Workspace Handlers ───────────────────────────
 
   safeHandle('interview-workspace:get-by-meeting', async (_, meetingId: string) => {

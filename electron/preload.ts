@@ -352,6 +352,12 @@ interface ElectronAPI {
   interviewWorkspaceUpdateDocuments: (payload: { workspaceId: string; documentIds: string[] }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
   interviewWorkspaceStartMeeting: (payload: { workspaceId: string; roundId: string }) => Promise<{ success: boolean; workspace?: any; meetingId?: string; error?: string }>;
   interviewWorkspaceFinishMeeting: (payload: { workspaceId: string; roundId: string; meetingId: string }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+  interviewWorkspaceUpdatePersonaOverrides: (payload: {
+    workspaceId: string;
+    hasCustomOverrides?: boolean;
+    candidateBackgroundOverride?: string;
+    aiPersonaOverride?: string;
+  }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
 
   // Backward Compatibility Workspace APIs
   interviewWorkspaceGetByMeeting: (meetingId: string) => Promise<any | null>;
@@ -1474,6 +1480,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('interview-workspace:start-meeting', payload),
   interviewWorkspaceFinishMeeting: (payload: { workspaceId: string; roundId: string; meetingId: string }) =>
     ipcRenderer.invoke('interview-workspace:finish-meeting', payload),
+  interviewWorkspaceUpdatePersonaOverrides: (payload: {
+    workspaceId: string;
+    hasCustomOverrides?: boolean;
+    candidateBackgroundOverride?: string;
+    aiPersonaOverride?: string;
+  }) => ipcRenderer.invoke('interview-workspace:update-persona-overrides', payload),
 
   // Backward Compatibility Workspace APIs
   interviewWorkspaceGetByMeeting: (meetingId: string) => ipcRenderer.invoke('interview-workspace:get-by-meeting', meetingId),

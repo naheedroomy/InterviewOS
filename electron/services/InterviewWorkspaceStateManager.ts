@@ -48,6 +48,9 @@ export interface InterviewWorkspace {
   documentIds: string[];
   rounds: InterviewRound[];
   activeRoundId: string;
+  hasCustomOverrides?: boolean;
+  candidateBackgroundOverride?: string;
+  aiPersonaOverride?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -157,6 +160,13 @@ function normalizeWorkspace(raw: any, existing?: InterviewWorkspace): InterviewW
     documentIds,
     rounds,
     activeRoundId,
+    hasCustomOverrides: Boolean(raw?.hasCustomOverrides ?? existing?.hasCustomOverrides),
+    candidateBackgroundOverride: typeof (raw?.candidateBackgroundOverride ?? existing?.candidateBackgroundOverride) === 'string'
+      ? (raw?.candidateBackgroundOverride ?? existing?.candidateBackgroundOverride)
+      : '',
+    aiPersonaOverride: typeof (raw?.aiPersonaOverride ?? existing?.aiPersonaOverride) === 'string'
+      ? (raw?.aiPersonaOverride ?? existing?.aiPersonaOverride)
+      : '',
     createdAt: existing?.createdAt || normalizeString(raw?.createdAt) || now,
     updatedAt: normalizeString(raw?.updatedAt || existing?.updatedAt).trim() || now,
   };
@@ -233,6 +243,9 @@ export class InterviewWorkspaceStateManager {
       documentIds,
       rounds: [initialRound],
       activeRoundId: roundId,
+      hasCustomOverrides: false,
+      candidateBackgroundOverride: '',
+      aiPersonaOverride: '',
       createdAt: now,
       updatedAt: now,
     };
@@ -248,6 +261,13 @@ export class InterviewWorkspaceStateManager {
     const workspaceId = normalizeString(id).trim();
     if (!workspaceId) return null;
     return this.readStore().workspaces.find(workspace => workspace.id === workspaceId) || null;
+  }
+
+  /**
+   * Retrieves a workspace by ID (alias for getWorkspace).
+   */
+  public getWorkspaceById(id: string): InterviewWorkspace | null {
+    return this.getWorkspace(id);
   }
 
   /**
@@ -485,6 +505,39 @@ export class InterviewWorkspaceStateManager {
     };
 
     return this.tryReplaceInStore(store, updated);
+  }
+
+  /**
+   * Updates persona and candidate background overrides for a workspace.
+   */
+  public async updatePersonaOverrides(
+    workspaceId: string,
+    overrides: {
+      hasCustomOverrides?: boolean;
+      candidateBackgroundOverride?: string;
+      aiPersonaOverride?: string;
+    }
+  ): Promise<InterviewWorkspace> {
+    const wsId = normalizeString(workspaceId).trim();
+    if (!wsId) {
+      throw new Error('Missing workspaceId');
+    }
+    const store = this.readStore();
+    const existing = store.workspaces.find((w) => w.id === wsId);
+    if (!existing) {
+      throw new Error(`Workspace ${workspaceId} not found`);
+    }
+    if (overrides.hasCustomOverrides !== undefined) {
+      existing.hasCustomOverrides = Boolean(overrides.hasCustomOverrides);
+    }
+    if (overrides.candidateBackgroundOverride !== undefined) {
+      existing.candidateBackgroundOverride = String(overrides.candidateBackgroundOverride);
+    }
+    if (overrides.aiPersonaOverride !== undefined) {
+      existing.aiPersonaOverride = String(overrides.aiPersonaOverride);
+    }
+    existing.updatedAt = new Date().toISOString();
+    return this.tryReplaceInStore(store, existing);
   }
 
   // ─── Backward Compatibility Adapters ──────────────────────────────────────
