@@ -1970,13 +1970,13 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         }
     }, [resetWorkspaceStreamBuffer, selectMeeting]);
 
-    const fetchWorkspaces = useCallback(async () => {
+    const fetchWorkspaces = useCallback(async (createFallbackIfEmpty: boolean = false) => {
         if (!window.electronAPI?.interviewWorkspaceList) return;
         try {
             const res = await window.electronAPI.interviewWorkspaceList();
             if (res?.success && Array.isArray(res.workspaces)) {
                 let list = res.workspaces;
-                if (list.length === 0 && window.electronAPI.interviewWorkspaceCreate) {
+                if (createFallbackIfEmpty && list.length === 0 && window.electronAPI.interviewWorkspaceCreate) {
                     const createRes = await window.electronAPI.interviewWorkspaceCreate({ title: 'New Interview' });
                     if (createRes?.success && createRes.workspace) {
                         list = [createRes.workspace];
@@ -2334,7 +2334,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
 
     useEffect(() => {
         if (typeof window.electronAPI?.interviewWorkspaceList === 'function') {
-            fetchWorkspaces();
+            fetchWorkspaces(true);
             return;
         }
 
@@ -2675,7 +2675,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         analytics.trackCommandExecuted('refresh_launcher');
         try {
             setShowNotification(true);
-            fetchWorkspaces();
+            fetchWorkspaces(false);
             fetchMeetings();
             fetchInterviewDocs();
             loadAudioDevices();
@@ -4689,8 +4689,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                     <motion.div
                                                         key={ws.id}
                                                         layoutId={`workspace-${ws.id}`}
-                                                        role="button"
-                                                        tabIndex={0}
+                                                        role={isRenaming ? undefined : 'button'}
+                                                        tabIndex={isRenaming ? undefined : 0}
                                                         aria-label={`Interview: ${ws.title}`}
                                                         className={`group relative px-2.5 py-2 rounded-md transition-colors ${
                                                             isRenaming ? 'cursor-default' : 'cursor-pointer'
@@ -5033,8 +5033,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                     return (
                                                         <div
                                                             key={round.id}
-                                                            role="button"
-                                                            tabIndex={0}
+                                                            role={isRenaming ? undefined : 'button'}
+                                                            tabIndex={isRenaming ? undefined : 0}
                                                             onClick={() => {
                                                                 if (!isRenaming) {
                                                                     void handleSwitchRound(round.id);

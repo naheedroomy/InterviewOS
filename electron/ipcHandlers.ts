@@ -1152,7 +1152,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, error: 'invalid_value' };
     }
     SettingsManager.getInstance().set('speculativeInferenceEnabled', enabled);
-    (appState as any).intelligenceManager?.setSpeculativeInferenceEnabled(enabled);
+    appState.getIntelligenceManager()?.setSpeculativeInferenceEnabled(enabled);
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
         win.webContents.send('speculative-inference-enabled-changed', enabled);
