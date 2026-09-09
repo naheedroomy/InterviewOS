@@ -121,7 +121,7 @@ Before creating a new public release, inspect existing GitHub releases for stale
 - **Unsigned macOS builds** may require a manual install step after download:
 
   ```bash
-  xattr -cr /Applications/AnswerCue.app
+  xattr -cr /Applications/InterviewOS.app
   ```
 
 - **Signed macOS builds** can use the standard Electron updater flow; unsigned builds may require the manual step above.
