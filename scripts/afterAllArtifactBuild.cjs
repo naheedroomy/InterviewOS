@@ -38,7 +38,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 
-const VOLNAME = 'AnswerCue';
+const VOLNAME = 'InterviewOS';
 const BACKGROUND = path.resolve(__dirname, '..', 'assets', 'dmg-background.png');
 const VOLICON = path.resolve(__dirname, '..', 'assets', 'answercue', 'answercue.icns');
 

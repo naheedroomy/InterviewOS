@@ -18,11 +18,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const APP_NAME = 'AnswerCue';
+const APP_NAME = 'InterviewOS';
 const PERMISSIONS = {
-  NSScreenCaptureUsageDescription: 'AnswerCue needs Screen Recording permission to capture system audio for interview transcription.',
-  NSAudioCaptureUsageDescription: 'AnswerCue needs system audio access to transcribe interview audio.',
-  NSMicrophoneUsageDescription: 'AnswerCue needs microphone access to transcribe your voice during interviews.',
+  NSScreenCaptureUsageDescription: 'InterviewOS needs Screen Recording permission to capture system audio for interview transcription.',
+  NSAudioCaptureUsageDescription: 'InterviewOS needs system audio access to transcribe interview audio.',
+  NSMicrophoneUsageDescription: 'InterviewOS needs microphone access to transcribe your voice during interviews.',
 };
 
 const plistPath = path.join(

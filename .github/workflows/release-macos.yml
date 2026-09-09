@@ -191,8 +191,8 @@ jobs:
         if: env.MACOS_SIGNING_AVAILABLE == 'true'
         run: |
           set -euo pipefail
-          APPS=$(find release -maxdepth 2 -name 'AnswerCue.app' -path '*mac*')
-          if [ -z "$APPS" ]; then echo "No AnswerCue.app found in release/"; exit 1; fi
+          APPS=$(find release -maxdepth 2 \( -name 'InterviewOS.app' -o -name 'AnswerCue.app' \) -path '*mac*')
+          if [ -z "$APPS" ]; then echo "No app bundle found in release/"; exit 1; fi
           for APP in $APPS; do
             echo "::group::Verifying app: $APP"
             codesign -dv --verbose=4 "$APP" 2>&1 | sed -n '1,20p'
@@ -216,8 +216,8 @@ jobs:
         if: env.MACOS_SIGNING_AVAILABLE != 'true'
         run: |
           set -euo pipefail
-          APPS=$(find release -maxdepth 2 -name 'AnswerCue.app' -path '*mac*')
-          if [ -z "$APPS" ]; then echo "No AnswerCue.app found in release/"; exit 1; fi
+          APPS=$(find release -maxdepth 2 \( -name 'InterviewOS.app' -o -name 'AnswerCue.app' \) -path '*mac*')
+          if [ -z "$APPS" ]; then echo "No app bundle found in release/"; exit 1; fi
           shopt -s nullglob
           DMGS=(release/*.dmg)
           ZIPS=(release/*.zip)
@@ -229,7 +229,7 @@ jobs:
         uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
-          name: answercue-macos
+          name: interviewos-macos
           path: |
             release/*.dmg
             release/*.blockmap
