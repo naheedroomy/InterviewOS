@@ -1950,9 +1950,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
 
         if (activeRound?.meetingId && window.electronAPI?.getMeetingDetails) {
             const targetWorkspaceId = workspace.id;
+            const targetRoundId = activeRound.id;
             window.electronAPI.getMeetingDetails(activeRound.meetingId)
                 .then(fullMeeting => {
-                    if (selectedWorkspaceRef.current?.id !== targetWorkspaceId) return;
+                    if (selectedWorkspaceRef.current?.id !== targetWorkspaceId || selectedWorkspaceRef.current?.activeRoundId !== targetRoundId) return;
                     if (fullMeeting) {
                         selectMeeting(fullMeeting);
                     } else {
@@ -1960,7 +1961,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                     }
                 })
                 .catch(() => {
-                    if (selectedWorkspaceRef.current?.id === targetWorkspaceId) {
+                    if (selectedWorkspaceRef.current?.id === targetWorkspaceId && selectedWorkspaceRef.current?.activeRoundId === targetRoundId) {
                         selectMeeting(null);
                     }
                 });
@@ -2192,11 +2193,15 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                             const fullMeeting = await window.electronAPI?.getMeetingDetails?.(completedMeetingId);
                             const meetingToOpen = fullMeeting || completedMeeting;
                             selectMeeting(meetingToOpen);
-                            await hydrateWorkspaceForMeeting(meetingToOpen.id);
+                            if (!targetWsId) {
+                                await hydrateWorkspaceForMeeting(meetingToOpen.id);
+                            }
                         } catch (error) {
                             console.error("[Launcher] Failed to open latest finished interview:", error);
                             selectMeeting(completedMeeting);
-                            await hydrateWorkspaceForMeeting(completedMeeting.id);
+                            if (!targetWsId) {
+                                await hydrateWorkspaceForMeeting(completedMeeting.id);
+                            }
                         }
                         return;
                     }
@@ -5022,12 +5027,14 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                 {selectedWorkspace.rounds.map((round) => {
                                                     const isActive = round.id === (selectedWorkspace.activeRoundId || selectedWorkspace.rounds[0]?.id);
                                                     const isCompleted = round.status === 'completed' || Boolean(round.meetingId);
-                                                    const isLive = round.status === 'active' || (isActive && isMeetingActive);
+                                                    const isLive = isMeetingActive && (round.status === 'active' || isActive);
                                                     const isRenaming = renamingRoundId === round.id;
 
                                                     return (
                                                         <div
                                                             key={round.id}
+                                                            role="button"
+                                                            tabIndex={0}
                                                             onClick={() => {
                                                                 if (!isRenaming) {
                                                                     void handleSwitchRound(round.id);
