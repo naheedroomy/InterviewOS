@@ -1836,9 +1836,11 @@ const formatTime = (dateStr: string) => {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
 };
 
-const formatRelativeTime = (dateStr: string) => {
+const formatRelativeTime = (dateStr?: string | null) => {
+    if (!dateStr) return 'Draft';
     try {
         const date = new Date(dateStr);
+        if (Number.isNaN(date.getTime())) return 'Draft';
         const now = new Date();
         const diffMs = now.getTime() - date.getTime();
         if (diffMs < 0) return 'Just now';
@@ -1940,6 +1942,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     }, []);
 
     const selectWorkspace = useCallback((workspace: InterviewWorkspace) => {
+        setRenamingWorkspaceId(null);
+        setWorkspaceRenameDraft('');
         selectedWorkspaceRef.current = workspace;
         setSelectedWorkspace(workspace);
         setWorkspaceStateId(workspace.id);
@@ -1961,15 +1965,21 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         resetWorkspaceStreamBuffer();
 
         if (activeRound?.meetingId && window.electronAPI?.getMeetingDetails) {
+            const targetWorkspaceId = workspace.id;
             window.electronAPI.getMeetingDetails(activeRound.meetingId)
                 .then(fullMeeting => {
+                    if (selectedWorkspaceRef.current?.id !== targetWorkspaceId) return;
                     if (fullMeeting) {
                         selectMeeting(fullMeeting);
                     } else {
                         selectMeeting(null);
                     }
                 })
-                .catch(() => selectMeeting(null));
+                .catch(() => {
+                    if (selectedWorkspaceRef.current?.id === targetWorkspaceId) {
+                        selectMeeting(null);
+                    }
+                });
         } else {
             selectMeeting(null);
         }
@@ -2705,7 +2715,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             });
         }
 
-        fetchWorkspaces();
         fetchMeetings();
         fetchInterviewDocs();
         refreshReadiness();
@@ -2988,27 +2997,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         window.electronAPI?.setUndetectable(!newState); // Note: setUndetectable takes the *undetectable* state, which is inverse of *detectable*
         analytics.trackModeSelected(newState ? 'launcher' : 'undetectable'); // If visible (detectable), mode is normal/launcher. If not detectable, mode is undetectable.
     };
-
-    // Group meetings
-    const groupedMeetings = meetings.reduce((acc, meeting) => {
-        const label = getGroupLabel(meeting.date);
-        if (!acc[label]) acc[label] = [];
-        acc[label].push(meeting);
-        return acc;
-    }, {} as Record<string, Meeting[]>);
-
-    // Group order (Today, Yesterday, then others sorted new to old is implicit via API return order ideally, 
-    // but JS object key order isn't guaranteed. We can use a Map or just known keys.)
-    // Simple sort for keys:
-    const sortedGroups = Object.keys(groupedMeetings).sort((a, b) => {
-        if (a === 'Today') return -1;
-        if (b === 'Today') return 1;
-        if (a === 'Yesterday') return -1;
-        if (b === 'Yesterday') return 1;
-        // Approximation for others: parse date
-        return new Date(b).getTime() - new Date(a).getTime();
-    });
-
 
     const [forwardMeeting, setForwardMeeting] = useState<Meeting | null>(null);
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
