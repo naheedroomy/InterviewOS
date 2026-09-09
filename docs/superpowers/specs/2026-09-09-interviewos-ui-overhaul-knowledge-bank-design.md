@@ -1,134 +1,188 @@
 # Design Specification: InterviewOS — Modern UI Overhaul, Knowledge Bank & Persona Overrides
 
 _Date: 2026-09-09_  
-_Status: Draft_  
-_Target Release: InterviewOS 2.10.0_
+_Status: Approved (Tuned to Impeccable Standards)_  
+_Target Release: InterviewOS 2.10.0_  
+_Surface Mode: Operate (Desktop AI Copilot)_
 
 ---
 
-## 1. Overview & Objectives
+## 1. Direction Contract (Impeccable Standard)
 
-AnswerCue is being fully rebranded and modernized into **InterviewOS**. This specification outlines the architectural overhaul across three primary pillars:
-1. **Rebrand & Aesthetic Overhaul:** Replace the legacy blue styling and generic controls with a high-contrast, premium **Executive Charcoal & Warm Amber** design system inspired by tools like Raycast and Linear.
-2. **Dedicated Knowledge Bank:** Introduce a top-rail navigation switch (`[ 💬 Interviews ]` and `[ 📚 Knowledge Bank ]`) providing a central, permanent document library for master resumes, system design cheat-sheets, brag sheets, and company research.
-3. **Streamlined Chat Context & Per-Interview Persona Overrides:** Remove the right-panel drawer from the interview view and replace it with an inline "Active Context" strip. Add the ability to override global candidate background instructions and AI persona tone on a per-interview basis.
+- **THESIS:** InterviewOS is an executive-grade cockpit for career-defining interviews. It rejects consumer chatbot tropes (decorative text gradients, bouncy spring animations, nested cards, and bulky drawer popups) in favor of high-density glanceability, split-second contextual recall, and zero-distraction dark mode ergonomics.
+- **OWN-WORLD:** Executive Charcoal & Warm Amber. Deep `#121214` canvas ground, `#16161a` panel surfaces, `#1c1c21` elevated cards, hairline 1px `rgba(255, 255, 255, 0.07)` dividers, and `#f59e0b` / `#fbbf24` warm amber focal points. Semantic status is strictly reserved: `#10b981` for completed rounds, `#ef4444` for active audio capture, and warm amber for active rounds.
+- **STORY:** A candidate navigates multi-round interview pipelines with zero cognitive friction. They curate master resumes and system design portfolios once in a centralized Knowledge Bank, immediately attach them via an inline Active Context strip in the interview chat, and tailor candidate background facts and AI persona styles per company—delivering sub-second, perfectly grounded live answers during high-stakes calls without breaking eye contact.
+- **FIRST VIEWPORT:**
+  - **Top Navigation Rail:** Unified branded header (`[⚡ InterviewOS]`, segmented switcher `[ 💬 Interviews ]` vs `[ 📚 Knowledge Bank ]`, and quick audio/readiness status indicator with Settings `⚙️`).
+  - **Interviews Screen:** Left sidebar of persistent company workspaces with inline double-click renaming; main workspace with Round Switcher pill bar (`[ ✓ Round 1 ] [ 🟢 Round 2 ] [ + Next Round ]`), inline Active Context strip (`📎 [📄 Resume.pdf ✕] [+ Attach]`), role & persona status indicator, prep timeline, and live execution cockpit.
+  - **Knowledge Bank Screen:** Master document vault with search, upload dropzone, document cards with file telemetry (formatted size, kind, parsed word count), and real-time interview usage badges (`Used in: Google (Round 1 & 2), Stripe`).
+- **FORM & SIGNATURE INTERACTION:** 
+  - Instant round switching with state isolation.
+  - Seamless drag-and-drop file attachment in chat that automatically indexes to the Knowledge Bank and links to the active interview.
+  - Non-modal header popover for per-interview candidate background and persona overrides with real-time inheritance preview.
+- **FINISH:** `unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance`.
 
 ---
 
-## 2. Design System: Executive Charcoal & Warm Amber
+## 2. Impeccable Craft Floor & Refusal Rules
+
+To eliminate the AI-generated aesthetic signatures detected in the incumbent codebase, the overhaul strictly adheres to the Impeccable craft floor:
+
+### Absolute Bans (Anti-Slop)
+1. **No Gradient Text:** All decorative text gradients (`background-clip: text`) in headers and badges are permanently eradicated. Text emphasis is achieved solely through font weight (`font-semibold` / `font-bold`), scale, and precise foreground contrast (`#fafafa` vs `#f59e0b`).
+2. **No Bouncy or Elastic Easing:** Replace all spring curves (`cubic-bezier(0.34, 1.56, 0.64, 1)`) with smooth, physics-grounded exponential deceleration curves (`cubic-bezier(0.16, 1, 0.3, 1)` / `ease-out-quint`) with 120ms–180ms durations.
+3. **No Decorative Grid-Line Backgrounds:** Decorative hairline linear-gradient background grids are stripped. Surfaces rely on clean semantic planes and structural dividers.
+4. **No Eyebrows or Kickers:** Decorative uppercase micro-labels above headings are eliminated; headers state their purpose directly.
+5. **No Nested Cards:** Strict prohibition of cards inside cards. Sections use flat semantic grouping separated by hairline borders (`1px solid rgba(255, 255, 255, 0.07)`).
+6. **No Zero-Blur Halos:** Decorative glowing neon borders and zero-offset halos are refused. Depth is rendered with calibrated soft shadows (`0 4px 20px -2px rgba(0, 0, 0, 0.5)`).
+7. **No Emoji as System Icons:** All icons are drawn Lucide SVG vectors with a consistent 1.5px stroke weight.
+
+### Positive Craft Standards
+- **Contrast Ratios:** Primary body and placeholder text strictly ≥4.5:1. Secondary text is tinted from the warm foreground (`#d4d4d8`, `#a1a1aa`), never a washed-out muddy gray.
+- **Typography & Measure:** Body copy measure is capped at 65–75ch for optimal reading during high-stress prep and live answers. Headings use `-0.02em` tracking and `text-wrap: balance`. Tabular figures (`font-variant-numeric: tabular-nums` / `tnum`) are enforced on all timers, file sizes, and counters.
+- **Browser Surfaces Theming:**
+  - **Text Selection:** `selection:bg-amber-500/25 selection:text-amber-100`
+  - **Caret Color:** `caret-amber-500`
+  - **Scrollbars:** Minimal 6px scrollbars (transparent track, `#27272a` thumb, `#3f3f46` hover thumb)
+  - **Focus Rings:** `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#121214]`
+
+---
+
+## 3. Design System Tokens: Executive Charcoal & Warm Amber
 
 ### Color Palette
-- **Backgrounds:**
-  - Base canvas: `#121214`
-  - Sidebar / Surfaces: `#16161a`
-  - Cards & Input Fields: `#1c1c21`
-  - Popovers & Modals: `#202026`
-- **Accents (Amber):**
-  - Primary Accent: `#f59e0b` (Amber 500)
-  - Hover Accent: `#fbbf24` (Amber 400)
-  - Subtle Tints: `rgba(245, 158, 11, 0.12)` (badges, active pill backgrounds)
-  - Amber Border: `rgba(245, 158, 11, 0.35)`
-- **Borders:**
-  - Subtle hairline borders: `rgba(255, 255, 255, 0.07)`
-  - Elevated borders: `rgba(255, 255, 255, 0.12)`
-- **Typography:**
-  - High-contrast text primary: `#fafafa`
-  - Secondary text: `#a1a1aa`
-  - Tertiary / Muted text: `#71717a`
-- **Semantic Accents:**
-  - Success / Completed round: `#10b981` (Emerald)
-  - Live Recording / Audio: `#ef4444` (Pulsing Red)
-  - Active Round selection: `#f59e0b` (Warm Amber)
+```css
+:root {
+  /* Canvas & Surfaces */
+  --bg-canvas: #121214;
+  --bg-surface: #16161a;
+  --bg-card: #1c1c21;
+  --bg-overlay: #202026;
+  --bg-subtle: rgba(255, 255, 255, 0.03);
 
-### Micro-Interactions
-- Crisp 1px borders with subtle inner highlights.
-- Clear keyboard focus rings (`focus-visible:ring-1 focus-visible:ring-amber-500/50`).
-- Seamless transitions with 120ms–150ms ease curves.
+  /* Dividers & Borders */
+  --border-hairline: rgba(255, 255, 255, 0.07);
+  --border-elevated: rgba(255, 255, 255, 0.12);
+  --border-active: rgba(245, 158, 11, 0.4);
+
+  /* Primary Accent: Warm Amber */
+  --amber-primary: #f59e0b;
+  --amber-hover: #fbbf24;
+  --amber-tint: rgba(245, 158, 11, 0.12);
+  --amber-tint-hover: rgba(245, 158, 11, 0.18);
+  --amber-border: rgba(245, 158, 11, 0.35);
+
+  /* Text & Foreground */
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --text-on-amber: #18181b;
+
+  /* Semantic Telemetry */
+  --status-success: #10b981;
+  --status-success-tint: rgba(16, 185, 129, 0.12);
+  --status-live: #ef4444;
+  --status-live-tint: rgba(239, 68, 68, 0.15);
+  --status-warning: #f59e0b;
+}
+```
+
+### Motion Physics
+- **Entrance & Exits:** `cubic-bezier(0.16, 1, 0.3, 1)` (ease-out-quint).
+- **Fast micro-interactions (hover, pill selection):** 120ms.
+- **Screen & modal transitions:** 180ms.
+- Zero bounce, overshoot, or spring oscillations.
 
 ---
 
-## 3. Primary Navigation Architecture
+## 4. Primary Navigation Architecture
 
-`Launcher.tsx` will feature a unified top navigation rail:
+`Launcher.tsx` implements a unified top navigation rail:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ [⚡ InterviewOS]         [ 💬 Interviews ]   [ 📚 Knowledge Bank ]        [⚙️] │
 ├──────────────────────────┬───────────────────────────────────────────────┤
-│ Left Sidebar (Interviews)│ Active Screen                                 │
+│ Left Sidebar             │ Active Screen                                 │
 │                          │                                               │
-│ • Google — Staff Backend │ (Displays either the Interview Chat Workspace │
-│ • Stripe — Infra Lead    │  or the full-page Knowledge Bank Hub)         │
-│ • Meta — E5 Product      │                                               │
+│ • Google — Staff Backend │ (Interviews Workspace: Prep & Live Cockpit)   │
+│ • Stripe — Infra Lead    │                       OR                      │
+│ • Meta — E5 Product      │ (Knowledge Bank Hub: Full-page Vault)         │
 └──────────────────────────┴───────────────────────────────────────────────┘
 ```
 
+### Navigation Behavior
 - **Top Rail Segmented Switcher:**
-  - `[ 💬 Interviews ]`: Shows the active interview chat workspace, round switcher, prep timeline, and live meeting controls.
-  - `[ 📚 Knowledge Bank ]`: Transitions the main area to the full-page document library.
-- **Brand Logo:** Updated from "AnswerCue" to "InterviewOS" with a distinct amber badge.
-- **Top Right Actions:** Quick access to audio/permissions readiness status and the global Settings modal (`⚙️`).
+  - `[ 💬 Interviews ]`: Renders the left company sidebar and the active interview workspace (round switcher, active context, timeline, live assistant).
+  - `[ 📚 Knowledge Bank ]`: Transitions the main area to the full-page master document vault with cross-interview indexing.
+- **Brand Title:** Prominently branded `InterviewOS` with a warm amber⚡ lightning glyph.
+- **Utility Actions:** Audio permissions badge, mic readiness indicator, and Settings trigger (`⚙️`).
 
 ---
 
-## 4. Dedicated Knowledge Bank Subsystem
+## 5. Dedicated Knowledge Bank Subsystem
 
 ### Purpose
-Allows candidates to maintain master documents (master resume versions, system design cheat-sheets, behavioral story banks, and company profiles) in one permanent location without needing to re-upload them across different interviews.
+Solves the friction of managing interview assets. Candidates store master resumes, brag sheets, system design architectures, and company research notes in a persistent, accessible library without re-uploading documents across separate interviews.
 
 ### Component Architecture: `src/components/KnowledgeBankView.tsx`
-- **Header & Stats:**
-  - Total document count, total storage size, and quick search bar.
-  - Primary button: `＋ Upload to Knowledge Bank`.
+- **Header & Search:**
+  - Display document count, total storage consumption, and instant live filtering search bar.
+  - Primary Action: `＋ Upload Document` (triggering file selector or accepting drag-and-drop).
 - **Drag-and-Drop Dropzone:**
-  - Clean dashed dropzone accepting `.pdf`, `.docx`, `.txt`, `.md`.
-  - Automatically parses text, extracts metadata (word count, kind: Resume, Job Description, Technical Notes), and saves to `InterviewContextManager`.
-- **Document Cards & Grid:**
-  - Document icon (styled according to file type).
-  - Title, formatted byte size, upload date.
-  - **Usage Badge:** Shows which interviews are actively referencing the file (e.g. `Used in: Google (Round 1 & 2), Stripe`).
-  - **Document Actions Menu (`•••`):**
-    - View/Preview parsed text content.
-    - Delete document (with confirmation dialog warning if linked to active interviews).
+  - Clean dashed border with subtle amber hover feedback.
+  - Supported formats: `.pdf`, `.docx`, `.txt`, `.md`.
+  - Automatic extraction of metadata: byte size, word count, document classification (Resume, Job Description, Technical Notes, General).
+- **Document Cards Grid:**
+  - File type icon with clean stroke styling.
+  - Document title with inline rename support.
+  - Document telemetry: formatted file size (`1.4 MB`), word count (`2,410 words`), last updated timestamp (`tnum`).
+  - **Cross-Interview Usage Badges:** Displays tags showing where the document is attached (e.g. `Used in: Google (Round 1 & 2), Stripe`).
+  - **Context Menu Actions (`•••`):**
+    - Quick preview of parsed text.
+    - Attach to active interview.
+    - Delete document (with safe dependency check warning if linked to active workspaces).
+- **Empty State:**
+  - Designed empty state with clear guidance: *"Your knowledge bank is empty. Add your master resume, system design notes, or job descriptions to ground your AI answers in verified truth."*
 
 ---
 
-## 5. Interview Chat & "Active Context" Strip
+## 6. Interview Chat & "Active Context" Strip
 
-### Removal of Right Drawer
-The narrow, cumbersome right drawer in `Launcher.tsx` is completely removed. All master document management lives in the Knowledge Bank, while interview-specific attachments are kept minimal and lightweight directly inside the chat.
+### Removal of Bulky Right Drawer
+The awkward right drawer in `Launcher.tsx` is completely eliminated, reclaiming horizontal screen space for the prep timeline and live transcript.
 
 ### Active Context Strip
-Located directly underneath the Round Switcher in the interview main header:
+Mounted directly beneath the Round Switcher pill bar in the interview view:
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ Round 1: Recruiter Screen (✓)   Round 2: System Design (🟢)   [ + Next Round ]│
+│ [✓ Round 1: Screen]     [🟢 Round 2: Architecture]          [ + Next Round ] │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ 📎 Active Context: [📄 Staff_Resume.pdf ✕] [📋 Google_JD.pdf ✕] [+ Attach]   │
+│ 📎 Active Context: [📄 Staff_Resume.pdf ✕] [📋 Job_Spec.pdf ✕]  [+ Attach]  │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
-- **Attached Document Pills:** Displays each document linked to `selectedWorkspace.documentIds`.
-- **Detach Control (`✕`):** Detaches the document from this interview workspace. Does **not** delete the document from the Knowledge Bank.
-- **`+ Attach from Knowledge Bank` Button:** Opens a modal dialog listing all documents from the Knowledge Bank with checkboxes to attach/detach in one click.
-- **Direct Drag-and-Drop into Chat:** Candidates can drag and drop a file directly into the interview chat area; it is automatically added to the Knowledge Bank *and* attached to the current interview.
+- **Attached Document Pills:** Displays documents linked to `selectedWorkspace.documentIds`.
+- **1-Click Detach (`✕`):** Detaches the file from the current interview workspace without deleting it from the Knowledge Bank.
+- **`+ Attach from Knowledge Bank`:** Opens a fast picker listing all documents in the Knowledge Bank with checkboxes to attach/detach in one click.
+- **Direct Drag-and-Drop:** Dropping any document into the interview workspace automatically saves it to the Knowledge Bank *and* attaches it to the current interview workspace.
 
 ---
 
-## 6. Per-Interview Custom Instructions & AI Persona Overrides
+## 7. Per-Interview Custom Instructions & AI Persona Overrides
 
 ### Conceptual Model
-1. **Candidate Background (Custom Instructions):** *Who you are* — facts, years of experience, specific accomplishments, and tech stack details.
-2. **AI Persona (Response Style):** *How the AI answers* — tone, brevity, bullet points, seniority level, and structure.
+1. **Candidate Background (Custom Instructions):** *Who you are* — verified career facts, years of experience, key system architectures, and tech stack details.
+2. **AI Persona (Response Style):** *How the AI answers* — seniority voice, conciseness level, bulleted vs prose structure, and trade-off orientation.
 
-### Global vs. Per-Interview Scope
-- **Global Defaults:** Configured once in Settings (`ProfileIntelligenceSettings.tsx` / `CustomInstructionsSettings.tsx`).
-- **Per-Interview Customization:**
-  - A `⚙️ Role & Persona` button in the interview chat header opens an override popover/modal.
-  - **Toggle:** `[✓] Override Global Background & Persona for this Interview`.
-  - **Inputs:**
-    - `Candidate Background for this Role` (e.g., emphasize Go, Kubernetes, and distributed systems for Google).
-    - `AI Persona & Style for this Role` (e.g., Staff Engineer tone, start with high-level architecture before trade-offs).
-  - When unchecked, the interview seamlessly inherits the global settings.
+### Global Defaults vs. Per-Interview Overrides
+- **Global Settings:** Configured globally in Settings (`ProfileIntelligenceSettings.tsx`).
+- **Per-Interview Override Modal/Popover:**
+  - Located in the interview header next to workspace title: `[ ⚡ Role & Persona ]`.
+  - Toggle: `[✓] Override Global Settings for this Interview`.
+  - When unchecked: Displays read-only preview of global settings with a badge: `Inheriting from Global Settings`.
+  - When checked: Provides editable text areas for:
+    1. `Role-Specific Candidate Background` (e.g., emphasize Go, Kubernetes, and high-throughput streaming for Stripe).
+    2. `Role-Specific AI Persona & Style` (e.g., Staff Engineer tone: lead with architectural trade-offs, state bottlenecks first, concise bullets).
 
 ### Data Model Extension (`InterviewWorkspaceStateManager.ts`)
 ```typescript
@@ -138,7 +192,7 @@ export interface InterviewWorkspace {
   rounds: InterviewRound[];
   activeRoundId?: string;
   documentIds: string[];
-  // New override properties:
+  // Persona & Background Overrides:
   hasCustomOverrides?: boolean;
   candidateBackgroundOverride?: string;
   aiPersonaOverride?: string;
@@ -148,11 +202,11 @@ export interface InterviewWorkspace {
 ```
 
 ### LLM Prompt Assembly Integration
-When assembling prompts in `WhatToAnswerLLM.ts` or `LLMHelper.ts`:
+In `WhatToAnswerLLM.ts` and `LLMHelper.ts`:
 ```typescript
-const backgroundContext = (workspace?.hasCustomOverrides && workspace?.candidateBackgroundOverride?.trim())
+const candidateContext = (workspace?.hasCustomOverrides && workspace?.candidateBackgroundOverride?.trim())
   ? workspace.candidateBackgroundOverride.trim()
-  : globalCustomNotes;
+  : globalCandidateNotes;
 
 const personaContext = (workspace?.hasCustomOverrides && workspace?.aiPersonaOverride?.trim())
   ? workspace.aiPersonaOverride.trim()
@@ -161,24 +215,21 @@ const personaContext = (workspace?.hasCustomOverrides && workspace?.aiPersonaOve
 
 ---
 
-## 7. IPC & Preload Interface Updates
+## 8. IPC & Preload Interface Additions
 
-### New / Updated IPC Channels
-1. `interview-workspace:update-persona-overrides`:
+1. **`interview-workspace:update-persona-overrides`:**
    - Payload: `{ workspaceId: string, hasCustomOverrides: boolean, candidateBackgroundOverride?: string, aiPersonaOverride?: string }`
-2. `knowledge-bank:get-document-usage`:
-   - Returns a mapping of `docId -> Array<{ workspaceId: string, workspaceTitle: string }>` so Knowledge Bank cards know which interviews reference each file.
+2. **`knowledge-bank:get-document-usage`:**
+   - Returns: `Record<string, Array<{ workspaceId: string, workspaceTitle: string }>>` mapping document IDs to all referencing interview workspaces.
+3. **`interview-workspace:attach-document` / `interview-workspace:detach-document`:**
+   - Streamlined granular document attachment IPC channels.
 
 ---
 
-## 8. Verification & Quality Gates
+## 9. Verification & Quality Gates
 
-1. **Unit Tests:**
-   - Expand `InterviewWorkspaceStateManager.test.mjs` to cover persona overrides, persistence across reloads, and workspace document detachment.
-2. **React Doctor:**
-   - Maintain 0 errors on `npm run doctor` across all components.
-3. **Accessibility:**
-   - Clean keyboard navigation with `Tab`, `Enter`, and `Esc` for modals and segmented switchers.
-4. **Electron & TypeScript Compilation:**
-   - `npx tsc --noEmit -p tsconfig.json` with 0 errors.
-   - `npm run build:electron` builds cleanly without warnings.
+1. **React Doctor:** Must pass with **0 errors** (`npm run doctor`).
+2. **TypeScript:** Strict type checking (`npx tsc --noEmit -p tsconfig.json`) with 0 errors.
+3. **Electron Build:** Clean compilation of electron main and preload (`npm run build:electron`).
+4. **Unit Tests:** Expand `InterviewWorkspaceStateManager.test.mjs` to test persona override persistence, document detachment, and atomic writes.
+5. **Impeccable Design Audit:** Run Impeccable detector (`impeccable detect --json src`) to confirm zero gradient text or bounce easing anti-patterns remain in production code.
