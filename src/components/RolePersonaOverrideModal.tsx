@@ -120,11 +120,8 @@ const RolePersonaOverrideContent: React.FC<RolePersonaOverrideModalProps> = ({
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, onClose, handleSave]);
 
-    if (!isOpen) return null;
-
     return (
-        <AnimatePresence>
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                 {/* Backdrop */}
                 <motion.div
                     initial={{ opacity: 0 }}
@@ -353,17 +350,19 @@ const RolePersonaOverrideContent: React.FC<RolePersonaOverrideModalProps> = ({
                     </div>
                 </motion.div>
             </div>
-        </AnimatePresence>
     );
 };
 
 export const RolePersonaOverrideModal: React.FC<RolePersonaOverrideModalProps> = (props) => {
-    if (!props.isOpen) return null;
     return (
-        <RolePersonaOverrideContent
-            key={`${props.workspace?.id || 'workspace'}-${props.workspace?.updatedAt || 'initial'}`}
-            {...props}
-        />
+        <AnimatePresence>
+            {props.isOpen && (
+                <RolePersonaOverrideContent
+                    key={`${props.workspace?.id || 'workspace'}-${props.workspace?.updatedAt || 'initial'}`}
+                    {...props}
+                />
+            )}
+        </AnimatePresence>
     );
 };
 

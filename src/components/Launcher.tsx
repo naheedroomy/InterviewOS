@@ -5315,7 +5315,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                     >
                                         {isDraggingOverChat && (
                                             <div className="absolute inset-2 z-50 rounded-xl border-2 border-dashed border-amber-500 bg-amber-500/10 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center pointer-events-none transition-all">
-                                                <UploadCloud size={36} className="text-amber-500 animate-bounce mb-2" />
+                                                <UploadCloud size={36} className="text-amber-500 animate-pulse mb-2" />
                                                 <p className="text-sm font-semibold text-text-primary">Drop files to add to Knowledge Bank & attach to this interview</p>
                                                 <p className="text-xs text-text-secondary mt-1">Supports PDF, DOCX, TXT, MD</p>
                                             </div>

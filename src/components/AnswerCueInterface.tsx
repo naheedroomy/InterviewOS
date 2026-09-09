@@ -3183,15 +3183,15 @@ Provide only the answer, nothing else.`;
               {!msg.text && (
                 <div className="flex gap-1.5 items-center py-0.5">
                   <div
-                    className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
+                    className="w-2 h-2 bg-slate-400 rounded-full animate-pulse"
                     style={{ animationDelay: '0ms' }}
                   />
                   <div
-                    className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
+                    className="w-2 h-2 bg-slate-400 rounded-full animate-pulse"
                     style={{ animationDelay: '150ms' }}
                   />
                   <div
-                    className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
+                    className="w-2 h-2 bg-slate-400 rounded-full animate-pulse"
                     style={{ animationDelay: '300ms' }}
                   />
                 </div>
@@ -4710,15 +4710,15 @@ Provide only the answer, nothing else.`;
                       )}
                       <div className="px-3 py-2 flex gap-1.5 items-center bg-emerald-500/10 border border-emerald-500/20 rounded-full">
                         <div
-                          className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
+                          className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"
                           style={{ animationDelay: '0ms' }}
                         />
                         <div
-                          className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
+                          className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"
                           style={{ animationDelay: '150ms' }}
                         />
                         <div
-                          className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
+                          className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"
                           style={{ animationDelay: '300ms' }}
                         />
                         <span className="text-[10px] text-emerald-400/70 ml-1">Listening...</span>
@@ -4727,7 +4727,7 @@ Provide only the answer, nothing else.`;
                   )}
 
                   {/*
-                   * Bouncing-dots "AI is thinking" indicator. Gated on
+                   * Pulsing-dots "AI is thinking" indicator. Gated on
                    * `!hasStreamingPlaceholder` so it never co-exists with a
                    * streaming system row — which MessageRow already renders as
                    * a visible empty bubble (subtleSurfaceClass + border +
@@ -4750,15 +4750,15 @@ Provide only the answer, nothing else.`;
                         style={appearance.subtleStyle}
                       >
                         <div
-                          className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
+                          className="w-2 h-2 bg-slate-400 rounded-full animate-pulse"
                           style={{ animationDelay: '0ms' }}
                         />
                         <div
-                          className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
+                          className="w-2 h-2 bg-slate-400 rounded-full animate-pulse"
                           style={{ animationDelay: '150ms' }}
                         />
                         <div
-                          className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
+                          className="w-2 h-2 bg-slate-400 rounded-full animate-pulse"
                           style={{ animationDelay: '300ms' }}
                         />
                       </div>
