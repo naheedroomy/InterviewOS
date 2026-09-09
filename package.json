@@ -11,6 +11,7 @@
     "build:electron:tsc": "tsc -p electron/tsconfig.json",
     "typecheck:electron": "tsc -p electron/tsconfig.json --noEmit",
     "verify:package-inputs": "node scripts/verify-package-inputs.js",
+    "icons:generate": "node scripts/generate-app-icons.mjs",
     "preview": "vite preview",
     "postinstall": "cross-env SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm rebuild sharp && electron-rebuild -f -w better-sqlite3,keytar && node scripts/download-models.js && node scripts/ensure-sqlite-vec.js && node scripts/patch-electron-plist.js",
     "electron:dev": "npm run build:electron && cross-env NODE_ENV=development electron .",
