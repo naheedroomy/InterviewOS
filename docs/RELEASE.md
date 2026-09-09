@@ -6,7 +6,7 @@ This is the canonical release checklist for AnswerCue. It covers build/package c
 
 ## Release channel
 
-This app ships through GitHub Releases from the `FarzamHejaziK/AnswerCue` release channel. The update metadata must point to this repository so installed apps never read update notes or installers from the upstream project.
+This app ships through GitHub Releases from the `naheedroomy/AnswerCue` release channel. The update metadata must point to this repository so installed apps never read update notes or installers from the upstream project.
 
 ## Platform prerequisites
 

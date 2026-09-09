@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.9.0] - 2026-09-09
+
+### Summary
+
+AnswerCue v2.9.0 redesigns the core interview experience from flat ephemeral meetings to first-class persistent Interview Chats with multi-round support, per-interview scoped document management, and targeted updater fixes.
+
+### What's New
+
+- **Persistent Interview Chats:** Interviews are now first-class persistent workspaces saved atomically to disk. Sessions created in the sidebar are preserved across app relaunches with title, rounds, context documents, and prep history intact.
+- **Sidebar Redesign:** Clean sidebar listing all interview chats with double-click or context menu (`•••`) inline renaming, deletion, round counts, and live status.
+- **Header Round Switcher:** Built a dedicated Round Pill Bar in the main header showing completed rounds (`✓`), active rounds (`🟢`), and a `+ Next Round` action with inline renaming.
+- **"Start Next Round" Flow:** Replaced the legacy "Prepare next run" action with an intuitive transition that appends a new round, preserves company context documents, and gives candidates a fresh prep chat and timeline for their next interview round.
+- **Dedicated Context Documents Panel:** Replaced the floating composer popover with a full right-hand drawer supporting drag-and-drop document upload, file kind badges (Resume, Job Description, Notes), instant detachment, and an "+ Reuse existing document" selection modal.
+
+### Improvements
+
+- **Updater Target Isolation:** Re-pointed updater publishing and release notes APIs from the upstream repository to `naheedroomy/AnswerCue`.
+- **Spurious Update Guard:** Added a strict version comparison check to the auto-updater listener in Electron `main.ts` so that older or equal release tags never trigger spurious "newer version available" notifications.
+- **Crash-Safe Persistence:** Domain state uses `.tmp` atomic file replacement on disk writes to eliminate corruption risks during unexpected shutdowns.
+
+### Technical
+
+- Bounded all round and workspace mutations outside React state updaters, keeping React Doctor at 0 errors.
+- Added comprehensive unit test suite in `electron/services/__tests__/InterviewWorkspaceStateManager.test.mjs` verifying workspace lifecycle and atomic persistence.
+
 ## [2.7.3] - 2026-06-15
 
 ### Summary
