@@ -132,7 +132,7 @@ const UpdateBanner: React.FC = () => {
                 const dmgSuffix = isArm ? 'arm64' : 'x64';
                 setInstructionsArch(dmgSuffix);
                 const version = updateInfo.version.replace('v', '');
-                const url = `https://github.com/naheedroomy/AnswerCue/releases/download/v${version}/AnswerCue-${version}-${dmgSuffix}.dmg`;
+                const url = `https://github.com/naheedroomy/InterviewOS/releases/download/v${version}/InterviewOS-${version}-${dmgSuffix}.dmg`;
                 window.electronAPI.openExternal(url);
                 setStatus('instructions');
             } catch (err) {

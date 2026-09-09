@@ -2,24 +2,21 @@
   <img src="assets/readme/answercue-banner.png" alt="AnswerCue Interview Assistant" width="100%">
 </p>
 
-# AnswerCue
+# InterviewOS
 
-**Open-source desktop interview assistant for prep, live transcription, real-time answer support, and post-interview follow-up.**
+**Open-source desktop interview operating system for prep, live transcription, real-time answer support, and post-interview follow-up.**
 
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-6D5DF6?style=flat-square)](https://github.com/FarzamHejaziK/AnswerCue/releases)
-[![Latest Release](https://img.shields.io/github/v/release/FarzamHejaziK/AnswerCue?style=flat-square&color=22C55E)](https://github.com/FarzamHejaziK/AnswerCue/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/FarzamHejaziK/AnswerCue/total?style=flat-square&color=success)](https://github.com/FarzamHejaziK/AnswerCue/releases)
-[![Build Windows](https://img.shields.io/github/actions/workflow/status/FarzamHejaziK/AnswerCue/build-windows.yml?branch=main&label=Windows%20build&style=flat-square)](https://github.com/FarzamHejaziK/AnswerCue/actions/workflows/build-windows.yml)
-[![Release macOS](https://img.shields.io/github/actions/workflow/status/FarzamHejaziK/AnswerCue/release-macos.yml?branch=main&label=macOS%20release&style=flat-square)](https://github.com/FarzamHejaziK/AnswerCue/actions/workflows/release-macos.yml)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-6D5DF6?style=flat-square)](https://github.com/naheedroomy/InterviewOS/releases)
+[![Latest Release](https://img.shields.io/github/v/release/naheedroomy/InterviewOS?style=flat-square&color=22C55E)](https://github.com/naheedroomy/InterviewOS/releases/latest)
 
-[Download Latest Release](https://github.com/FarzamHejaziK/AnswerCue/releases/latest) ·
-[Report an Issue](https://github.com/FarzamHejaziK/AnswerCue/issues) ·
-[View Source](https://github.com/FarzamHejaziK/AnswerCue)
+[Download Latest Release](https://github.com/naheedroomy/InterviewOS/releases/latest) ·
+[Report an Issue](https://github.com/naheedroomy/InterviewOS/issues) ·
+[View Source](https://github.com/naheedroomy/InterviewOS)
 
 Requires macOS 12+ on Apple Silicon or Intel, or Windows 10/11 on Intel/AMD 64-bit.
 
-AnswerCue is a desktop interview assistant for preparing context, transcribing live interviews, and continuing the conversation afterward with relevant history available as context, subject to retrieval and context limits.
+InterviewOS is a desktop interview workspace for preparing context, transcribing live interviews, and continuing the conversation afterward with relevant history available as context, subject to retrieval and context limits.
 
 It is designed around one flow:
 
@@ -113,17 +110,17 @@ npm test
 Main repository:
 
 ```bash
-https://github.com/FarzamHejaziK/AnswerCue
+https://github.com/naheedroomy/InterviewOS
 ```
 
 Clone:
 
 ```bash
-git clone https://github.com/FarzamHejaziK/AnswerCue.git
-cd AnswerCue
+git clone https://github.com/naheedroomy/InterviewOS.git
+cd InterviewOS
 ```
 
-This checkout tracks `origin` (`https://github.com/FarzamHejaziK/AnswerCue.git`); the original upstream project is configured separately as a fetch-only remote for future merge updates. Push AnswerCue work to `origin`, not `upstream`. Prefer merge over rebase on shared/public branches so public history is not rewritten.
+This checkout tracks `origin` (`https://github.com/naheedroomy/InterviewOS.git`). Push InterviewOS work to `origin`. Prefer merge over rebase on shared/public branches so public history is not rewritten.
 
 ## License
 

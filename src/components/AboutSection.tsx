@@ -16,7 +16,7 @@ import packageJson from '../../package.json';
 
 interface AboutSectionProps { }
 
-const REPO_URL = 'https://github.com/naheedroomy/AnswerCue';
+const REPO_URL = 'https://github.com/naheedroomy/InterviewOS';
 
 export const AboutSection: React.FC<AboutSectionProps> = () => {
     const handleOpenLink = (event: React.MouseEvent<HTMLAnchorElement>, url: string) => {
@@ -31,7 +31,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
     return (
         <div className="space-y-6 animated fadeIn pb-10">
             <div>
-                <h3 className="text-lg font-bold text-text-primary mb-1">About AnswerCue</h3>
+                <h3 className="text-lg font-bold text-text-primary mb-1">About InterviewOS</h3>
                 <p className="text-sm text-text-secondary">
                     A desktop interview workspace for preparation, live transcription, AI-guided answers, and post-interview follow-up.
                 </p>

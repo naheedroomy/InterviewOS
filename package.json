@@ -38,7 +38,7 @@
   },
   "build": {
     "generateUpdatesFilesForAllChannels": true,
-    "appId": "com.answercue.desktop",
+    "appId": "com.interviewos.desktop",
     "afterPack": "./scripts/ad-hoc-sign.js",
     "productName": "InterviewOS",
     "files": [
@@ -94,9 +94,9 @@
       "identity": null,
       "hardenedRuntime": false,
       "extendInfo": {
-        "NSScreenCaptureUsageDescription": "AnswerCue needs Screen Recording permission to capture system audio for interview transcription.",
-        "NSMicrophoneUsageDescription": "AnswerCue needs microphone access to transcribe your voice during interviews.",
-        "NSAudioCaptureUsageDescription": "AnswerCue needs system audio access to transcribe interview audio."
+        "NSScreenCaptureUsageDescription": "InterviewOS needs Screen Recording permission to capture system audio for interview transcription.",
+        "NSMicrophoneUsageDescription": "InterviewOS needs microphone access to transcribe your voice during interviews.",
+        "NSAudioCaptureUsageDescription": "InterviewOS needs system audio access to transcribe interview audio."
       }
     },
     "dmg": {
@@ -150,7 +150,7 @@
       {
         "provider": "github",
         "owner": "naheedroomy",
-        "repo": "AnswerCue",
+        "repo": "InterviewOS",
         "releaseType": "release"
       }
     ]
