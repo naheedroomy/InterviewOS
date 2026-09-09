@@ -3168,12 +3168,26 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Meeting Lifecycle Handlers
   // ==========================================
 
+  const broadcastInterviewDocsChanged = () => {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (win.isDestroyed()) return;
+      try {
+        win.webContents.send('interview-docs:changed');
+      } catch {
+        // Renderer may be tearing down
+      }
+    });
+  };
+
   safeHandle('interview-docs:list', async () => {
     return InterviewContextDocsManager.getInstance().listDocuments();
   });
 
   safeHandle('interview-docs:delete', async (_, id: string) => {
     const success = InterviewContextDocsManager.getInstance().deleteDocument(id);
+    if (success) {
+      broadcastInterviewDocsChanged();
+    }
     return { success };
   });
 
@@ -3183,6 +3197,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         contextKind: metadata?.contextKind,
         contextDescription: metadata?.contextDescription,
       });
+      if (document) {
+        broadcastInterviewDocsChanged();
+      }
       return document ? { success: true, document } : { success: false, error: 'Document not found.' };
     } catch (error: any) {
       return { success: false, error: error?.message || 'Could not update document details.' };
@@ -3238,6 +3255,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
 
       const document = await InterviewContextDocsManager.getInstance().addDocumentFromFile(result.filePaths[0]);
+      broadcastInterviewDocsChanged();
       return { success: true, document };
     } catch (error: any) {
       console.error('[IPC] interview-docs:upload error:', error?.message ?? error);
@@ -3254,6 +3272,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'Invalid file path' };
       }
       const document = await InterviewContextDocsManager.getInstance().addDocumentFromFile(filePath, metadata);
+      broadcastInterviewDocsChanged();
       return { success: true, document };
     } catch (error: any) {
       console.error('[IPC] interview-docs:upload-from-path error:', error?.message ?? error);
@@ -3267,6 +3286,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'No files provided for batch upload.' };
       }
       const documents = await InterviewContextDocsManager.getInstance().addDocumentsFromFiles(items);
+      broadcastInterviewDocsChanged();
       return { success: true, documents };
     } catch (error: any) {
       console.error('[IPC] interview-docs:batch-upload error:', error?.message ?? error);

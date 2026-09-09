@@ -370,6 +370,7 @@ export interface ElectronAPI {
     error?: string;
   }>
   interviewDocsUploadFromPath: (filePath: string, metadata?: { contextKind?: InterviewContextDocumentKind; contextDescription?: string }) => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>
+  onInterviewDocsChanged?: (callback: () => void) => () => void
   getPathForFile?: (file: File) => string
 
   // Backward Compatibility Workspace APIs

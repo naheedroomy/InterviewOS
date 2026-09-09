@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, RefreshCw, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight, ArrowUp, Brain, Mic, ShieldCheck, Paperclip, X, Speaker, Pencil, KeyRound, Monitor, HelpCircle, FileText, UploadCloud } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, RefreshCw, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight, ArrowUp, Brain, Mic, ShieldCheck, Paperclip, X, Speaker, Pencil, KeyRound, Monitor, HelpCircle, FileText, UploadCloud, Loader2 } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
 import TopSearchPill from './TopSearchPill';
@@ -1806,6 +1806,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
     const [activeMainView, setActiveMainView] = useState<'interviews' | 'knowledge-bank'>('interviews');
     const [isAttachModalOpen, setIsAttachModalOpen] = useState(false);
+    const [isAttachLoading, setIsAttachLoading] = useState(false);
     const [attachSearchQuery, setAttachSearchQuery] = useState('');
     const [attachSelectedDocIds, setAttachSelectedDocIds] = useState<string[]>([]);
     const [isDraggingOverChat, setIsDraggingOverChat] = useState(false);
@@ -1873,6 +1874,19 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         setSelectedMeeting(meeting);
     }, []);
 
+    const fetchInterviewDocs = useCallback(async () => {
+        try {
+            const docs = await window.electronAPI?.interviewDocsList?.();
+            const list = Array.isArray(docs) ? docs : [];
+            setInterviewDocs(list);
+            return list;
+        } catch (err) {
+            console.error("Failed to fetch interview documents:", err);
+            setInterviewDocs([]);
+            return [];
+        }
+    }, []);
+
     const selectWorkspace = useCallback((workspace: InterviewWorkspace) => {
         setRenamingWorkspaceId(null);
         setWorkspaceRenameDraft('');
@@ -1934,7 +1948,9 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         } else {
             selectMeeting(null);
         }
-    }, [resetWorkspaceStreamBuffer, selectMeeting]);
+
+        void fetchInterviewDocs();
+    }, [resetWorkspaceStreamBuffer, selectMeeting, fetchInterviewDocs]);
 
     const fetchWorkspaces = useCallback(async (createFallbackIfEmpty: boolean = false) => {
         if (!window.electronAPI?.interviewWorkspaceList) return;
@@ -2182,15 +2198,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                 })
                 .catch(err => console.error("Failed to fetch meetings:", err));
         }
-    };
-
-    const fetchInterviewDocs = () => {
-        window.electronAPI?.interviewDocsList?.()
-            .then((docs: InterviewContextDocument[]) => setInterviewDocs(Array.isArray(docs) ? docs : []))
-            .catch(err => {
-                console.error("Failed to fetch interview documents:", err);
-                setInterviewDocs([]);
-            });
     };
 
     const getWorkspaceDocumentIds = useCallback((
@@ -2712,6 +2719,14 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             });
         }
 
+        // Listen for document changes across all windows
+        let removeInterviewDocsListener: (() => void) | undefined;
+        if (window.electronAPI?.onInterviewDocsChanged) {
+            removeInterviewDocsListener = window.electronAPI.onInterviewDocsChanged(() => {
+                if (mounted) void fetchInterviewDocs();
+            });
+        }
+
         fetchMeetings();
         fetchInterviewDocs();
         refreshReadiness();
@@ -2885,6 +2900,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
 
         return () => {
             mounted = false;
+            if (removeInterviewDocsListener) removeInterviewDocsListener();
             if (removeMeetingsListener) removeMeetingsListener();
             if (removeUndetectableListener) removeUndetectableListener();
             if (removeMeetingStateListener) removeMeetingStateListener();
@@ -2897,6 +2913,23 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Mount-only: stable setup that must run exactly once
+
+    // Keep documents in sync whenever switching back to interviews view
+    useEffect(() => {
+        if (activeMainView === 'interviews') {
+            void fetchInterviewDocs();
+        }
+    }, [activeMainView, fetchInterviewDocs]);
+
+    // Ensure documents are fresh whenever attach modal opens
+    useEffect(() => {
+        if (isAttachModalOpen) {
+            setIsAttachLoading(true);
+            void fetchInterviewDocs().finally(() => {
+                setIsAttachLoading(false);
+            });
+        }
+    }, [isAttachModalOpen, fetchInterviewDocs]);
 
     useEffect(() => {
         if (!window.electronAPI?.onDeviceSelectionApplied) return;
@@ -3250,7 +3283,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             setSelectedWorkspace(prev => prev ? { ...prev, documentIds: nextIds } : null);
             void persistWorkspaceState({ selectedDocumentIds: nextIds });
         }
-    }, [workspaces, selectedWorkspace?.id, persistWorkspaceState]);
+        void fetchInterviewDocs();
+    }, [workspaces, selectedWorkspace?.id, persistWorkspaceState, fetchInterviewDocs]);
 
     const handleChatDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -4396,7 +4430,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                     <div className="flex items-center bg-black/10 dark:bg-black/30 p-0.5 rounded-lg border border-border-subtle text-[12px] font-medium ml-1">
                         <button
                             type="button"
-                            onClick={() => setActiveMainView('interviews')}
+                            onClick={() => {
+                                setActiveMainView('interviews');
+                                void fetchInterviewDocs();
+                            }}
                             className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-md transition-all duration-150 ${
                                 activeMainView === 'interviews'
                                     ? isLight
@@ -4810,6 +4847,9 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                             <KnowledgeBankView
                                 isLight={isLight}
                                 currentWorkspaceId={selectedWorkspace?.id}
+                                onDocumentsChange={() => {
+                                    void fetchInterviewDocs();
+                                }}
                                 onAttachToWorkspace={(docId, wsId) => {
                                     void handleAttachDocToWorkspace(docId, wsId);
                                 }}
@@ -5421,6 +5461,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                 <button
                                                     type="button"
                                                     onClick={() => {
+                                                        void fetchInterviewDocs();
                                                         setIsAttachModalOpen(true);
                                                         setAttachSearchQuery('');
                                                         setAttachSelectedDocIds([]);
@@ -5595,7 +5636,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
 
                         {/* Document List */}
                         <div className="mt-3 max-h-64 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
-                            {filteredAvailableDocs.length === 0 ? (
+                            {isAttachLoading ? (
+                                <div className="py-8 flex flex-col items-center justify-center gap-2 text-xs text-text-tertiary">
+                                    <Loader2 className="w-5 h-5 animate-spin text-amber-500" />
+                                    <span>Loading Knowledge Bank documents...</span>
+                                </div>
+                            ) : filteredAvailableDocs.length === 0 ? (
                                 <div className="py-8 text-center text-xs text-text-tertiary space-y-2">
                                     <p>
                                         {interviewDocs.length === 0
@@ -5604,16 +5650,30 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                             ? 'All Knowledge Bank documents are already attached to this interview.'
                                             : 'No matching documents found.'}
                                     </p>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setIsAttachModalOpen(false);
-                                            setActiveMainView('knowledge-bank');
-                                        }}
-                                        className="text-amber-500 hover:text-amber-400 underline text-xs font-medium"
-                                    >
-                                        Open Knowledge Bank
-                                    </button>
+                                    {interviewDocs.length === 0 ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setIsAttachModalOpen(false);
+                                                setActiveMainView('knowledge-bank');
+                                            }}
+                                            className="text-amber-500 hover:text-amber-400 underline text-xs font-medium"
+                                        >
+                                            Open Knowledge Bank
+                                        </button>
+                                    ) : unattachedDocs.length === 0 && selectedDocs.length > 0 ? (
+                                        <div className="pt-2 flex flex-col items-center gap-1.5">
+                                            <span className="text-[11px] text-text-tertiary">Currently attached ({selectedDocs.length}):</span>
+                                            <div className="flex flex-wrap justify-center gap-1 max-w-sm">
+                                                {selectedDocs.map(d => (
+                                                    <span key={d.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                                        <Check size={10} className="text-amber-400" />
+                                                        <span className="truncate max-w-[140px]">{d.name}</span>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ) : null}
                                 </div>
                             ) : (
                                 filteredAvailableDocs.map((doc) => {

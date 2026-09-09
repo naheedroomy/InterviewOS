@@ -341,6 +341,7 @@ interface ElectronAPI {
   interviewDocsUpload: () => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>;
   interviewDocsUpdateMetadata: (id: string, metadata: { contextKind: string; contextDescription?: string }) => Promise<{ success: boolean; document?: any; error?: string }>;
   interviewDocsDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
+  onInterviewDocsChanged: (callback: () => void) => () => void;
   // Interview Workspace & Multi-Round APIs
   interviewWorkspaceList: () => Promise<{ success: boolean; workspaces?: any[]; error?: string }>;
   interviewWorkspaceCreate: (payload?: { title?: string; initialDocIds?: string[] }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
@@ -1469,6 +1470,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   interviewDocsUpload: () => ipcRenderer.invoke('interview-docs:upload'),
   interviewDocsUpdateMetadata: (id: string, metadata: { contextKind: string; contextDescription?: string }) => ipcRenderer.invoke('interview-docs:update-metadata', id, metadata),
   interviewDocsDelete: (id: string) => ipcRenderer.invoke('interview-docs:delete', id),
+  onInterviewDocsChanged: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on('interview-docs:changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('interview-docs:changed', subscription);
+    };
+  },
   // Interview Workspace & Multi-Round APIs
   interviewWorkspaceList: () =>
     ipcRenderer.invoke('interview-workspace:list'),

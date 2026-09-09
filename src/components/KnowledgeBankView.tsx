@@ -45,6 +45,7 @@ export interface KnowledgeBankViewProps {
   onOpenWorkspace?: (workspaceId: string) => void;
   onNavigateToWorkspace?: (workspaceId: string) => void;
   onClose?: () => void;
+  onDocumentsChange?: () => void;
   currentWorkspaceId?: string;
 }
 
@@ -140,6 +141,7 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
   onOpenWorkspace,
   onNavigateToWorkspace,
   onClose,
+  onDocumentsChange,
   currentWorkspaceId,
 }) => {
   const handleOpenWorkspace = onNavigateToWorkspace || onOpenWorkspace;
@@ -218,6 +220,18 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
 
   useEffect(() => {
     void loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    if (window.electronAPI?.onInterviewDocsChanged) {
+      cleanup = window.electronAPI.onInterviewDocsChanged(() => {
+        void loadData();
+      });
+    }
+    return () => {
+      cleanup?.();
+    };
   }, [loadData]);
 
   // Keyboard escape listener for modals
@@ -369,6 +383,7 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
       }
 
       await loadData();
+      onDocumentsChange?.();
       setIsStagingModalOpen(false);
       setStagedUploadFiles([]);
     } catch (err: any) {
@@ -408,6 +423,7 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
         setDeleteConfirmDoc(null);
         setDeleteError(null);
         await loadData();
+        onDocumentsChange?.();
       } else {
         setDeleteError(res?.error || 'Failed to delete document.');
       }
