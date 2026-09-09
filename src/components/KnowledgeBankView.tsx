@@ -151,6 +151,7 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
     doc: KnowledgeDocument;
     linkedWorkspaces: WorkspaceUsageItem[];
   } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [copiedPreview, setCopiedPreview] = useState(false);
 
@@ -208,13 +209,21 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
       if (e.key === 'Escape') {
         if (previewDoc) setPreviewDoc(null);
         else if (attachDoc) setAttachDoc(null);
-        else if (deleteConfirmDoc) setDeleteConfirmDoc(null);
+        else if (deleteConfirmDoc) {
+          setDeleteConfirmDoc(null);
+          setDeleteError(null);
+        }
         else if (onClose) onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [previewDoc, attachDoc, deleteConfirmDoc, onClose]);
+
+  // Reset deleteError whenever deleteConfirmDoc modal is opened or closed
+  useEffect(() => {
+    setDeleteError(null);
+  }, [deleteConfirmDoc]);
 
   // Upload handler via native dialog
   const handleUploadFromDialog = async () => {
@@ -291,17 +300,19 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
   // Delete document handler
   const handleDeleteDocument = async (id: string) => {
     setIsDeleting(true);
+    setDeleteError(null);
     try {
       const res = await window.electronAPI?.interviewDocsDelete?.(id);
       if (res?.success) {
         setDeleteConfirmDoc(null);
+        setDeleteError(null);
         await loadData();
       } else {
-        setUploadError(res?.error || 'Failed to delete document.');
+        setDeleteError(res?.error || 'Failed to delete document.');
       }
     } catch (err: any) {
       console.error('[KnowledgeBankView] Delete failed:', err);
-      setUploadError(err?.message || 'Failed to delete document.');
+      setDeleteError(err?.message || 'Failed to delete document.');
     } finally {
       setIsDeleting(false);
     }
@@ -320,10 +331,14 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
 
     try {
       if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
-        await window.electronAPI.interviewWorkspaceUpdateDocuments({
+        const res = await window.electronAPI.interviewWorkspaceUpdateDocuments({
           workspaceId: wsId,
           documentIds: nextDocs,
         });
+        if (res && !res.success) {
+          console.error('[KnowledgeBankView] Failed to toggle attachment:', res.error);
+          return;
+        }
       }
 
       setWorkspaces(prev =>
@@ -816,12 +831,13 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
 
                     <button
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
+                        setDeleteError(null);
                         setDeleteConfirmDoc({
                           doc,
                           linkedWorkspaces,
-                        })
-                      }
+                        });
+                      }}
                       aria-label={`Delete ${doc.name}`}
                       className="p-1 text-zinc-500 hover:text-red-400 rounded hover:bg-red-500/10 transition-colors"
                     >
@@ -1088,10 +1104,23 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
               </div>
             </div>
 
+            {deleteError && (
+              <div
+                role="alert"
+                className="mt-4 p-2.5 rounded-md bg-red-500/10 border border-red-500/25 text-red-300 text-xs flex items-start gap-2"
+              >
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 text-red-400 mt-0.5" />
+                <span className="flex-1 leading-relaxed">{deleteError}</span>
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-2.5 mt-6 pt-3 border-t border-white/[0.07]">
               <button
                 type="button"
-                onClick={() => setDeleteConfirmDoc(null)}
+                onClick={() => {
+                  setDeleteConfirmDoc(null);
+                  setDeleteError(null);
+                }}
                 disabled={isDeleting}
                 className="px-3 py-1.5 rounded-md bg-white/[0.06] hover:bg-white/[0.1] text-zinc-300 text-xs font-medium transition-colors"
               >
