@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, RefreshCw, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight, ArrowUp, Brain, Mic, ShieldCheck, Paperclip, X, Speaker, Pencil, KeyRound, Monitor, HelpCircle, FileText, UploadCloud, Zap, FileCode } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, RefreshCw, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight, ArrowUp, Brain, Mic, ShieldCheck, Paperclip, X, Speaker, Pencil, KeyRound, Monitor, HelpCircle, FileText, UploadCloud } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
 import TopSearchPill from './TopSearchPill';
@@ -1600,81 +1600,7 @@ const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     );
 };
 
-interface LauncherAudioSelectProps {
-    label: string;
-    icon: React.ReactNode;
-    value: string;
-    options: LauncherAudioDevice[];
-    placeholder: string;
-    onChange: (value: string) => void;
-}
 
-const LauncherAudioSelect: React.FC<LauncherAudioSelectProps> = ({
-    label,
-    icon,
-    value,
-    options,
-    placeholder,
-    onChange,
-}) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
-    const selectedLabel = options.find(device => device.id === value)?.name || placeholder;
-
-    return (
-        <div className="bg-bg-card rounded-xl p-4 border border-border-subtle" ref={containerRef}>
-            <div className="flex items-center gap-2 mb-3">
-                <span className="text-text-secondary">{icon}</span>
-                <label className="text-xs font-medium text-text-primary uppercase tracking-wide">{label}</label>
-            </div>
-            <div className="relative">
-                <button
-                    type="button"
-                    onClick={() => setIsOpen(prev => !prev)}
-                    className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5 text-sm text-text-primary flex items-center justify-between hover:bg-bg-elevated transition-colors"
-                >
-                    <span className="truncate pr-4 text-left">{selectedLabel}</span>
-                    <ChevronDown size={14} className={`text-text-secondary transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {isOpen && (
-                    <div className="absolute top-full left-0 w-full mt-1 bg-bg-elevated border border-border-subtle rounded-lg shadow-xl z-[80] max-h-48 overflow-y-auto custom-scrollbar">
-                        <div className="p-1 space-y-0.5">
-                        {options.length > 0 ? (
-                            options.map(device => (
-                                <button
-                                    key={device.id}
-                                    type="button"
-                                    onClick={() => {
-                                        onChange(device.id);
-                                        setIsOpen(false);
-                                    }}
-                                    className={`w-full text-left px-3 py-2 text-sm rounded-md flex items-center justify-between group transition-colors ${value === device.id ? 'bg-bg-input hover:bg-bg-elevated text-text-primary' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
-                                >
-                                    <span className="truncate">{device.name || `Device ${device.id.slice(0, 5)}...`}</span>
-                                    {value === device.id && <Check size={14} className="text-accent-primary" />}
-                                </button>
-                            ))
-                        ) : (
-                            <div className="px-3 py-2 text-sm text-gray-500 italic">No devices found</div>
-                        )}
-                        </div>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
 
 const TranscriptTimeline: React.FC<TranscriptTimelineProps> = ({ meeting, isLight }) => {
     const items = buildTranscriptTimeline(meeting);
@@ -1870,8 +1796,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     const [isSavingProviderKeys, setIsSavingProviderKeys] = useState(false);
     const [interviewDocs, setInterviewDocs] = useState<InterviewContextDocument[]>([]);
     const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
-    const [isUploadingDoc, setIsUploadingDoc] = useState(false);
-    const [docError, setDocError] = useState<string | null>(null);
     const [activeMainView, setActiveMainView] = useState<'interviews' | 'knowledge-bank'>('interviews');
     const [isAttachModalOpen, setIsAttachModalOpen] = useState(false);
     const [attachSearchQuery, setAttachSearchQuery] = useState('');
@@ -3036,13 +2960,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         };
     }, [isShortcutPressed]);
 
-    const toggleDetectable = () => {
-        const newState = !isDetectable;
-        setIsDetectable(newState);
-        window.electronAPI?.setUndetectable(!newState); // Note: setUndetectable takes the *undetectable* state, which is inverse of *detectable*
-        analytics.trackModeSelected(newState ? 'launcher' : 'undetectable'); // If visible (detectable), mode is normal/launcher. If not detectable, mode is undetectable.
-    };
-
     const [forwardMeeting, setForwardMeeting] = useState<Meeting | null>(null);
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
     const [menuEntered, setMenuEntered] = useState(false);
@@ -3273,6 +3190,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         setWorkspaces(prev => prev.map(w => w.id === wsId ? { ...w, documentIds: nextIds } : w));
         if (selectedWorkspace?.id === wsId) {
             setSelectedDocIds(nextIds);
+            setWorkspaceContextDocIds(nextIds);
             setSelectedWorkspace(prev => prev ? { ...prev, documentIds: nextIds } : null);
             void persistWorkspaceState({ selectedDocumentIds: nextIds });
         }
@@ -3319,6 +3237,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                     result = await window.electronAPI.interviewDocsUpload();
                 }
 
+                if (result && !result.success) {
+                    setChatUploadError(result.error || 'Failed to upload document');
+                }
+
                 if (result?.success && result.document) {
                     setInterviewDocs(prev => [result.document, ...prev.filter(d => d.id !== result.document.id)]);
                     newDocIds.push(result.document.id);
@@ -3328,6 +3250,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             if (newDocIds.length > 0 && selectedWorkspace) {
                 const nextDocIds = Array.from(new Set([...selectedDocIds, ...newDocIds]));
                 setSelectedDocIds(nextDocIds);
+                setWorkspaceContextDocIds(nextDocIds);
                 if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
                     await window.electronAPI.interviewWorkspaceUpdateDocuments({
                         workspaceId: workspaceStateId,
@@ -3404,14 +3327,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         analytics.trackCommandExecuted('new_interview_ready_from_sidebar');
     };
 
-    const handleModelSelect = async (modelId: string) => {
-        setCurrentModel(modelId);
-        const result = await window.electronAPI?.setModel?.(modelId);
-        if (!result?.success) {
-            console.error('[Launcher] Failed to set model:', result?.error);
-        }
-        refreshReadiness();
-    };
 
     const handleProviderKeyDraftChange = (provider: ProviderKeyId, value: string) => {
         setProviderKeyDrafts(prev => ({ ...prev, [provider]: value }));
@@ -3700,69 +3615,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         window.dispatchEvent(new Event(AUDIO_DEVICES_CHANGED_EVENT));
         setDeviceFallbackNotice(null);
     };
-
-    const handleUploadInterviewDoc = async () => {
-        setDocError(null);
-        setIsUploadingDoc(true);
-        try {
-            const result = await window.electronAPI?.interviewDocsUpload?.();
-            if (result?.cancelled) return;
-            if (!result?.success || !result.document) {
-                setDocError(result?.error || 'Could not upload document.');
-                return;
-            }
-            setInterviewDocs(prev => [result.document, ...prev]);
-
-            const next = selectedDocIds.includes(result.document.id)
-                ? selectedDocIds
-                : [...selectedDocIds, result.document.id];
-            setSelectedDocIds(next);
-
-            if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
-                void window.electronAPI.interviewWorkspaceUpdateDocuments({
-                    workspaceId: workspaceStateId,
-                    documentIds: next,
-                });
-            }
-            persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
-                console.error('[Launcher] Failed to persist uploaded document:', error);
-            });
-            setSelectedWorkspace(prev => prev ? { ...prev, documentIds: next } : null);
-            setWorkspaces(prev => prev.map(w => w.id === workspaceStateId ? { ...w, documentIds: next } : w));
-
-            setDocDetailsTargetId(result.document.id);
-            setDocDetailsMode('upload');
-            setDocDetailsError(null);
-            analytics.trackCommandExecuted('interview_doc_uploaded');
-        } catch (error) {
-            console.error('[Launcher] document upload failed:', error);
-            setDocError('Could not upload document.');
-        } finally {
-            setIsUploadingDoc(false);
-        }
-    };
-
-    const handleAttachExistingDoc = (docId: string) => {
-        if (selectedDocIds.includes(docId)) return;
-        const next = [...selectedDocIds, docId];
-        setSelectedDocIds(next);
-
-        if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
-            void window.electronAPI.interviewWorkspaceUpdateDocuments({
-                workspaceId: workspaceStateId,
-                documentIds: next,
-            });
-        }
-        persistWorkspaceState({ selectedDocumentIds: next }).catch(error => {
-            console.error('[Launcher] Failed to persist attached document:', error);
-        });
-        setSelectedWorkspace(prev => prev ? { ...prev, documentIds: next } : null);
-        setWorkspaces(prev => prev.map(w => w.id === workspaceStateId ? { ...w, documentIds: next } : w));
-    };
-
     const handleRemoveInterviewDoc = (docId: string) => {
         const next = selectedDocIds.filter(id => id !== docId);
         setSelectedDocIds(next);
+        setWorkspaceContextDocIds(next);
 
         if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
             void window.electronAPI.interviewWorkspaceUpdateDocuments({
@@ -3807,6 +3663,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             ? selectedDocIds.filter(docId => docId !== id)
             : [...selectedDocIds, id];
         setSelectedDocIds(next);
+        setWorkspaceContextDocIds(next);
 
         if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
             void window.electronAPI.interviewWorkspaceUpdateDocuments({
@@ -5637,6 +5494,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                     onClick={async () => {
                                         const next = Array.from(new Set([...selectedDocIds, ...attachSelectedDocIds]));
                                         setSelectedDocIds(next);
+                                        setWorkspaceContextDocIds(next);
                                         if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
                                             await window.electronAPI.interviewWorkspaceUpdateDocuments({
                                                 workspaceId: workspaceStateId,
