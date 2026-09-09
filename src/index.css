@@ -23,31 +23,45 @@
   --font-system: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
   color-scheme: dark;
 
+  /* Executive Charcoal & Warm Amber Design System */
+  --bg-canvas: #121214;
+  --bg-surface: #16161a;
+  --bg-card: #1c1c21;
+  --bg-overlay: #202026;
+  --border-hairline: rgba(255, 255, 255, 0.07);
+  --border-elevated: rgba(255, 255, 255, 0.12);
+  --border-active: rgba(245, 158, 11, 0.4);
+  --amber-primary: #f59e0b;
+  --amber-hover: #fbbf24;
+  --amber-tint: rgba(245, 158, 11, 0.12);
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --status-success: #10b981;
+  --status-live: #ef4444;
+
   /* --- SEMANTIC TOKEN SYSTEM (DEFAULT: DARK) --- */
-  /* AnswerCue brand shell: deep navy surfaces with blue, violet, and pink cues. */
-  --brand-ink: #071426;
-  --brand-blue: #1769ff;
-  --brand-violet: #7c4dff;
-  --brand-pink: #e76bce;
+  /* Executive Charcoal & Warm Amber shell */
+  --brand-ink: #121214;
+  --brand-blue: #f59e0b;
+  --brand-violet: #d97706;
+  --brand-pink: #fbbf24;
 
-  --bg-primary: #090d18;
-  --bg-secondary: #101625;
-  --bg-sidebar: #070b14;
-  --bg-main: #0b1020;
-  --bg-card: #121a2b;
-  --bg-elevated: #172033;
-  --bg-input: #1a2438;
-  --bg-component: #172238;
-  --bg-toggle-switch: #26334f;
-  --bg-item-surface: #141d30;
-  --bg-item-active: rgba(124, 77, 255, 0.18);
+  --bg-primary: #121214;
+  --bg-secondary: #16161a;
+  --bg-sidebar: #121214;
+  --bg-main: #121214;
+  --bg-elevated: #202026;
+  --bg-input: #1c1c21;
+  --bg-component: #1c1c21;
+  --bg-toggle-switch: #27272a;
+  --bg-item-surface: #1c1c21;
+  --bg-item-active: rgba(245, 158, 11, 0.16);
 
-  --text-primary: #f7f9ff;
-  --text-secondary: #b7c2d8;
-  --text-tertiary: #7f8aa3;
+  --text-tertiary: #71717a;
 
-  --border-subtle: rgba(187, 202, 255, 0.10);
-  --border-muted: rgba(187, 202, 255, 0.16);
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-muted: rgba(255, 255, 255, 0.12);
 
   --accent-primary: #2f7cff;
   --accent-muted: rgba(124, 77, 255, 0.18);
@@ -373,7 +387,7 @@
     inset 0 0 0 1px rgba(255, 255, 255, 0.13),
     0 4px 12px rgba(0, 0, 0, 0.22),
     0 1px 3px rgba(0, 0, 0, 0.12) !important;
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.18s ease-out,
               background 0.18s ease-out !important;
 }
@@ -453,7 +467,7 @@
     inset 0 -0.5px 0 rgba(0, 0, 0, 0.08),
     inset 0 0 0 1px rgba(255, 255, 255, 0.12),
     0 3px 10px rgba(0, 0, 0, 0.20) !important;
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.18s ease-out,
               background 0.18s ease-out !important;
 }
@@ -542,7 +556,7 @@
     inset 0 0 0 1px rgba(255, 255, 255, 0.14),
     0 3px 10px rgba(0, 0, 0, 0.24),
     0 1px 3px rgba(0, 0, 0, 0.12) !important;
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.18s ease-out,
               background 0.18s ease-out !important;
 }
@@ -637,7 +651,7 @@
     inset 0 0 0 1px rgba(255, 255, 255, 0.22),
     0 6px 18px rgba(249, 115, 22, 0.45),
     0 2px 5px rgba(0, 0, 0, 0.22) !important;
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.18s ease-out,
               background 0.18s ease-out !important;
 }
@@ -822,7 +836,7 @@
     inset 0 0 0 1px rgba(255, 255, 255, 0.14),
     0 5px 14px rgba(239, 68, 68, 0.28),
     0 1px 3px rgba(0, 0, 0, 0.16) !important;
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.18s ease-out,
               background 0.18s ease-out !important;
 }
@@ -1023,7 +1037,7 @@
     0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
   position: relative;
   overflow: hidden;
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.18s ease-out,
               background 0.18s ease-out !important;
 }
@@ -1097,7 +1111,7 @@
     0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
   position: relative;
   overflow: hidden;
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.18s ease-out,
               background 0.18s ease-out !important;
 }
@@ -1144,7 +1158,7 @@
     0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
   position: relative;
   overflow: hidden;
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.18s ease-out,
               background 0.18s ease-out !important;
 }
@@ -1246,7 +1260,7 @@
     0 0 0 0.5px rgba(255, 255, 255, 0.10) !important;
   position: relative;
   overflow: hidden;
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.18s ease-out,
               background 0.18s ease-out !important;
 }
@@ -1436,7 +1450,7 @@
     inset 0 0 0 1px rgba(255, 255, 255, 0.12),
     0 6px 16px rgba(239, 68, 68, 0.32),
     0 2px 5px rgba(0, 0, 0, 0.18) !important;
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.18s ease-out,
               background 0.18s ease-out !important;
 }
@@ -1573,10 +1587,24 @@ body {
   --overlay-transcript-blur: calc(var(--overlay-opacity) * 6px);
 }
 
-/* Scrollbar Styling - Minimal macOS Hidden style */
+/* Scrollbar Styling & Text Selection */
 ::-webkit-scrollbar {
-  width: 0px;
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
   background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+::selection {
+  background-color: rgba(245, 158, 11, 0.25);
+  color: #fef3c7;
 }
 
 /* Liquid Glass Effect Base - Refined Matte Look */
@@ -2116,21 +2144,18 @@ html[data-platform="linux"] body {
   z-index: 2 !important;
 }
 
-/* Blueprint tech grid overlay on detail cards */
+/* Tech overlay on detail cards */
 [data-interface-theme="liquid-glass"] .natively-api-detail-card::after,
 [data-interface-theme="modern"] .natively-api-detail-card::after {
   content: '' !important;
   position: absolute !important;
   inset: 0 !important;
   border-radius: inherit !important;
-  background-image: 
-    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px) !important;
-  background-size: 24px 24px !important;
+  background: var(--bg-canvas) !important;
   pointer-events: none !important;
   z-index: 1 !important;
   opacity: 0.55 !important;
-  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  transition: opacity 180ms cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -2259,30 +2284,22 @@ html[data-platform="linux"] body {
 /* ──── Premium Graphics & Specular Upgrades (Liquid Glass Theme) ──── */
 
 .natively-api-price-pro {
-  background: linear-gradient(135deg, #ffffff 30%, #c4b5fd 100%) !important;
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
+  color: #fafafa !important;
   display: inline-block;
 }
 
 .natively-api-price-max {
-  background: linear-gradient(135deg, #ffffff 30%, #fdb582 100%) !important;
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
+  color: #f59e0b !important;
   display: inline-block;
 }
 
 .natively-api-price-ultra {
-  background: linear-gradient(135deg, #ffffff 30%, #fdb582 100%) !important;
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
+  color: #f59e0b !important;
   display: inline-block;
 }
 
 .natively-api-price-standard {
-  background: linear-gradient(135deg, #ffffff 40%, #cbd5e1 100%) !important;
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
+  color: #fafafa !important;
   display: inline-block;
 }
 
@@ -3057,14 +3074,11 @@ html[data-platform="linux"] body {
   content: '' !important;
   position: absolute !important;
   inset: 0 !important;
-  background-image: 
-    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px) !important;
-  background-size: 24px 24px !important;
+  background: var(--bg-canvas) !important;
   pointer-events: none !important;
   z-index: 1 !important;
   opacity: 0.55 !important;
-  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  transition: opacity 180ms cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -3475,19 +3489,16 @@ html[data-platform="linux"] body {
   z-index: 2 !important;
 }
 
-/* Tech mesh grid blueprint */
+/* Tech overlay on cards */
 .about-jelly-card::after {
   content: '' !important;
   position: absolute !important;
   inset: 0 !important;
-  background-image: 
-    linear-gradient(rgba(255, 255, 255, 0.009) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.009) 1px, transparent 1px) !important;
-  background-size: 24px 24px !important;
+  background: var(--bg-canvas) !important;
   pointer-events: none !important;
   z-index: 1 !important;
   opacity: 0.45 !important;
-  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  transition: opacity 180ms cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 .about-jelly-card:hover::after {
@@ -3594,9 +3605,7 @@ html[data-platform="linux"] body {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 100%) !important;
 }
 [data-theme='light'] .about-jelly-card::after {
-  background-image: 
-    linear-gradient(rgba(0, 0, 0, 0.005) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.005) 1px, transparent 1px) !important;
+  background: var(--bg-canvas) !important;
 }
 
 [data-theme='light'] .about-jelly-indigo {
@@ -3923,19 +3932,16 @@ html[data-platform="linux"] body {
   z-index: 2 !important;
 }
 
-/* Fine-grid blueprint architectural layout overlay */
+/* Tech overlay on feature cards */
 .pro-feature-card::after {
   content: '' !important;
   position: absolute !important;
   inset: 0 !important;
-  background-image: 
-    linear-gradient(rgba(255, 255, 255, 0.007) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.007) 1px, transparent 1px) !important;
-  background-size: 16px 16px !important;
+  background: var(--bg-canvas) !important;
   pointer-events: none !important;
   z-index: 1 !important;
   opacity: 0.35 !important;
-  transition: opacity 220ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 .pro-feature-card:hover::after {
@@ -4115,9 +4121,7 @@ html[data-platform="linux"] body {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 100%) !important;
 }
 [data-theme='light'] .pro-feature-card::after {
-  background-image: 
-    linear-gradient(rgba(0, 0, 0, 0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.015) 1px, transparent 1px) !important;
+  background: var(--bg-canvas) !important;
   opacity: 0.25 !important;
 }
 [data-theme='light'] .pro-feature-card:hover::after {
@@ -4197,7 +4201,7 @@ html[data-platform="linux"] body {
 }
 
 /* --- ABOUT SECTION ADDITIONAL MICRO-ANIMATIONS --- */
-@keyframes about-waveform-bounce {
+@keyframes about-waveform-pulse {
   0%, 100% {
     transform: scaleY(0.3);
   }
@@ -4205,11 +4209,11 @@ html[data-platform="linux"] body {
     transform: scaleY(1);
   }
 }
-.about-animate-waveform-1 { animation: about-waveform-bounce 1.2s ease-in-out infinite; transform-origin: bottom; }
-.about-animate-waveform-2 { animation: about-waveform-bounce 0.8s ease-in-out infinite 0.15s; transform-origin: bottom; }
-.about-animate-waveform-3 { animation: about-waveform-bounce 1.4s ease-in-out infinite 0.3s; transform-origin: bottom; }
-.about-animate-waveform-4 { animation: about-waveform-bounce 1.0s ease-in-out infinite 0.45s; transform-origin: bottom; }
-.about-animate-waveform-5 { animation: about-waveform-bounce 0.7s ease-in-out infinite 0.6s; transform-origin: bottom; }
+.about-animate-waveform-1 { animation: about-waveform-pulse 1.2s ease-in-out infinite; transform-origin: bottom; }
+.about-animate-waveform-2 { animation: about-waveform-pulse 0.8s ease-in-out infinite 0.15s; transform-origin: bottom; }
+.about-animate-waveform-3 { animation: about-waveform-pulse 1.4s ease-in-out infinite 0.3s; transform-origin: bottom; }
+.about-animate-waveform-4 { animation: about-waveform-pulse 1.0s ease-in-out infinite 0.45s; transform-origin: bottom; }
+.about-animate-waveform-5 { animation: about-waveform-pulse 0.7s ease-in-out infinite 0.6s; transform-origin: bottom; }
 
 @keyframes about-phone-pulse {
   0% {
@@ -4343,29 +4347,21 @@ html[data-platform="linux"] body {
     0 4px 12px rgba(249, 115, 22, 0.18) !important;
 }
 
-/* 3. Light Mode Specular Price Gradients */
+/* 3. Light Mode Price Colors */
 [data-theme='light'] .natively-api-price-pro {
-  background: linear-gradient(135deg, #1e1b4b 20%, #6d28d9 100%) !important;
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
+  color: #18181b !important;
 }
 
 [data-theme='light'] .natively-api-price-max {
-  background: linear-gradient(135deg, #0f172a 20%, #c2410c 100%) !important;
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
+  color: #d97706 !important;
 }
 
 [data-theme='light'] .natively-api-price-ultra {
-  background: linear-gradient(135deg, #1c0a00 20%, #c2410c 100%) !important;
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
+  color: #d97706 !important;
 }
 
 [data-theme='light'] .natively-api-price-standard {
-  background: linear-gradient(135deg, #0f172a 30%, #475569 100%) !important;
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
+  color: #18181b !important;
 }
 
 /* 4. Light Mode Detail Card Backgrounds & Specular reflections */

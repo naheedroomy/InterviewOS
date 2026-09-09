@@ -8,7 +8,7 @@ if (!app.isPackaged) {
   require('dotenv').config();
 }
 
-const APP_NAME = "AnswerCue";
+const APP_NAME = "InterviewOS";
 const APP_ID = "com.answercue.desktop";
 const DEBUG_LOG_FILE_NAME = "answercue_debug.log";
 
@@ -4984,6 +4984,13 @@ async function initializeApp() {
     }
   }
 
+  if (app.setAboutPanelOptions) {
+    app.setAboutPanelOptions({
+      applicationName: APP_NAME,
+      applicationVersion: app.getVersion(),
+    });
+  }
+
   // 3. Initialize Managers
   // Phase 6 — bind TelemetryService to the Electron userData path. The
   // singleton was constructed with cwd-relative paths at module-load time
@@ -5064,7 +5071,8 @@ async function initializeApp() {
     console.warn('[Init] STT pre-warm threw (non-fatal):', err);
   }
 
-  appState.createWindow()
+  appState.createWindow();
+  appState.getMainWindow()?.setTitle(APP_NAME);
 
   // Apply initial stealth state based on isUndetectable setting.
   // NOTE: app.dock.hide() was already called pre-emptively before createWindow()

@@ -1,5 +1,5 @@
 {
-  "name": "answercue",
+  "name": "interviewos",
   "version": "2.9.0",
   "main": "dist-electron/electron/main.js",
   "description": "AnswerCue is a live interview assistant that helps prepare context, transcribe conversations, and generate AI-guided answers.",
@@ -40,7 +40,7 @@
     "generateUpdatesFilesForAllChannels": true,
     "appId": "com.answercue.desktop",
     "afterPack": "./scripts/ad-hoc-sign.js",
-    "productName": "AnswerCue",
+    "productName": "InterviewOS",
     "files": [
       "dist",
       "dist-electron",
