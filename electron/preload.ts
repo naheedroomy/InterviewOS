@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 // Types for the exposed Electron API
 interface ElectronAPI {
@@ -358,6 +358,13 @@ interface ElectronAPI {
     candidateBackgroundOverride?: string;
     aiPersonaOverride?: string;
   }) => Promise<{ success: boolean; workspace?: any; error?: string }>;
+  knowledgeBankGetDocumentUsage: () => Promise<{
+    success: boolean;
+    usage: Record<string, Array<{ workspaceId: string; workspaceTitle: string }>>;
+    error?: string;
+  }>;
+  interviewDocsUploadFromPath: (filePath: string) => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>;
+  getPathForFile: (file: File) => string;
 
   // Backward Compatibility Workspace APIs
   interviewWorkspaceGetByMeeting: (meetingId: string) => Promise<any | null>;
@@ -1486,6 +1493,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     candidateBackgroundOverride?: string;
     aiPersonaOverride?: string;
   }) => ipcRenderer.invoke('interview-workspace:update-persona-overrides', payload),
+  knowledgeBankGetDocumentUsage: () => ipcRenderer.invoke('knowledge-bank:get-document-usage'),
+  interviewDocsUploadFromPath: (filePath: string) => ipcRenderer.invoke('interview-docs:upload-from-path', filePath),
+  getPathForFile: (file: File) => {
+    try {
+      return webUtils.getPathForFile(file);
+    } catch {
+      return (file as any).path || '';
+    }
+  },
 
   // Backward Compatibility Workspace APIs
   interviewWorkspaceGetByMeeting: (meetingId: string) => ipcRenderer.invoke('interview-workspace:get-by-meeting', meetingId),

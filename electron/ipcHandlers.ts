@@ -3207,6 +3207,19 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('interview-docs:upload-from-path', async (_, filePath: string) => {
+    try {
+      if (!filePath || typeof filePath !== 'string') {
+        return { success: false, error: 'Invalid file path' };
+      }
+      const document = await InterviewContextDocsManager.getInstance().addDocumentFromFile(filePath);
+      return { success: true, document };
+    } catch (error: any) {
+      console.error('[IPC] interview-docs:upload-from-path error:', error?.message ?? error);
+      return { success: false, error: error?.message || 'Could not read document.' };
+    }
+  });
+
   // ─── Interview Workspace & Multi-Round Handlers ────────────────────────────
 
   safeHandle('interview-workspace:list', async () => {
@@ -3363,6 +3376,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     }
   );
+
+  safeHandle('knowledge-bank:get-document-usage', async () => {
+    try {
+      const manager = InterviewWorkspaceStateManager.getInstance();
+      const usage = await manager.getDocumentUsage();
+      return { success: true, usage };
+    } catch (err: any) {
+      console.error('[IPC] knowledge-bank:get-document-usage error:', err?.message ?? err);
+      return { success: false, error: err?.message || 'Failed to get document usage', usage: {} };
+    }
+  });
 
   // ─── Backward Compatibility Workspace Handlers ───────────────────────────
 

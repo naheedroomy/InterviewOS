@@ -342,6 +342,13 @@ export interface ElectronAPI {
     candidateBackgroundOverride?: string;
     aiPersonaOverride?: string;
   }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  knowledgeBankGetDocumentUsage: () => Promise<{
+    success: boolean;
+    usage: Record<string, Array<{ workspaceId: string; workspaceTitle: string }>>;
+    error?: string;
+  }>
+  interviewDocsUploadFromPath: (filePath: string) => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>
+  getPathForFile?: (file: File) => string
 
   // Backward Compatibility Workspace APIs
   interviewWorkspaceGetByMeeting: (meetingId: string) => Promise<any | null>

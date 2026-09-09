@@ -172,6 +172,16 @@ function normalizeWorkspace(raw: any, existing?: InterviewWorkspace): InterviewW
   };
 }
 
+let lastMonotonicTime = 0;
+function getMonotonicIsoTimestamp(): string {
+  let now = Date.now();
+  if (now <= lastMonotonicTime) {
+    now = lastMonotonicTime + 1;
+  }
+  lastMonotonicTime = now;
+  return new Date(now).toISOString();
+}
+
 // ─── Manager ────────────────────────────────────────────────────────────────
 
 export class InterviewWorkspaceStateManager {
@@ -219,10 +229,42 @@ export class InterviewWorkspaceStateManager {
   }
 
   /**
+   * Returns all workspaces, satisfying asynchronous SDD interface.
+   */
+  public async readWorkspaces(): Promise<InterviewWorkspace[]> {
+    return this.listWorkspaces();
+  }
+
+  /**
+   * Computes cross-interview document usage across all workspaces.
+   * Maps document ID to all workspaces referencing it in their documentIds.
+   */
+  public async getDocumentUsage(): Promise<Record<string, Array<{ workspaceId: string; workspaceTitle: string }>>> {
+    const workspaces = [...this.readStore().workspaces].sort((a, b) =>
+      a.createdAt.localeCompare(b.createdAt) || a.title.localeCompare(b.title)
+    );
+    const usage: Record<string, Array<{ workspaceId: string; workspaceTitle: string }>> = {};
+    for (const ws of workspaces) {
+      if (Array.isArray(ws.documentIds)) {
+        for (const docId of ws.documentIds) {
+          if (!usage[docId]) {
+            usage[docId] = [];
+          }
+          usage[docId].push({
+            workspaceId: ws.id,
+            workspaceTitle: ws.title,
+          });
+        }
+      }
+    }
+    return usage;
+  }
+
+  /**
    * Creates a new persistent InterviewWorkspace with Round 1 in 'draft' state.
    */
   public createWorkspace(opts?: { title?: string; initialDocIds?: string[]; id?: string }): InterviewWorkspace {
-    const now = new Date().toISOString();
+    const now = getMonotonicIsoTimestamp();
     const id = opts?.id?.trim() || crypto.randomUUID();
     const roundId = crypto.randomUUID();
     const title = (opts?.title && opts.title.trim()) ? opts.title.trim() : 'New Interview';
@@ -531,10 +573,10 @@ export class InterviewWorkspaceStateManager {
       existing.hasCustomOverrides = Boolean(overrides.hasCustomOverrides);
     }
     if (overrides.candidateBackgroundOverride !== undefined) {
-      existing.candidateBackgroundOverride = String(overrides.candidateBackgroundOverride);
+      existing.candidateBackgroundOverride = String(overrides.candidateBackgroundOverride ?? '');
     }
     if (overrides.aiPersonaOverride !== undefined) {
-      existing.aiPersonaOverride = String(overrides.aiPersonaOverride);
+      existing.aiPersonaOverride = String(overrides.aiPersonaOverride ?? '');
     }
     existing.updatedAt = new Date().toISOString();
     return this.tryReplaceInStore(store, existing);
