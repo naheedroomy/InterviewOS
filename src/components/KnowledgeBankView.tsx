@@ -40,6 +40,7 @@ export interface KnowledgeBankViewProps {
   isLight?: boolean;
   onAttachToWorkspace?: (documentId: string, workspaceId: string) => void;
   onOpenWorkspace?: (workspaceId: string) => void;
+  onNavigateToWorkspace?: (workspaceId: string) => void;
   onClose?: () => void;
   currentWorkspaceId?: string;
 }
@@ -128,9 +129,11 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
   isLight = false,
   onAttachToWorkspace,
   onOpenWorkspace,
+  onNavigateToWorkspace,
   onClose,
   currentWorkspaceId,
 }) => {
+  const handleOpenWorkspace = onNavigateToWorkspace || onOpenWorkspace;
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [usage, setUsage] = useState<Record<string, WorkspaceUsageItem[]>>({});
   const [workspaces, setWorkspaces] = useState<Array<{ id: string; title: string; documentIds?: string[] }>>([]);
@@ -759,12 +762,12 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
                             {linkedWorkspaces.slice(0, 2).map((w, idx) => (
                               <React.Fragment key={w.workspaceId}>
                                 {idx > 0 && ', '}
-                                {onOpenWorkspace ? (
+                                {handleOpenWorkspace ? (
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      onOpenWorkspace(w.workspaceId);
+                                      handleOpenWorkspace(w.workspaceId);
                                     }}
                                     className="hover:underline hover:text-amber-200"
                                   >
@@ -982,12 +985,12 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        {onOpenWorkspace && (
+                        {handleOpenWorkspace && (
                           <button
                             type="button"
                             onClick={() => {
                               setAttachDoc(null);
-                              onOpenWorkspace(ws.id);
+                              handleOpenWorkspace(ws.id);
                             }}
                             title={`Open ${ws.title}`}
                             className="p-1.5 text-zinc-400 hover:text-amber-400 rounded hover:bg-white/[0.05] transition-colors"

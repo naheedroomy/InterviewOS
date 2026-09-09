@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, RefreshCw, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight, ArrowUp, Brain, Mic, ShieldCheck, Paperclip, X, Speaker, Pencil, KeyRound, Monitor, HelpCircle } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, RefreshCw, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight, ArrowUp, Brain, Mic, ShieldCheck, Paperclip, X, Speaker, Pencil, KeyRound, Monitor, HelpCircle, FileText, UploadCloud, Zap, FileCode } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
-import { ModelSelector } from './ui/ModelSelector';
 import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
 import HelpAssistant from './help/HelpAssistant';
-import ContextDocumentsPanel from './ContextDocumentsPanel';
+import { KnowledgeBankView } from './KnowledgeBankView';
 import { motion, AnimatePresence } from 'framer-motion';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
 import { useShortcuts } from '../hooks/useShortcuts';
@@ -360,6 +359,14 @@ const formatTimelineTime = (timestamp: number) => {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+};
+
+const formatDocSize = (bytes: number): string => {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 KB';
+    if (bytes < 1024 * 1024) {
+        return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
 const isHumanTimelineRole = (role: TimelineRole) => role === 'interviewer' || role === 'me';
@@ -1835,7 +1842,7 @@ const formatRelativeTime = (dateStr?: string | null) => {
     }
 };
 
-const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onPageChange, ollamaPullStatus = 'idle', ollamaPullPercent = 0, ollamaPullMessage = '' }) => {
+const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onPageChange, ollamaPullStatus: _ollamaPullStatus = 'idle', ollamaPullPercent: _ollamaPullPercent = 0, ollamaPullMessage: _ollamaPullMessage = '' }) => {
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [workspaces, setWorkspaces] = useState<InterviewWorkspace[]>([]);
     const [selectedWorkspace, setSelectedWorkspace] = useState<InterviewWorkspace | null>(null);
@@ -1865,6 +1872,13 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
     const [isUploadingDoc, setIsUploadingDoc] = useState(false);
     const [docError, setDocError] = useState<string | null>(null);
+    const [activeMainView, setActiveMainView] = useState<'interviews' | 'knowledge-bank'>('interviews');
+    const [isAttachModalOpen, setIsAttachModalOpen] = useState(false);
+    const [attachSearchQuery, setAttachSearchQuery] = useState('');
+    const [attachSelectedDocIds, setAttachSelectedDocIds] = useState<string[]>([]);
+    const [isDraggingOverChat, setIsDraggingOverChat] = useState(false);
+    const [isChatUploadingDoc, setIsChatUploadingDoc] = useState(false);
+    const [chatUploadError, setChatUploadError] = useState<string | null>(null);
     const [docDetailsTargetId, setDocDetailsTargetId] = useState<string | null>(null);
     const [docDetailsMode, setDocDetailsMode] = useState<'upload' | 'select' | null>(null);
     const [docDetailsError, setDocDetailsError] = useState<string | null>(null);
@@ -3229,6 +3243,109 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     const docDetailsTarget = interviewDocs.find(doc => doc.id === docDetailsTargetId) || null;
     const prepContextMarkdown = buildInterviewContextMarkdown(prepMessages, contextDocs);
 
+    const unattachedDocs = useMemo(() => {
+        const selectedSet = new Set(selectedDocIds);
+        return interviewDocs.filter(doc => !selectedSet.has(doc.id));
+    }, [interviewDocs, selectedDocIds]);
+
+    const filteredAvailableDocs = useMemo(() => {
+        const query = attachSearchQuery.trim().toLowerCase();
+        if (!query) return unattachedDocs;
+        return unattachedDocs.filter(doc => doc.name.toLowerCase().includes(query));
+    }, [unattachedDocs, attachSearchQuery]);
+
+    const attachSelectedDocIdsSet = useMemo(() => new Set(attachSelectedDocIds), [attachSelectedDocIds]);
+
+    const handleAttachDocToWorkspace = useCallback(async (docId: string, wsId: string) => {
+        const ws = workspaces.find(w => w.id === wsId);
+        const currentDocIds = ws && Array.isArray(ws.documentIds) ? ws.documentIds : [];
+        const nextIds = currentDocIds.includes(docId)
+            ? currentDocIds
+            : [...currentDocIds, docId];
+
+        if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+            await window.electronAPI.interviewWorkspaceUpdateDocuments({
+                workspaceId: wsId,
+                documentIds: nextIds,
+            });
+        }
+
+        setWorkspaces(prev => prev.map(w => w.id === wsId ? { ...w, documentIds: nextIds } : w));
+        if (selectedWorkspace?.id === wsId) {
+            setSelectedDocIds(nextIds);
+            setSelectedWorkspace(prev => prev ? { ...prev, documentIds: nextIds } : null);
+            void persistWorkspaceState({ selectedDocumentIds: nextIds });
+        }
+    }, [workspaces, selectedWorkspace?.id, persistWorkspaceState]);
+
+    const handleChatDragOver = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+            setIsDraggingOverChat(true);
+        }
+    }, []);
+
+    const handleChatDragLeave = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+        setIsDraggingOverChat(false);
+    }, []);
+
+    const handleChatDrop = useCallback(async (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDraggingOverChat(false);
+        setChatUploadError(null);
+
+        const files = Array.from(e.dataTransfer.files);
+        if (!files.length) return;
+
+        setIsChatUploadingDoc(true);
+        try {
+            const newDocIds: string[] = [];
+            for (const file of files) {
+                const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+                if (!['.pdf', '.docx', '.txt', '.md', '.markdown'].includes(ext)) {
+                    continue;
+                }
+
+                const filePath = window.electronAPI?.getPathForFile?.(file) || (file as any).path;
+                let result: any = null;
+                if (filePath && window.electronAPI?.interviewDocsUploadFromPath) {
+                    result = await window.electronAPI.interviewDocsUploadFromPath(filePath);
+                } else if (window.electronAPI?.interviewDocsUpload) {
+                    result = await window.electronAPI.interviewDocsUpload();
+                }
+
+                if (result?.success && result.document) {
+                    setInterviewDocs(prev => [result.document, ...prev.filter(d => d.id !== result.document.id)]);
+                    newDocIds.push(result.document.id);
+                }
+            }
+
+            if (newDocIds.length > 0 && selectedWorkspace) {
+                const nextDocIds = Array.from(new Set([...selectedDocIds, ...newDocIds]));
+                setSelectedDocIds(nextDocIds);
+                if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+                    await window.electronAPI.interviewWorkspaceUpdateDocuments({
+                        workspaceId: workspaceStateId,
+                        documentIds: nextDocIds,
+                    });
+                }
+                setSelectedWorkspace(prev => prev ? { ...prev, documentIds: nextDocIds } : null);
+                setWorkspaces(prev => prev.map(w => w.id === workspaceStateId ? { ...w, documentIds: nextDocIds } : w));
+                void persistWorkspaceState({ selectedDocumentIds: nextDocIds });
+            }
+        } catch (err: any) {
+            console.error('[Launcher] Chat drop upload failed:', err);
+            setChatUploadError(err?.message || 'Failed to upload and attach document.');
+        } finally {
+            setIsChatUploadingDoc(false);
+        }
+    }, [selectedWorkspace, selectedDocIds, workspaceStateId, persistWorkspaceState]);
+
     const handleNewInterview = async () => {
         try {
             let newWorkspace: InterviewWorkspace | null = null;
@@ -4244,8 +4361,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         <div className="h-full w-full flex flex-col bg-bg-primary text-text-primary font-sans overflow-hidden selection:bg-[var(--accent-muted)]">
             {/* 1. Header (Static) */}
             <header className={`relative w-full h-[40px] shrink-0 flex items-center justify-between pl-0 drag-region select-none ${isLight ? 'bg-bg-primary' : 'bg-bg-secondary'} border-b border-border-subtle z-[200]`}>
-                {/* Left: Spacing for Traffic Lights + Navigation Arrows */}
-                <div className="flex items-center gap-1 no-drag">
+                {/* Left: Spacing for Traffic Lights + Navigation Arrows + Brand Logo + Segmented Switcher */}
+                <div className="flex items-center gap-2 no-drag">
                     {isMac && <div className="w-[70px]" />} {/* Traffic Light Spacer (macOS only) */}
 
                     {/* Back Button */}
@@ -4275,8 +4392,54 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                     >
                         <ArrowRight size={16} />
                     </button>
-                </div>
 
+                    {/* Branded InterviewOS Logo with amber lightning glyph */}
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 select-none font-semibold text-[13px] tracking-tight text-text-primary mr-1">
+                        <span className="flex items-center justify-center w-5 h-5 rounded-md bg-amber-500/15 text-amber-500 font-bold text-xs shadow-xs">
+                            ⚡
+                        </span>
+                        <span className="font-semibold text-[13px] tracking-tight text-text-primary">
+                            Interview<span className="text-amber-500">OS</span>
+                        </span>
+                    </div>
+
+                    {/* Segmented button switcher: Interviews vs Knowledge Bank */}
+                    <div className="flex items-center bg-black/10 dark:bg-black/30 p-0.5 rounded-lg border border-border-subtle text-[12px] font-medium ml-1">
+                        <button
+                            type="button"
+                            onClick={() => setActiveMainView('interviews')}
+                            className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-md transition-all duration-150 ${
+                                activeMainView === 'interviews'
+                                    ? isLight
+                                        ? 'bg-white text-text-primary shadow-xs font-semibold'
+                                        : 'bg-zinc-800 text-text-primary shadow-xs font-semibold'
+                                    : 'text-text-tertiary hover:text-text-secondary'
+                            }`}
+                            title="Interviews & Workspace Chat"
+                        >
+                            <span className="text-xs">💬</span>
+                            <span>Interviews</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setActiveMainView('knowledge-bank');
+                                fetchInterviewDocs();
+                            }}
+                            className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-md transition-all duration-150 ${
+                                activeMainView === 'knowledge-bank'
+                                    ? isLight
+                                        ? 'bg-white text-text-primary shadow-xs font-semibold'
+                                        : 'bg-zinc-800 text-text-primary shadow-xs font-semibold'
+                                    : 'text-text-tertiary hover:text-text-secondary'
+                            }`}
+                            title="Knowledge Bank (Master Document Library)"
+                        >
+                            <span className="text-xs">📚</span>
+                            <span>Knowledge Bank</span>
+                        </button>
+                    </div>
+                </div>
 
                 {/* Center: Spotlight-style Search Pill */}
                 <TopSearchPill
@@ -4287,8 +4450,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                         setIsGlobalChatOpen(true);
                     }}
                     onLiteralSearch={(query) => {
-                        // For now, also use AI query for literal search
-                        // Could be enhanced to do fuzzy filtering in the UI
                         analytics.trackCommandExecuted('literal_search');
                         setSubmittedGlobalQuery(query);
                         setIsGlobalChatOpen(true);
@@ -4302,8 +4463,19 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                     }}
                 />
 
-                {/* Right: Actions */}
+                {/* Right: Actions & Utility Status */}
                 <div className={`flex items-center gap-1 no-drag shrink-0 ${isMac ? 'mr-1' : ''}`}>
+                    {/* Utility Status: Mic Ready / Audio Permissions */}
+                    <div
+                        className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-text-tertiary font-medium"
+                        title={`Microphone: ${permissionLabel(readiness.micPermission)} · System Audio: ${readiness.audioReady ? 'Ready' : 'Checking'}`}
+                    >
+                        <span className={`h-2 w-2 rounded-full ${readiness.micPermission === 'granted' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                        <span className="hidden md:inline font-mono text-[10.5px] text-text-secondary">
+                            {readiness.micPermission === 'granted' ? 'Mic Ready' : 'Mic Setup'}
+                        </span>
+                    </div>
+
                     <button
                         onClick={() => {
                             try {
@@ -4642,7 +4814,32 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                     transition={{ duration: 0.15 }}
                 >
 
-                            <div className={`h-full min-h-0 grid grid-cols-[300px_minmax(0,1fr)_360px] ${isLight ? 'bg-bg-primary' : 'bg-bg-primary'}`}>
+                    {activeMainView === 'knowledge-bank' ? (
+                        <div className="flex-1 min-h-0 overflow-hidden">
+                            <KnowledgeBankView
+                                isLight={isLight}
+                                currentWorkspaceId={selectedWorkspace?.id}
+                                onAttachToWorkspace={(docId, wsId) => {
+                                    void handleAttachDocToWorkspace(docId, wsId);
+                                }}
+                                onOpenWorkspace={(wsId) => {
+                                    const targetWs = workspaces.find((w) => w.id === wsId);
+                                    if (targetWs) {
+                                        selectWorkspace(targetWs);
+                                    }
+                                    setActiveMainView('interviews');
+                                }}
+                                onNavigateToWorkspace={(wsId) => {
+                                    const targetWs = workspaces.find((w) => w.id === wsId);
+                                    if (targetWs) {
+                                        selectWorkspace(targetWs);
+                                    }
+                                    setActiveMainView('interviews');
+                                }}
+                            />
+                        </div>
+                    ) : (
+                        <div className={`h-full min-h-0 grid grid-cols-[300px_minmax(0,1fr)] ${isLight ? 'bg-bg-primary' : 'bg-bg-primary'}`}>
                                 <aside className={`min-h-0 border-r border-border-subtle flex flex-col ${isLight ? 'bg-bg-secondary' : 'bg-bg-primary'}`}>
                                     <div className="shrink-0 px-3 py-3 border-b border-border-subtle">
                                         <button
@@ -5146,8 +5343,105 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                 </button>
                                             </div>
                                         )}
+
+                                        {/* Active Context Strip */}
+                                        {selectedWorkspace && (
+                                            <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pt-1 pb-0.5 text-xs">
+                                                <div className="flex items-center gap-1.5 text-text-secondary font-medium shrink-0">
+                                                    <Paperclip size={13} className="text-amber-500" />
+                                                    <span className="text-[11.5px] font-semibold text-text-secondary">Active Context:</span>
+                                                </div>
+
+                                                {/* Document pills */}
+                                                {selectedDocs.length > 0 ? (
+                                                    selectedDocs.map((doc) => {
+                                                        const ext = (doc.fileType || '').toLowerCase();
+                                                        return (
+                                                            <div
+                                                                key={doc.id}
+                                                                className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-[11px] font-medium shrink-0 border transition-all ${
+                                                                    isLight
+                                                                        ? 'bg-amber-500/8 border-amber-500/25 text-amber-900 shadow-2xs'
+                                                                        : 'bg-amber-500/10 border-amber-500/20 text-amber-200/90 shadow-2xs'
+                                                                }`}
+                                                            >
+                                                                <FileText size={11} className={ext === 'pdf' ? 'text-red-400' : ext === 'docx' ? 'text-blue-400' : 'text-amber-400'} />
+                                                                <span className="truncate max-w-[140px]" title={doc.name}>
+                                                                    {doc.name}
+                                                                </span>
+                                                                <span className="text-[10px] opacity-60 font-mono">
+                                                                    ({formatDocSize(doc.sizeBytes)})
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleRemoveInterviewDoc(doc.id);
+                                                                    }}
+                                                                    title={`Detach ${doc.name}`}
+                                                                    className="ml-0.5 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/15 text-text-tertiary hover:text-text-primary transition-colors"
+                                                                    aria-label={`Detach ${doc.name}`}
+                                                                >
+                                                                    <X size={10} />
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    <span className="text-[11px] text-text-tertiary italic">
+                                                        None attached
+                                                    </span>
+                                                )}
+
+                                                {/* + Attach from Knowledge Bank button */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setIsAttachModalOpen(true);
+                                                        setAttachSearchQuery('');
+                                                        setAttachSelectedDocIds([]);
+                                                    }}
+                                                    className={`inline-flex items-center gap-1 h-6 px-2 rounded-md text-[11px] font-medium shrink-0 border border-dashed transition-colors ${
+                                                        isLight
+                                                            ? 'border-border-subtle bg-slate-50/70 hover:bg-white text-text-secondary hover:border-accent-primary hover:text-accent-primary'
+                                                            : 'border-border-subtle bg-bg-secondary/40 hover:bg-bg-secondary text-text-secondary hover:border-accent-primary hover:text-accent-primary'
+                                                    }`}
+                                                    title="Attach documents from Knowledge Bank"
+                                                >
+                                                    <Plus size={11} strokeWidth={2.4} />
+                                                    <span>Attach from Knowledge Bank</span>
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
-			                                    <div className="flex-1 min-h-0 p-5 overflow-hidden">
+			                                    <div
+                                        className="flex-1 min-h-0 p-5 overflow-hidden relative"
+                                        onDragOver={handleChatDragOver}
+                                        onDragLeave={handleChatDragLeave}
+                                        onDrop={handleChatDrop}
+                                    >
+                                        {isDraggingOverChat && (
+                                            <div className="absolute inset-2 z-50 rounded-xl border-2 border-dashed border-amber-500 bg-amber-500/10 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center pointer-events-none transition-all">
+                                                <UploadCloud size={36} className="text-amber-500 animate-bounce mb-2" />
+                                                <p className="text-sm font-semibold text-text-primary">Drop files to add to Knowledge Bank & attach to this interview</p>
+                                                <p className="text-xs text-text-secondary mt-1">Supports PDF, DOCX, TXT, MD</p>
+                                            </div>
+                                        )}
+                                        {isChatUploadingDoc && (
+                                            <div className="absolute top-4 right-4 z-50 rounded-lg bg-zinc-900/90 border border-amber-500/30 px-3 py-1.5 shadow-lg flex items-center gap-2 text-xs text-amber-300">
+                                                <RefreshCw size={12} className="animate-spin text-amber-400" />
+                                                <span>Uploading & attaching document...</span>
+                                            </div>
+                                        )}
+                                        {chatUploadError && (
+                                            <div className="absolute top-4 right-4 z-50 rounded-lg bg-red-500/90 border border-red-400/40 px-3 py-1.5 shadow-lg flex items-center gap-2 text-xs text-white">
+                                                <AlertCircle size={12} />
+                                                <span>{chatUploadError}</span>
+                                                <button type="button" onClick={() => setChatUploadError(null)} className="ml-1 hover:text-red-200">
+                                                    <X size={10} />
+                                                </button>
+                                            </div>
+                                        )}
 		                                        <InterviewPrepPanel
                                                     key={`${selectedWorkspace?.id || 'workspace'}-${selectedWorkspace?.activeRoundId || 'round'}-${selectedMeeting?.id || 'draft'}`}
                                                     isLight={isLight}
@@ -5168,201 +5462,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                 />
 		                                    </div>
                                 </main>
-
-                                <aside className={`min-h-0 border-l border-border-subtle flex flex-col ${isLight ? 'bg-bg-secondary' : 'bg-bg-primary'}`}>
-                                    <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 space-y-4">
-                                        {setupIssues.length > 0 && (
-                                            <section className={`rounded-lg border border-amber-500/25 ${isLight ? 'bg-amber-50/80' : 'bg-amber-500/8'} p-3 space-y-2.5`}>
-                                                <div className="flex items-center gap-2 text-amber-500">
-                                                    <AlertCircle size={15} />
-                                                    <h3 className="text-[12px] font-semibold">Setup needed</h3>
-                                                </div>
-                                                <div className="space-y-1.5">
-                                                    {setupIssues.map(issue => (
-                                                        <button
-                                                            key={issue.key}
-                                                            onClick={() => onOpenSettings(issue.tab)}
-                                                            className={`w-full rounded-md px-2.5 py-2 text-left transition-colors ${isLight ? 'hover:bg-white/70' : 'hover:bg-white/8'}`}
-                                                        >
-                                                            <p className="text-[12px] font-semibold text-text-primary">{issue.label}</p>
-                                                            <p className="mt-0.5 text-[11px] leading-relaxed text-text-tertiary">{issue.detail}</p>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </section>
-                                        )}
-
-                                        <ContextDocumentsPanel
-                                            isLight={isLight}
-                                            workspaceId={workspaceStateId}
-                                            documentIds={selectedDocIds}
-                                            availableDocs={interviewDocs}
-                                            onUploadDoc={handleUploadInterviewDoc}
-                                            onRemoveDoc={handleRemoveInterviewDoc}
-                                            onAttachExistingDoc={handleAttachExistingDoc}
-                                            isUploadingDoc={isUploadingDoc}
-                                            docError={docError}
-                                        />
-
-                                        <section className={`rounded-lg border border-border-subtle ${isLight ? 'bg-bg-elevated' : 'bg-bg-secondary'} p-3`}>
-                                            <div className="flex items-center justify-between gap-2 mb-3">
-                                                <div className="min-w-0">
-                                                    <h3 className="text-[12px] font-semibold text-text-primary">Model</h3>
-                                                    <p className="text-[10.5px] text-text-tertiary truncate">{readiness.aiProvider} · {readiness.aiModel}</p>
-                                                </div>
-                                                <button
-                                                    onClick={() => refreshReadiness()}
-                                                    title="Refresh model"
-                                                    className={`h-7 w-7 shrink-0 rounded-md flex items-center justify-center text-text-tertiary hover:text-text-primary ${isLight ? 'hover:bg-black/8' : 'hover:bg-white/10'}`}
-                                                >
-                                                    <RefreshCw size={12} className={readiness.loading ? 'animate-spin text-accent-primary' : ''} />
-                                                </button>
-                                            </div>
-                                            <ModelSelector
-                                                currentModel={currentModel}
-                                                onSelectModel={handleModelSelect}
-                                                placement="down"
-                                                className="w-full !max-w-none justify-between"
-                                            />
-                                        </section>
-
-                                        <section className={`rounded-lg border border-border-subtle ${isLight ? 'bg-bg-elevated' : 'bg-bg-secondary'} p-3`}>
-                                            <div className="flex items-center justify-between gap-2 mb-3">
-                                                <div className="min-w-0">
-                                                    <h3 className="text-[12px] font-semibold text-text-primary">Audio Configuration</h3>
-                                                    <p className="text-[10.5px] text-text-tertiary truncate">Manage input and output devices.</p>
-                                                </div>
-                                                <button
-                                                    onClick={() => loadAudioDevices()}
-                                                    title="Refresh audio devices"
-                                                    className={`h-7 w-7 shrink-0 rounded-md flex items-center justify-center text-text-tertiary hover:text-text-primary ${isLight ? 'hover:bg-black/8' : 'hover:bg-white/10'}`}
-                                                >
-                                                    <RefreshCw size={12} className={audioDevicesLoading ? 'animate-spin text-accent-primary' : ''} />
-                                                </button>
-                                            </div>
-                                            {deviceFallbackNotice && (
-                                                <div className="mb-4 flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                                                    <AlertCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="text-xs text-amber-200/90 leading-snug">
-                                                            Selected {deviceFallbackNotice.kind === 'input' ? 'microphone' : 'output device'}
-                                                            {deviceFallbackNotice.requested ? ` "${deviceFallbackNotice.requested}"` : ''} couldn't be opened
-                                                            — using <span className="font-medium">{deviceFallbackNotice.actual ?? 'no device'}</span> instead.
-                                                        </p>
-                                                        {deviceFallbackNotice.reason && (
-                                                            <p className="text-[11px] text-amber-200/60 mt-1 font-mono break-all">{deviceFallbackNotice.reason}</p>
-                                                        )}
-                                                    </div>
-                                                    <button
-                                                        onClick={resetDeviceFallback}
-                                                        className="shrink-0 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25"
-                                                    >
-                                                        Reset
-                                                    </button>
-                                                </div>
-                                            )}
-                                            <div className="space-y-4">
-                                                <LauncherAudioSelect
-                                                    label="Input Device"
-                                                    icon={<Mic size={16} />}
-                                                    value={selectedInputDeviceId}
-                                                    options={inputDevices}
-                                                    placeholder={audioDevicesLoading ? 'Loading microphones...' : 'Default Microphone'}
-                                                    onChange={handleInputDeviceSelect}
-                                                />
-                                                <div>
-                                                    <div className="flex justify-between text-xs text-text-secondary mb-2 px-1">
-                                                        <span>Input Level</span>
-                                                    </div>
-                                                    <div className="h-1.5 bg-bg-input rounded-full overflow-hidden">
-                                                        <div
-                                                            className="h-full bg-green-500 transition-all duration-100 ease-out"
-                                                            style={{ width: `${micLevel}%` }}
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                <div className="h-px bg-border-subtle my-2" />
-
-                                                <LauncherAudioSelect
-                                                    label="Output Device"
-                                                    icon={<Speaker size={16} />}
-                                                    value={selectedOutputDeviceId}
-                                                    options={outputDevices}
-                                                    placeholder={audioDevicesLoading ? 'Loading speakers...' : 'Default Speakers'}
-                                                    onChange={handleOutputDeviceSelect}
-                                                />
-                                                <div>
-                                                    <div className="flex justify-between text-xs text-text-secondary mb-2 px-1">
-                                                        <span>System Audio Level</span>
-                                                    </div>
-                                                    <div className="h-1.5 bg-bg-input rounded-full overflow-hidden">
-                                                        <div
-                                                            className="h-full bg-accent-primary transition-all duration-100 ease-out"
-                                                            style={{ width: `${systemAudioLevel}%` }}
-                                                        />
-                                                    </div>
-                                                    {systemAudioError && (
-                                                        <p className="mt-2 text-xs text-red-400 leading-snug">{systemAudioError}</p>
-                                                    )}
-                                                </div>
-
-                                                {audioDevicesError && (
-                                                    <p className="text-[11px] leading-relaxed text-red-400">{audioDevicesError}</p>
-                                                )}
-                                            </div>
-                                        </section>
-
-                                        <section className={`rounded-lg border border-border-subtle ${isLight ? 'bg-bg-elevated' : 'bg-bg-secondary'} p-3`}>
-                                            <div className={`rounded-xl p-4 border border-border-subtle flex items-center justify-between gap-3 transition-all ${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} ${!isDetectable ? 'shadow-lg shadow-[0_0_24px_rgba(124,77,255,0.16)]' : ''}`}>
-                                                <div className="min-w-0 flex flex-col gap-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <Ghost size={16} className="shrink-0 text-text-primary" />
-                                                        <h3 className="text-[14px] font-bold text-text-primary">
-                                                            {isDetectable ? 'Detectable' : 'Undetectable'}
-                                                        </h3>
-                                                    </div>
-                                                    <p className="text-[11px] leading-relaxed text-text-secondary">
-                                                        AnswerCue is currently {isDetectable ? 'detectable' : 'undetectable'} by screen sharing.
-                                                    </p>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    role="switch"
-                                                    aria-checked={!isDetectable}
-                                                    aria-label={isDetectable ? 'Turn on undetectable mode' : 'Turn off undetectable mode'}
-                                                    onClick={toggleDetectable}
-                                                    className={`w-11 h-6 rounded-full relative shrink-0 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary ${!isDetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                >
-                                                    <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${!isDetectable ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                </button>
-                                            </div>
-                                        </section>
-
-                                        {ollamaPullStatus !== 'idle' && (
-                                            <section className={`rounded-lg border border-border-subtle ${isLight ? 'bg-bg-elevated' : 'bg-bg-secondary'} p-3`}>
-                                                <div className="flex items-center gap-2">
-                                                    {ollamaPullStatus === 'downloading' ? (
-                                                        <DownloadCloud size={14} className="text-accent-primary animate-pulse shrink-0" />
-                                                    ) : ollamaPullStatus === 'complete' ? (
-                                                        <CheckCircle size={14} className="text-emerald-400 shrink-0" />
-                                                    ) : (
-                                                        <AlertCircle size={14} className="text-red-400 shrink-0" />
-                                                    )}
-                                                    <span className="text-[12px] font-medium text-text-secondary truncate">
-                                                        {ollamaPullStatus === 'downloading' ? `Setting up AI memory... ${ollamaPullPercent}%` : ollamaPullMessage}
-                                                    </span>
-                                                </div>
-                                                {ollamaPullStatus === 'downloading' && (
-                                                    <div className="w-full h-[3px] bg-white/10 rounded-full mt-2 overflow-hidden">
-                                                        <div className="h-full bg-accent-primary rounded-full transition-all duration-300" style={{ width: `${ollamaPullPercent}%` }} />
-                                                    </div>
-                                                )}
-                                            </section>
-                                        )}
-                                    </div>
-                                </aside>
                             </div>
+                    )}
                     </motion.div>
                 )}
             </div>
@@ -5396,6 +5497,166 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Attach from Knowledge Bank Modal */}
+            {isAttachModalOpen && (
+                <div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+                    onClick={() => setIsAttachModalOpen(false)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                            setIsAttachModalOpen(false);
+                        }
+                    }}
+                >
+                    <div
+                        className={`relative w-full max-w-lg rounded-xl border p-5 shadow-2xl transition-all ${
+                            isLight ? 'bg-white border-zinc-200 text-zinc-900' : 'bg-[#18181b] border-white/10 text-zinc-100'
+                        }`}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+                            <div className="flex items-center gap-2">
+                                <Paperclip size={16} className="text-amber-500" />
+                                <h2 className="text-sm font-semibold tracking-tight">Attach from Knowledge Bank</h2>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsAttachModalOpen(false)}
+                                className="p-1 rounded-md text-text-tertiary hover:text-text-primary hover:bg-white/10 transition-colors"
+                                aria-label="Close attach modal"
+                            >
+                                <X size={15} />
+                            </button>
+                        </div>
+
+                        {/* Subtitle */}
+                        <p className="mt-2 text-xs text-text-secondary leading-relaxed">
+                            Select documents from your Knowledge Bank to inject as live grounded context into <span className="font-semibold text-text-primary">{selectedWorkspace?.title || 'this interview'}</span>.
+                        </p>
+
+                        {/* Search Input */}
+                        <div className="relative mt-3">
+                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                            <input
+                                type="text"
+                                value={attachSearchQuery}
+                                onChange={(e) => setAttachSearchQuery(e.target.value)}
+                                placeholder="Search available documents..."
+                                aria-label="Search available documents"
+                                className={`w-full h-8 pl-8 pr-3 text-xs rounded-md border outline-none transition-colors ${
+                                    isLight
+                                        ? 'bg-zinc-50 border-zinc-200 text-zinc-900 placeholder:text-zinc-400 focus:border-amber-500'
+                                        : 'bg-zinc-900 border-white/10 text-zinc-100 placeholder:text-zinc-500 focus:border-amber-500'
+                                }`}
+                                autoFocus
+                            />
+                        </div>
+
+                        {/* Document List */}
+                        <div className="mt-3 max-h-64 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
+                            {filteredAvailableDocs.length === 0 ? (
+                                <div className="py-8 text-center text-xs text-text-tertiary space-y-2">
+                                    <p>
+                                        {interviewDocs.length === 0
+                                            ? 'No documents in Knowledge Bank yet.'
+                                            : unattachedDocs.length === 0
+                                            ? 'All Knowledge Bank documents are already attached to this interview.'
+                                            : 'No matching documents found.'}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsAttachModalOpen(false);
+                                            setActiveMainView('knowledge-bank');
+                                        }}
+                                        className="text-amber-500 hover:text-amber-400 underline text-xs font-medium"
+                                    >
+                                        Open Knowledge Bank
+                                    </button>
+                                </div>
+                            ) : (
+                                filteredAvailableDocs.map((doc) => {
+                                    const isChecked = attachSelectedDocIdsSet.has(doc.id);
+                                    const ext = (doc.fileType || '').toLowerCase();
+                                    return (
+                                        <label
+                                            key={doc.id}
+                                            className={`flex items-center justify-between gap-3 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                                                isChecked
+                                                    ? isLight
+                                                        ? 'bg-amber-500/10 border-amber-500/40 text-amber-950'
+                                                        : 'bg-amber-500/15 border-amber-500/40 text-amber-200'
+                                                    : isLight
+                                                    ? 'bg-zinc-50/70 border-zinc-200/80 hover:bg-zinc-100/80'
+                                                    : 'bg-zinc-900/40 border-white/5 hover:bg-white/[0.04]'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    onChange={() => {
+                                                        setAttachSelectedDocIds(prev =>
+                                                            isChecked ? prev.filter(id => id !== doc.id) : [...prev, doc.id]
+                                                        );
+                                                    }}
+                                                    className="rounded border-zinc-500 text-amber-500 focus:ring-amber-500 shrink-0"
+                                                />
+                                                <FileText size={15} className={`shrink-0 ${ext === 'pdf' ? 'text-red-400' : ext === 'docx' ? 'text-blue-400' : 'text-amber-400'}`} />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-xs font-medium truncate text-text-primary">{doc.name}</p>
+                                                    <p className="text-[10px] text-text-tertiary font-mono">
+                                                        {formatDocSize(doc.sizeBytes)} • {doc.fileType?.toUpperCase()}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </label>
+                                    );
+                                })
+                            )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-between">
+                            <span className="text-xs text-text-tertiary font-mono">
+                                {attachSelectedDocIds.length} selected
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsAttachModalOpen(false)}
+                                    className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary rounded-md transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={attachSelectedDocIds.length === 0}
+                                    onClick={async () => {
+                                        const next = Array.from(new Set([...selectedDocIds, ...attachSelectedDocIds]));
+                                        setSelectedDocIds(next);
+                                        if (window.electronAPI?.interviewWorkspaceUpdateDocuments) {
+                                            await window.electronAPI.interviewWorkspaceUpdateDocuments({
+                                                workspaceId: workspaceStateId,
+                                                documentIds: next,
+                                            });
+                                        }
+                                        setSelectedWorkspace(prev => prev ? { ...prev, documentIds: next } : null);
+                                        setWorkspaces(prev => prev.map(w => w.id === workspaceStateId ? { ...w, documentIds: next } : w));
+                                        void persistWorkspaceState({ selectedDocumentIds: next });
+                                        setIsAttachModalOpen(false);
+                                    }}
+                                    className="px-3 py-1.5 text-xs font-medium bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold rounded-md shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Attach Selected ({attachSelectedDocIds.length})
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <DocumentDetailsModal
                 isLight={isLight}
