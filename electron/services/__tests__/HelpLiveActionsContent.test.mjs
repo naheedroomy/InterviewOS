@@ -21,7 +21,7 @@ test('Help settings explains live interview actions in detail', () => {
 });
 
 test('Help Assistant guide teaches live action purpose and expected output', () => {
-  const guide = read('src/content/answercue-help-guide.md');
+  const guide = read('src/content/interviewos-help-guide.md');
   const helpAssistant = read('src/components/help/HelpAssistant.tsx');
 
   assert.match(guide, /## Live Interview Actions/);

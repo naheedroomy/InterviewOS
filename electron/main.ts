@@ -4820,8 +4820,8 @@ export class AppState {
         appName = APP_NAME;
         if (isMac) {
           iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "answercue.icns")
-            : path.join(app.getAppPath(), "assets/answercue/answercue.icns");
+            ? path.join(process.resourcesPath, "icon.icns")
+            : path.join(app.getAppPath(), "assets/icons/mac/icon.icns");
         } else if (isWin) {
           iconPath = app.isPackaged
             ? path.join(process.resourcesPath, "assets/icons/win/icon.ico")

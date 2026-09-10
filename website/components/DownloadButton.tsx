@@ -17,7 +17,7 @@ const LABELS: Record<string, string> = {
   "mac-arm": "Download for Mac",
   "mac-intel": "Download for Mac (Intel)",
   windows: "Download for Windows",
-  unknown: "Download AnswerCue",
+  unknown: "Download InterviewOS",
 };
 
 const AppleIcon = () => (

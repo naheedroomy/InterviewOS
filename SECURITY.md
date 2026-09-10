@@ -2,13 +2,13 @@
 
 _Last updated: June 14, 2026_
 
-AnswerCue is a desktop interview assistant that handles sensitive local data: audio, transcript text, user documents, provider keys, screenshots when enabled, and interview history. Please treat security and privacy issues seriously.
+InterviewOS is a desktop interview assistant that handles sensitive local data: audio, transcript text, user documents, provider keys, screenshots when enabled, and interview history. Please treat security and privacy issues seriously.
 
 ## Supported Versions
 
 Security fixes target the current release line on GitHub:
 
-<https://github.com/FarzamHejaziK/AnswerCue/releases>
+<https://github.com/naheedroomy/InterviewOS/releases>
 
 Older versions may not receive fixes. Please reproduce issues on the latest release or current `main` before reporting when possible.
 
@@ -18,7 +18,7 @@ Do not report security vulnerabilities through public issues, public discussions
 
 Open a private GitHub security advisory draft here:
 
-<https://github.com/FarzamHejaziK/AnswerCue/security/advisories>
+<https://github.com/naheedroomy/InterviewOS/security/advisories>
 
 If GitHub advisories are unavailable, contact the repository owner through the GitHub profile associated with this repository and avoid posting exploit details publicly.
 
@@ -60,6 +60,6 @@ The following are normally out of scope unless they expose user data or enable l
 
 ## Privacy Boundary
 
-AnswerCue should keep local data local unless the user explicitly selects a feature that sends data externally: prompt text (and any included transcripts, documents, or screenshots) to the selected LLM provider, or interview audio to the selected cloud STT provider. The currently supported LLM provider keys are OpenAI, Google Gemini, and Anthropic Claude. Transcription uses the local Moonshine Base model by default; Google Cloud Speech-to-Text is selectable in Settings and sends interview audio to Google when selected.
+InterviewOS should keep local data local unless the user explicitly selects a feature that sends data externally: prompt text (and any included transcripts, documents, or screenshots) to the selected LLM provider, or interview audio to the selected cloud STT provider. The currently supported LLM provider keys are OpenAI, Google Gemini, and Anthropic Claude. Transcription uses the local Moonshine Base model by default; Google Cloud Speech-to-Text is selectable in Settings and sends interview audio to Google when selected.
 
 If you find a path where transcript, document Markdown, screenshots, custom instructions, provider keys, or interview history are sent somewhere unexpected, report it as security-sensitive.

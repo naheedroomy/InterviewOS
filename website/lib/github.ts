@@ -1,4 +1,4 @@
-export const REPO = "FarzamHejaziK/AnswerCue";
+export const REPO = "naheedroomy/InterviewOS";
 export const REPO_URL = `https://github.com/${REPO}`;
 
 export type ReleaseAsset = {

@@ -10,7 +10,7 @@ import { SiOpenid, SiGoogle } from 'react-icons/si';
 import { useShortcuts } from '../../hooks/useShortcuts';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { isMac, getModifierSymbol } from '../../utils/platformUtils';
-import answercueIcon from '../icon.png';
+import appIcon from '../icon.png';
 
 // ----------------------
 // Animations & Mocks
@@ -52,7 +52,7 @@ const MockAppInterface = () => {
                         {/* Logo Button */}
                         <div className="w-8 h-8 rounded-full bg-bg-item-active flex items-center justify-center border border-border-muted overflow-hidden">
                             <img
-                                src={answercueIcon}
+                                src={appIcon}
                                 alt="InterviewOS"
                                 className="w-[20px] h-[20px] object-contain"
                                 style={{ filter: isLight ? 'brightness(0)' : 'brightness(0) invert(1)', opacity: 0.9 }}
@@ -258,7 +258,7 @@ const MockMeetingInterfaceAnim = () => {
                             </div>
                             <div className="flex items-start gap-3">
                                 <div className="mt-0.5 w-5 h-5 rounded-full bg-bg-input flex items-center justify-center border border-border-subtle shrink-0">
-                                    <img src={answercueIcon} alt="AI" className="w-3 h-3 opacity-50 object-contain force-black-icon" />
+                                    <img src={appIcon} alt="AI" className="w-3 h-3 opacity-50 object-contain force-black-icon" />
                                 </div>
                                 <div>
                                     <div className="text-[10px] text-text-tertiary mb-1 font-medium">10:35 AM</div>
@@ -289,7 +289,7 @@ const MockMeetingChatAnim = () => {
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle shrink-0">
                 <div className="flex items-center gap-2 text-text-tertiary">
-                    <img src={answercueIcon} className="w-3.5 h-3.5 force-black-icon opacity-50" alt="logo" />
+                    <img src={appIcon} className="w-3.5 h-3.5 force-black-icon opacity-50" alt="logo" />
                     <span className="text-[13px] font-medium">Search this meeting</span>
                 </div>
                 <X size={16} className="text-text-tertiary" />
@@ -422,7 +422,7 @@ const MockPermissionsAnim = () => {
                 </div>
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
-                        <img src={answercueIcon} alt="InterviewOS" className="w-6 h-6 object-contain rounded drop-shadow-sm opacity-90" />
+                        <img src={appIcon} alt="InterviewOS" className="w-6 h-6 object-contain rounded drop-shadow-sm opacity-90" />
                         <span className="text-text-primary text-sm font-medium">InterviewOS</span>
                     </div>
 
@@ -463,7 +463,7 @@ const MockPillControlsAnim = () => {
             {/* Logo → Launcher */}
             <div className="flex items-center gap-3 p-3 bg-bg-elevated border border-border-subtle rounded-xl">
                 <div className="w-8 h-8 rounded-full bg-bg-item-active flex items-center justify-center border border-border-muted shrink-0 shadow-sm">
-                    <img src={answercueIcon} alt="Logo" className="w-[18px] h-[18px] object-contain force-black-icon opacity-90" />
+                    <img src={appIcon} alt="Logo" className="w-[18px] h-[18px] object-contain force-black-icon opacity-90" />
                 </div>
                 <ArrowRight className="w-3.5 h-3.5 text-text-tertiary shrink-0" />
                 <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -814,10 +814,12 @@ export const HelpSettings: React.FC = () => {
 
     const restoreFloatingHelp = () => {
         try {
+            localStorage.removeItem('interviewos_help_assistant_dismissed_v1');
             localStorage.removeItem('answercue_help_assistant_dismissed_v1');
         } catch {
             /* localStorage can fail in constrained environments */
         }
+        window.dispatchEvent(new Event('interviewos-help-assistant-show'));
         window.dispatchEvent(new Event('answercue-help-assistant-show'));
         setFloatingHelpRestored(true);
         window.setTimeout(() => setFloatingHelpRestored(false), 1600);

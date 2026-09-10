@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, Check, HelpCircle, MessageCircle, Send, Trash2, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import helpGuideMarkdown from '../../content/answercue-help-guide.md?raw';
+import helpGuideMarkdown from '../../content/interviewos-help-guide.md?raw';
 import { useStreamBuffer } from '../../hooks/useStreamBuffer';
 import { genMessageId } from '../../utils/messageId';
 
@@ -17,9 +17,12 @@ type HelpMessage = {
 type HelpState = 'idle' | 'waiting' | 'streaming' | 'error';
 type HelpView = 'chat' | 'guide';
 
-const STORAGE_KEY = 'answercue_help_assistant_messages_v1';
-const DISMISSED_STORAGE_KEY = 'answercue_help_assistant_dismissed_v1';
-const SHOW_HELP_ASSISTANT_EVENT = 'answercue-help-assistant-show';
+const STORAGE_KEY = 'interviewos_help_assistant_messages_v1';
+const LEGACY_STORAGE_KEY = 'answercue_help_assistant_messages_v1';
+const DISMISSED_STORAGE_KEY = 'interviewos_help_assistant_dismissed_v1';
+const LEGACY_DISMISSED_STORAGE_KEY = 'answercue_help_assistant_dismissed_v1';
+const SHOW_HELP_ASSISTANT_EVENT = 'interviewos-help-assistant-show';
+const LEGACY_SHOW_HELP_ASSISTANT_EVENT = 'answercue-help-assistant-show';
 const MAX_STORED_MESSAGES = 80;
 
 const HELP_ASSISTANT_SYSTEM_PROMPT = `You are the InterviewOS Help Assistant.
@@ -58,7 +61,7 @@ const markdownComponents: any = {
 
 const readStoredMessages = (): HelpMessage[] => {
     try {
-        const raw = localStorage.getItem(STORAGE_KEY);
+        const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
         if (!raw) return [];
         const parsed = JSON.parse(raw);
         if (!Array.isArray(parsed)) return [];
@@ -96,7 +99,10 @@ const saveStoredMessages = (messages: HelpMessage[]) => {
 
 const readDismissed = () => {
     try {
-        return localStorage.getItem(DISMISSED_STORAGE_KEY) === 'true';
+        return (
+            localStorage.getItem(DISMISSED_STORAGE_KEY) === 'true' ||
+            localStorage.getItem(LEGACY_DISMISSED_STORAGE_KEY) === 'true'
+        );
     } catch {
         return false;
     }
@@ -147,6 +153,7 @@ export const HelpAssistant: React.FC = () => {
         const restoreHelpAssistant = (event: Event) => {
             try {
                 localStorage.removeItem(DISMISSED_STORAGE_KEY);
+                localStorage.removeItem(LEGACY_DISMISSED_STORAGE_KEY);
             } catch {
                 /* localStorage can fail in constrained environments */
             }
@@ -158,7 +165,11 @@ export const HelpAssistant: React.FC = () => {
         };
 
         window.addEventListener(SHOW_HELP_ASSISTANT_EVENT, restoreHelpAssistant);
-        return () => window.removeEventListener(SHOW_HELP_ASSISTANT_EVENT, restoreHelpAssistant);
+        window.addEventListener(LEGACY_SHOW_HELP_ASSISTANT_EVENT, restoreHelpAssistant);
+        return () => {
+            window.removeEventListener(SHOW_HELP_ASSISTANT_EVENT, restoreHelpAssistant);
+            window.removeEventListener(LEGACY_SHOW_HELP_ASSISTANT_EVENT, restoreHelpAssistant);
+        };
     }, []);
 
     useEffect(() => {

@@ -40,14 +40,14 @@ const crypto = require('crypto');
 
 const VOLNAME = 'InterviewOS';
 const BACKGROUND = path.resolve(__dirname, '..', 'assets', 'dmg-background.png');
-const VOLICON = path.resolve(__dirname, '..', 'assets', 'answercue', 'answercue.icns');
+const VOLICON = path.resolve(__dirname, '..', 'assets', 'icons', 'mac', 'icon.icns');
 
 function sha512base64(file) {
   return crypto.createHash('sha512').update(fs.readFileSync(file)).digest('base64');
 }
 
 function resolveDeveloperIdIdentity() {
-  if (process.env.ANSWERCUE_SIGN_IDENTITY) return process.env.ANSWERCUE_SIGN_IDENTITY;
+  if (process.env.INTERVIEWOS_SIGN_IDENTITY) return process.env.INTERVIEWOS_SIGN_IDENTITY;
   if (process.env.ANSWERCUE_SIGN_IDENTITY) return process.env.ANSWERCUE_SIGN_IDENTITY;
   if (process.env.CSC_NAME) return process.env.CSC_NAME;
   try {

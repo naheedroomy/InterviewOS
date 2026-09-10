@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-Next.js App Router root for the AnswerCue marketing site. Owns the app shell and the single landing page:
+Next.js App Router root for the InterviewOS marketing site. Owns the app shell and the single landing page:
 
 - `layout.tsx` — root layout: global metadata/SEO, font loading, and the page-wide background ambience (mesh/vignette/grain overlays) that wraps every route.
 - `page.tsx` — the one-page marketing site (`/`): hero, undetectable/stealth section, model marquee, features bento, pricing, how-it-works, final CTA, footer.
@@ -27,8 +27,8 @@ Next.js App Router root for the AnswerCue marketing site. Owns the app shell and
 
 ## Integration
 
-- **`@/lib/github`** — `getLatestRelease()` (page version badge) and `getRecentReleases()` + `resolveAssetUrl()` (download route) talk to the GitHub REST API for `FarzamHejaziK/AnswerCue`; optional `GITHUB_TOKEN` env var raises the rate limit. Failures degrade gracefully (fallback version / redirect to releases page).
+- **`@/lib/github`** — `getLatestRelease()` (page version badge) and `getRecentReleases()` + `resolveAssetUrl()` (download route) talk to the GitHub REST API for `naheedroomy/InterviewOS`; optional `GITHUB_TOKEN` env var raises the rate limit. Failures degrade gracefully (fallback version / redirect to releases page).
 - **`@/components/*`** — `DownloadButton` (client, OS detection + dropdown), `AppMock` (pure-JSX product mockup), `Reveal` (scroll animation), `Spotlight` (cursor effects). All styled by `globals.css` tokens.
 - **`app/api/download/[platform]/route.ts`** — the page's only backend dependency; every download CTA resolves through it.
-- **Static assets** — `/icon.png` (favicon/logo, referenced in metadata + nav/footer), `/banner.png` (OG/Twitter image), served from `website/public`.
+- **Static assets** — `/icon.png` (favicon/logo, referenced in metadata + nav/footer), served from `website/public`.
 - **External** — Google Fonts (Inter) via `<link>` preconnect; GitHub repo/releases pages via `REPO_URL` links.

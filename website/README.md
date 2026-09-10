@@ -1,6 +1,6 @@
-# AnswerCue — Marketing Website
+# InterviewOS — Marketing Website
 
-The public landing page for [AnswerCue](https://github.com/FarzamHejaziK/AnswerCue). Built with
+The public landing page for [InterviewOS](https://github.com/naheedroomy/InterviewOS). Built with
 Next.js (App Router) + Tailwind CSS.
 
 ## Download links auto-sync with GitHub Releases

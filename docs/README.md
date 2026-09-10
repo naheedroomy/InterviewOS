@@ -38,7 +38,7 @@ See [PROJECT_STATUS.md](PROJECT_STATUS.md) for the full status summary and links
 | [ROADMAP.md](ROADMAP.md) | Current priorities, near-term reliability/security work, and deferred ideas. |
 | [TESTING.md](TESTING.md) | Supported test commands, test layers, manual Electron checks, and coverage limitations. |
 | [RELEASE.md](RELEASE.md) | Build, signing, notarization, packaging, and release checklist. |
-| [LOCAL_STT_ANSWERCUE_SETUP.md](LOCAL_STT_ANSWERCUE_SETUP.md) | Local transcription setup, expected user experience, and troubleshooting. |
+| [LOCAL_STT_SETUP.md](LOCAL_STT_SETUP.md) | Local transcription setup, expected user experience, and troubleshooting. |
 
 ## Policy and community documents
 

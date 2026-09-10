@@ -73,8 +73,6 @@ async function buildAppIcons() {
   const target1024Files = [
     path.join(rootDir, 'src/components/icon.png'),
     path.join(rootDir, 'assets/icon.png'),
-    path.join(rootDir, 'assets/answercue/app-icon-1024.png'),
-    path.join(rootDir, 'assets/answercue/app-icon-dark-1024.png'),
     path.join(rootDir, 'assets/icons/png/icon_1024x1024.png'),
   ];
 
@@ -129,7 +127,6 @@ async function buildAppIcons() {
 
   // Copy to legacy / other icns locations
   const otherIcnsPaths = [
-    path.join(rootDir, 'assets/answercue/answercue.icns'),
     path.join(rootDir, 'assets/icon.icns'),
     path.join(rootDir, 'src/icons/AppIcon.icns'),
   ];

@@ -5,6 +5,7 @@ const path = require('path');
 
 const nativeModulePath = path.join(__dirname, '..', 'native-module');
 const buildAllMacTargets =
+  process.env.INTERVIEWOS_BUILD_ALL_MAC_ARCHES === '1' ||
   process.env.ANSWERCUE_BUILD_ALL_MAC_ARCHES === '1';
 
 function verifyArtifacts(expectedArtifacts) {

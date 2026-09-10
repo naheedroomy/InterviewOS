@@ -73,7 +73,7 @@ Run this before any release. Launch Electron with `npm start`, then:
 9. Stop the interview.
 10. Confirm prep chat, transcript, and post-interview chat persist.
 
-See [LOCAL_STT_ANSWERCUE_SETUP.md](LOCAL_STT_ANSWERCUE_SETUP.md) for the focused local-transcription check and troubleshooting.
+See [LOCAL_STT_SETUP.md](LOCAL_STT_SETUP.md) for the focused local-transcription check and troubleshooting.
 
 ## Coverage limitations
 

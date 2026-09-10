@@ -39,7 +39,7 @@ the site a stable, platform-aware download link.
 - **`lib/github.ts`**: provides `getRecentReleases`, `resolveAssetUrl`, `pickAsset`, the
   `Platform` type, and `REPO_URL`. This is the only external dependency of the route.
 - **GitHub Releases API**: the route's data source; fetches release metadata (tags, assets)
-  for the `FarzamHejaziK/AnswerCue` repo, optionally authenticated via `GITHUB_TOKEN`.
+  for the `naheedroomy/InterviewOS` repo, optionally authenticated via `GITHUB_TOKEN`.
 - **Frontend**: download buttons/links elsewhere in the site point at this route to obtain a
   platform-appropriate installer URL.
 - **Sibling `[platform]/codemap.md`**: documents the route implementation itself; this file

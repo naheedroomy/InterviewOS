@@ -1,5 +1,5 @@
 /**
- * A stylized mock of the AnswerCue live-interview UI. Pure CSS/JSX — no image —
+ * A stylized mock of the InterviewOS live-interview UI. Pure CSS/JSX — no image —
  * so it stays crisp at any size and sells the actual product experience.
  */
 export default function AppMock() {
@@ -16,7 +16,7 @@ export default function AppMock() {
             <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
             <span className="h-3 w-3 rounded-full bg-[#28c840]" />
           </div>
-          <div className="ml-2 text-xs font-medium text-white/50">AnswerCue — Live Interview</div>
+          <div className="ml-2 text-xs font-medium text-white/50">InterviewOS — Live Interview</div>
           <div className="ml-auto flex items-center gap-3">
             <span className="flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-[11px] font-medium text-white/70 ring-1 ring-white/10">
               <span className="h-1.5 w-1.5 rounded-full bg-brand-purple" /> Claude
@@ -55,7 +55,7 @@ export default function AppMock() {
           <div className="relative space-y-3 bg-[#0c0c16] p-4 sm:p-5">
             <div className="flex items-center justify-between">
               <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">
-                AnswerCue suggests
+                InterviewOS suggests
               </div>
               <span className="text-[10px] text-white/30">using your prep + 2 docs</span>
             </div>

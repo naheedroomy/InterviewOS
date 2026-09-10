@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-Reusable, client-side marketing UI primitives for the AnswerCue landing page. This folder holds the small set of interactive/visual building blocks that the single-page marketing site (`app/page.tsx`) composes into its hero, feature, and CTA sections. It deliberately excludes page-level layout (that lives inline in `app/page.tsx`) and styling utilities (those live in `app/globals.css`).
+Reusable, client-side marketing UI primitives for the InterviewOS landing page. This folder holds the small set of interactive/visual building blocks that the single-page marketing site (`app/page.tsx`) composes into its hero, feature, and CTA sections. It deliberately excludes page-level layout (that lives inline in `app/page.tsx`) and styling utilities (those live in `app/globals.css`).
 
 Four components live here:
 

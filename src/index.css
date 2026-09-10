@@ -1993,7 +1993,7 @@ html[data-platform="linux"] body {
 }
 
 /* ───────────────────────────────────────────────────────────────────────
-   AnswerCue API - New Interactive Pricing switchboard (Liquid Glass)
+   InterviewOS API - New Interactive Pricing switchboard (Liquid Glass)
    ─────────────────────────────────────────────────────────────────────── */
 
 [data-interface-theme="liquid-glass"] .natively-api-selector-bar {
@@ -2339,7 +2339,7 @@ html[data-platform="linux"] body {
   pointer-events: none !important;
 }
 
-/* CTA buttons for AnswerCue API pricing cards */
+/* CTA buttons for InterviewOS API pricing cards */
 [data-interface-theme="liquid-glass"] .natively-api-pricing-cta {
   border-radius: 9999px !important;
   padding: 12px 24px !important;
@@ -2553,7 +2553,7 @@ html[data-platform="linux"] body {
     0 4px 12px rgba(16, 185, 129, 0.35) !important;
 }
 
-/* ─── AnswerCue API Pricing Card System - Modern Theme ─────────────────── */
+/* ─── InterviewOS API Pricing Card System - Modern Theme ─────────────────── */
 
 [data-interface-theme="modern"] .natively-api-selector-bar {
   background: rgba(0, 0, 0, 0.32) !important;
@@ -2801,7 +2801,7 @@ html[data-platform="linux"] body {
   pointer-events: none !important;
 }
 
-/* CTA buttons for AnswerCue API pricing cards (Modern) */
+/* CTA buttons for InterviewOS API pricing cards (Modern) */
 [data-interface-theme="modern"] .natively-api-pricing-cta {
   border-radius: 9999px !important;
   padding: 12px 24px !important;
@@ -3059,7 +3059,7 @@ html[data-platform="linux"] body {
 }
 
 /* ───────────────────────────────────────────────────────────────────────
-   AnswerCue Pro Purchase UI Redesign (Tactile 3D Jelly-Clay / Liquid-Glass)
+   InterviewOS Pro Purchase UI Redesign (Tactile 3D Jelly-Clay / Liquid-Glass)
    ─────────────────────────────────────────────────────────────────────── */
 
 .perspective-1000 {
@@ -4257,7 +4257,7 @@ html[data-platform="linux"] body {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
-   ──── AnswerCue Pro Pricing Interface: Light Mode Optimization Overrides ───
+   ──── InterviewOS Pro Pricing Interface: Light Mode Optimization Overrides ───
    ────────────────────────────────────────────────────────────────────────── */
 
 /* 1. Selector Segmented Control Bar */
@@ -4476,7 +4476,7 @@ html[data-platform="linux"] body {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
-   ──── AnswerCue Pro Pricing: Theme-Responsive Contrast & Glow Enhancements ─
+   ──── InterviewOS Pro Pricing: Theme-Responsive Contrast & Glow Enhancements ─
    ────────────────────────────────────────────────────────────────────────── */
 
 /* A. Default / Dark Mode Badge Text & Icons */
@@ -4623,7 +4623,7 @@ html[data-platform="linux"] body {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
-   ──── AnswerCue Pro Yearly & Lifetime Cards: Light Mode Overrides ──────────
+   ──── InterviewOS Pro Yearly & Lifetime Cards: Light Mode Overrides ──────────
    ────────────────────────────────────────────────────────────────────────── */
 
 /* 1. Card Backgrounds & Specular 3D Borders (No cheap flat white borders) */

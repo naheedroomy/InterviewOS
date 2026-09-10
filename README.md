@@ -60,7 +60,7 @@ Current architecture, status, roadmap, testing, release, and local transcription
 - [Architecture](docs/ARCHITECTURE.md) — system boundaries, core flows, and trust boundaries.
 - [Testing](docs/TESTING.md) — test commands, test layers, and manual Electron checks.
 - [Release](docs/RELEASE.md) — build, signing, and packaging checklist.
-- [Local transcription setup](docs/LOCAL_STT_ANSWERCUE_SETUP.md) — local STT setup and troubleshooting.
+- [Local transcription setup](docs/LOCAL_STT_SETUP.md) — local STT setup and troubleshooting.
 
 ## Local Development
 

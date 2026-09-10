@@ -94,4 +94,4 @@ Canonical project context lives in `docs/README.md`, `docs/ARCHITECTURE.md`, and
 - Current shipped status and known gaps: [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).
 - Tests and manual checks: [`docs/TESTING.md`](docs/TESTING.md).
 - Packaging/signing: [`docs/RELEASE.md`](docs/RELEASE.md).
-- Local STT setup: [`docs/LOCAL_STT_ANSWERCUE_SETUP.md`](docs/LOCAL_STT_ANSWERCUE_SETUP.md).
+- Local STT setup: [`docs/LOCAL_STT_SETUP.md`](docs/LOCAL_STT_SETUP.md).

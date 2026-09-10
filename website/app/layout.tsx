@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
-const SITE = "https://answercue.vercel.app";
+const SITE = "https://interviewos.vercel.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
-  title: "AnswerCue — Free AI Interview Assistant",
+  title: "InterviewOS — Free AI Interview Assistant",
   description:
-    "AnswerCue is a free, undetectable desktop interview assistant — invisible to screen sharing and recording. Bring your own AI model, upload your docs per interview, and control exactly what the assistant remembers and says. Stop paying $1,000s for closed subscriptions.",
+    "InterviewOS is a free, undetectable desktop interview assistant — invisible to screen sharing and recording. Bring your own AI model, upload your docs per interview, and control exactly what the assistant remembers and says. Stop paying $1,000s for closed subscriptions.",
   keywords: [
     "interview assistant",
     "AI interview copilot",
@@ -16,23 +16,23 @@ export const metadata: Metadata = {
     "free interview assistant",
     "bring your own model",
     "live transcription",
-    "AnswerCue",
+    "InterviewOS",
   ],
   openGraph: {
-    title: "AnswerCue — Free AI Interview Assistant",
+    title: "InterviewOS — Free AI Interview Assistant",
     description:
       "Free, bring-your-own-model interview copilot. Upload docs per interview and control exactly what it remembers and says.",
     url: SITE,
-    siteName: "AnswerCue",
-    images: [{ url: "/banner.png", width: 1200, height: 432, alt: "AnswerCue" }],
+    siteName: "InterviewOS",
+    images: [{ url: "/icon.png", width: 1024, height: 1024, alt: "InterviewOS" }],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "AnswerCue — Free AI Interview Assistant",
+    title: "InterviewOS — Free AI Interview Assistant",
     description:
       "Free, bring-your-own-model interview copilot. Upload docs per interview and control exactly what it remembers and says.",
-    images: ["/banner.png"],
+    images: ["/icon.png"],
   },
   icons: { icon: "/icon.png", apple: "/icon.png" },
 };

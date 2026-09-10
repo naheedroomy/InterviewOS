@@ -29,9 +29,9 @@ const Check = ({ className = "" }: { className?: string }) => (
 );
 
 const STEALTH_POINTS: [string, string][] = [
-  ["Hidden from screen sharing", "Share your whole screen on Zoom, Meet, or Teams — AnswerCue stays off the image everyone else sees."],
+  ["Hidden from screen sharing", "Share your whole screen on Zoom, Meet, or Teams — InterviewOS stays off the image everyone else sees."],
   ["Invisible in recordings & screenshots", "Screen recordings and screenshots come out clean. The overlay simply isn't in the captured frame."],
-  ["No bot in the participant list", "AnswerCue never joins the meeting, so there's no extra name or bot for anyone to notice."],
+  ["No bot in the participant list", "InterviewOS never joins the meeting, so there's no extra name or bot for anyone to notice."],
   ["Skips the share picker", "It doesn't show up as a shareable window when someone chooses what to share."],
   ["Out of the app switcher", "Undetectable Mode keeps it from stealing focus or appearing in ⌘-Tab / Alt-Tab."],
   ["Driven by global hotkeys", "Read answers and move the overlay with keyboard shortcuts — no visible clicking around."],
@@ -57,9 +57,9 @@ export default async function Home() {
         <div className="glass border-b border-black/[0.06]">
           <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
             <a href="#top" className="flex items-center gap-2.5">
-              <Image src="/icon.png" alt="AnswerCue" width={32} height={32} className="rounded-lg" />
+              <Image src="/icon.png" alt="InterviewOS" width={32} height={32} className="rounded-lg" />
               <span className="text-lg font-extrabold tracking-tight">
-                Answer<span className="gradient-text">Cue</span>
+                Interview<span className="gradient-text">OS</span>
               </span>
             </a>
             <div className="flex items-center gap-2 sm:gap-7">
@@ -124,7 +124,7 @@ export default async function Home() {
 
         <Reveal delay={160}>
           <p className="mx-auto mt-6 max-w-2xl text-balance text-lg text-ink/55 sm:text-xl">
-            <span className="font-semibold text-ink">Completely free.</span> AnswerCue hears your live
+            <span className="font-semibold text-ink">Completely free.</span> InterviewOS hears your live
             interview, understands your prep, and helps you answer in real time — with your own model,
             your own docs, and full control over what it remembers and says.
           </p>
@@ -179,7 +179,7 @@ export default async function Home() {
                   They&rsquo;ll never know <span className="gradient-text">it&rsquo;s there</span>
                 </h2>
                 <p className="mt-4 max-w-md text-white/60">
-                  AnswerCue lives in a window that screen-share and recording tools simply can&rsquo;t
+                  InterviewOS lives in a window that screen-share and recording tools simply can&rsquo;t
                   capture &mdash; using the same OS-level content protection Zoom uses to hide its own
                   windows. No bot joins the call. Nothing shows up on the other side.
                 </p>
@@ -324,18 +324,18 @@ export default async function Home() {
                 <p className="mt-5 text-lg text-ink/60">
                   Other interview copilots lock the good stuff behind{" "}
                   <span className="font-semibold text-ink">$1,000s a year</span> in subscriptions —
-                  and force you onto their model and their rules. AnswerCue is free. You only pay your
+                  and force you onto their model and their rules. InterviewOS is free. You only pay your
                   own AI provider for the tokens you actually use.
                 </p>
               </div>
               <div className="grid gap-3">
-                {/* What YOU pay with AnswerCue */}
+                {/* What YOU pay with InterviewOS */}
                 <div className="flex items-center justify-between rounded-2xl bg-brand-gradient px-5 py-4 text-white shadow-glow">
                   <span className="flex items-center gap-2 font-bold">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M20 6 9 17l-5-5" />
                     </svg>
-                    AnswerCue
+                    InterviewOS
                   </span>
                   <span className="font-extrabold">Always free</span>
                 </div>
@@ -359,7 +359,7 @@ export default async function Home() {
                   </div>
                 ))}
                 <p className="px-1 text-xs leading-relaxed text-ink/45">
-                  Those are competitors’ prices — not ours. AnswerCue never charges you; you only pay
+                  Those are competitors’ prices — not ours. InterviewOS never charges you; you only pay
                   your own AI provider for tokens.
                 </p>
               </div>
@@ -382,7 +382,7 @@ export default async function Home() {
             [
               ["01", "Set up once", "Add your AI provider key, pick audio devices, grant permissions."],
               ["02", "Prep the interview", "Chat to build context and attach the docs that matter."],
-              ["03", "Go live", "AnswerCue transcribes and suggests answers in real time."],
+              ["03", "Go live", "InterviewOS transcribes and suggests answers in real time."],
               ["04", "Follow up", "Keep asking questions with the full interview as context."],
             ] as const
           ).map(([num, title, body], i) => (
@@ -407,7 +407,7 @@ export default async function Home() {
               Your next interview, <span className="gradient-text">handled.</span>
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-lg text-ink/60">
-              Download AnswerCue free, bring your own model, and walk in ready.
+              Download InterviewOS free, bring your own model, and walk in ready.
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <a
@@ -432,9 +432,9 @@ export default async function Home() {
       <footer className="relative mx-auto mt-24 max-w-6xl px-6 pb-12">
         <div className="flex flex-col items-center justify-between gap-6 border-t border-black/10 pt-8 sm:flex-row">
           <div className="flex items-center gap-2.5">
-            <Image src="/icon.png" alt="AnswerCue" width={28} height={28} className="rounded-md" />
+            <Image src="/icon.png" alt="InterviewOS" width={28} height={28} className="rounded-md" />
             <span className="font-extrabold">
-              Answer<span className="gradient-text">Cue</span>
+              Interview<span className="gradient-text">OS</span>
             </span>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-ink/55">
@@ -448,7 +448,7 @@ export default async function Home() {
           </div>
         </div>
         <p className="mt-6 text-center text-xs text-ink/40">
-          © {new Date().getFullYear()} AnswerCue · Open source under AGPL-3.0 · Built for people who do their own homework.
+          © {new Date().getFullYear()} InterviewOS · Open source under AGPL-3.0 · Built for people who do their own homework.
         </p>
       </footer>
     </main>

@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-The public marketing / landing site for AnswerCue (`answercue-website`). Standalone Next.js app
+The public marketing / landing site for InterviewOS (`interviewos-website`). Standalone Next.js app
 sibling to the root Electron app — it is NOT part of the app runtime. Jobs:
 
 - Present the product landing page (marketing copy, feature/hero sections) to site visitors.
@@ -39,7 +39,7 @@ sibling to the root Electron app — it is NOT part of the app runtime. Jobs:
 ## Integration
 
 - **GitHub Releases (primary integration)**: download endpoints consume the public GitHub API for
-  the `FarzamHejaziK/AnswerCue` repo. Optional `GITHUB_TOKEN` env var (see `.env.example`) raises
+  the `naheedroomy/InterviewOS` repo. Optional `GITHUB_TOKEN` env var (see `.env.example`) raises
   the API rate limit; a fine-grained token with public-repo read access is recommended.
 - **Deployment**: deployed on Vercel with Root Directory set to `website/`; Next.js framework preset
   auto-detected. The site lives in a subfolder of the monorepo and is deployed independently of the

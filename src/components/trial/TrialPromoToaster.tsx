@@ -4,7 +4,7 @@
 //
 // Premium Apple-inspired trial offer card.
 // Shows 5 seconds after launcher is visible on non-first launches,
-// when no AnswerCue API key is stored and no trial is active.
+// when no InterviewOS API key is stored and no trial is active.
 // Violet/purple accent — consistent with the trial brand throughout the app.
 
 import React, { useState, useEffect } from 'react';

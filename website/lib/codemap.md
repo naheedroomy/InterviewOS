@@ -7,7 +7,7 @@ Central GitHub/Release helper module for the website. Owns all knowledge of the 
 ## Design
 
 - Single file `github.ts` exporting:
-  - Constants: `REPO` (`"FarzamHejaziK/AnswerCue"`) and `REPO_URL` (the GitHub repo URL).
+  - Constants: `REPO` (`"naheedroomy/InterviewOS"`) and `REPO_URL` (the GitHub repo URL).
   - Types: `ReleaseAsset` (`name`, `browser_download_url`, `size`), `LatestRelease` (`tag`, `htmlUrl`, `publishedAt`, `assets`), and `Platform` (`"mac" | "mac-arm" | "mac-intel" | "windows"`).
   - Fetch helpers: `getLatestRelease(options)` and `getRecentReleases(count, options)`.
   - Pure matching helpers: `pickAsset(assets, platform)` and `resolveAssetUrl(releases, platform)`.

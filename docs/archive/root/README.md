@@ -12,7 +12,7 @@ This index covers analysis, audit, QA, research, roadmap, and temporary working 
 - [CROSS_PLATFORM_REVIEW.md](CROSS_PLATFORM_REVIEW.md)
 - [QA_REPORT.md](QA_REPORT.md)
 - [QAautomationprompt.md](QAautomationprompt.md)
-- [answercue-market-research.md](answercue-market-research.md)
+- [interviewos-market-research.md](interviewos-market-research.md)
 - [apple-signing-report.md](apple-signing-report.md)
 - [changes.md](changes.md)
 - [comparisonreport.md](comparisonreport.md)
@@ -24,7 +24,7 @@ This index covers analysis, audit, QA, research, roadmap, and temporary working 
 - [visionupgrade.md](visionupgrade.md)
 - [ROADMAP.md](ROADMAP.md) — superseded root roadmap (last updated March 2026); current priorities live in [docs/ROADMAP.md](../../ROADMAP.md).
 - [TOFIX.MD](TOFIX.MD) — temporary root working note from a parallel agent audit; historical scratch notes, not current guidance.
-- [transcription_reliability_improvement_plan.md](transcription_reliability_improvement_plan.md) — superseded local-transcription reliability plan (previously `.docs/`); current transcription guidance lives in [docs/LOCAL_STT_ANSWERCUE_SETUP.md](../../LOCAL_STT_ANSWERCUE_SETUP.md).
+- [transcription_reliability_improvement_plan.md](transcription_reliability_improvement_plan.md) — superseded local-transcription reliability plan (previously `.docs/`); current transcription guidance lives in [docs/LOCAL_STT_SETUP.md](../../LOCAL_STT_SETUP.md).
 - [transcription_reliability_improvement_progress.md](transcription_reliability_improvement_progress.md) — dated progress log for the superseded transcription reliability plan (previously `.docs/`); historical evidence only.
 
 ## Canonical replacements

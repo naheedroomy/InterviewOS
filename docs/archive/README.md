@@ -19,7 +19,7 @@ Current guidance lives in the [documentation index](../README.md):
 - [ROADMAP.md](../ROADMAP.md) — current priorities.
 - [TESTING.md](../TESTING.md) — supported test commands and coverage limitations.
 - [RELEASE.md](../RELEASE.md) — build, signing, notarization, and release checklist.
-- [LOCAL_STT_ANSWERCUE_SETUP.md](../LOCAL_STT_ANSWERCUE_SETUP.md) — local transcription setup and troubleshooting.
+- [LOCAL_STT_SETUP.md](../LOCAL_STT_SETUP.md) — local transcription setup and troubleshooting.
 
 ## Policy
 

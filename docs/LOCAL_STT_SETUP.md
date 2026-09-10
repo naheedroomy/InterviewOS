@@ -1,10 +1,10 @@
-# AnswerCue Local Transcription Setup
+# InterviewOS Local Transcription Setup
 
 _Review date: 2026-08-20_
 
-This guide covers local speech-to-text (STT) setup for AnswerCue. It is part of the [AnswerCue documentation hub](README.md); see [ARCHITECTURE.md](ARCHITECTURE.md) for the transcription pipeline and [TESTING.md](TESTING.md) for the manual transcription check.
+This guide covers local speech-to-text (STT) setup for InterviewOS. It is part of the [InterviewOS documentation hub](README.md); see [ARCHITECTURE.md](ARCHITECTURE.md) for the transcription pipeline and [TESTING.md](TESTING.md) for the manual transcription check.
 
-AnswerCue can transcribe interviews using the local Moonshine Base model. The local model is downloaded during setup and cached in app data, so you do not need to run a separate local transcription server.
+InterviewOS can transcribe interviews using the local Moonshine Base model. The local model is downloaded during setup and cached in app data, so you do not need to run a separate local transcription server.
 
 ## Prerequisites
 
@@ -62,7 +62,7 @@ If your voice appears but the interviewer does not:
 
 - The microphone path is working.
 - Check the meeting app output device.
-- Match that output device in AnswerCue.
+- Match that output device in InterviewOS.
 - Check macOS Screen Recording/system-audio permission if applicable.
 
 If the interviewer appears but your voice does not:

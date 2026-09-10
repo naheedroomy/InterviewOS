@@ -439,8 +439,8 @@ export class WindowHelper {
         if (mode === 'none') {
           if (isMac) {
             return app.isPackaged
-              ? path.join(process.resourcesPath, 'answercue.icns')
-              : path.resolve(__dirname, '../../assets/answercue/answercue.icns');
+              ? path.join(process.resourcesPath, 'icon.icns')
+              : path.resolve(__dirname, '../../assets/icons/mac/icon.icns');
           } else if (isWin) {
             return app.isPackaged
               ? path.join(process.resourcesPath, 'assets/icons/win/icon.ico')
