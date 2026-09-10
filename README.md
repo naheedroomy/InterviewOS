@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="assets/readme/answercue-banner.png" alt="InterviewOS Desktop Workspace" width="100%">
-</p>
+
 
 # InterviewOS
 
