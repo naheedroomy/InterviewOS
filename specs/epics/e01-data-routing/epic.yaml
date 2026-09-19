@@ -10,5 +10,5 @@ stories:
   - id: e01s01
     title: Enforce every outbound request scope
     bcps: 8
-    status: todo
+    status: planned
     tasks: e01s01-enforce-request-scope-tasks.yaml

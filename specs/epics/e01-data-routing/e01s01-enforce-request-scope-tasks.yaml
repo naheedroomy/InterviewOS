@@ -1,29 +1,58 @@
 story_id: e01s01
 title: Enforce every outbound request scope
-status: todo
+status: failing
 bcps: 8
+risk: P0
 tasks:
   - id: e01s01-01
     description: >-
-      Add request-policy tests for transcript, document, screenshot, and mixed
-      payloads, including denied-scope cases.
+      Add focused policy regression coverage for transcript, screenshot, and
+      mixed explicit/inferred scopes, including profile-history and
+      post-call-summary denial with local-fallback and cloud-omission cases.
     verify: >-
       npm run build:electron && node --test
-      electron/llm/__tests__/ProviderScopePolicy.test.mjs
-    status: todo
+      electron/services/__tests__/LLMHelperScopePropagation.test.mjs
+    risk: P0
+    security: high
+    status: failing
+    allure:
+      severity: critical
+      categories:
+        - Security Review
+        - Provider data scope
+        - Regression
   - id: e01s01-02
     description: >-
-      Derive a canonical union of data scopes from the actual outbound payload
-      before provider routing.
+      Make LLMHelper derive a canonical scope union and preserve caller-owned
+      extra scopes through optional trailing legacy Gemini dispatch parameters
+      before existing denial and fallback routing.
     verify: >-
       npm run build:electron && node --test
-      electron/llm/__tests__/ProviderScopePolicy.test.mjs
-    status: todo
+      electron/services/__tests__/LLMHelperScopePropagation.test.mjs
+    risk: P0
+    security: high
+    status: failing
+    allure:
+      severity: critical
+      categories:
+        - Security Review
+        - Provider data scope
   - id: e01s01-03
     description: >-
-      Reject requests whose real data scope is not permitted and verify that
-      denied content is absent from logs and provider requests.
+      Remove raw prompt data from the affected WhatToAnswer diagnostic and
+      prove the focused propagation, provider-router, and local-fallback
+      suites pass with no new security findings in affected paths.
     verify: >-
       npm run build:electron && node --test
-      electron/llm/__tests__/ProviderScopePolicy.test.mjs
-    status: todo
+      electron/services/__tests__/LLMHelperScopePropagation.test.mjs
+      electron/llm/__tests__/ProviderRouter.test.mjs
+      electron/services/__tests__/ScopeLocalFallback.test.mjs
+    risk: P0
+    security: high
+    status: failing
+    allure:
+      severity: critical
+      categories:
+        - Security Review
+        - Sensitive logging
+        - Regression
