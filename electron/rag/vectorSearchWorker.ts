@@ -117,6 +117,7 @@ const dbCache = new Map<string, Database.Database>();
 function getDb(dbPath: string, extPath: string): Database.Database {
     if (dbCache.has(dbPath)) return dbCache.get(dbPath)!;
     const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+    db.pragma('foreign_keys = ON');
     try {
         db.loadExtension(extPath);
     } catch (e) {

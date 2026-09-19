@@ -168,7 +168,7 @@ export class LLMHelper {
 
   private scopesForPayload(text: string, imagePaths?: string[], extraScopes: ProviderDataScope[] = []): ProviderDataScope[] {
     const scopes = new Set<ProviderDataScope>(extraScopes);
-    if (text.trim().length > 0 && extraScopes.length === 0) scopes.add('transcript');
+    if (text.trim().length > 0) scopes.add('transcript');
     if (imagePaths?.length) scopes.add('screenshots');
     return [...scopes];
   }
@@ -186,7 +186,12 @@ export class LLMHelper {
       console.warn(`[ScopeFallback] ${scope} denied for cloud; routing to Ollama`);
       return;
     }
-    console.warn(`[ScopeFallback] ${scope} denied; Ollama unavailable, omitting from context`);
+    console.warn(`[ScopeFallback] ${scope} denied; Ollama unavailable, blocking cloud dispatch`);
+  }
+
+  private scopeBlockedResponse(deniedScopes: ProviderDataScope[]): string {
+    const scopeLabel = deniedScopes.join(', ');
+    return `This request contains ${scopeLabel} data that is disabled for cloud providers. Start Ollama to process it locally, or update the provider data settings.`;
   }
 
   constructor(apiKey?: string, useOllama: boolean = false, ollamaModel?: string, ollamaUrl?: string, groqApiKey?: string, openaiApiKey?: string, claudeApiKey?: string, deepseekApiKey?: string) {
@@ -1532,7 +1537,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     return blocks;
   }
 
-  public async chatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false, alternateGroqMessage?: string): Promise<string> {
+  public async chatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false, alternateGroqMessage?: string, extraDataScopes: ProviderDataScope[] = []): Promise<string> {
     try {
       console.log(`[LLMHelper] chatWithGemini called`, { messageLength: message.length, imageCount: imagePaths?.length ?? 0, hasContext: Boolean(context) })
 
@@ -1598,10 +1603,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           : `${systemPrompt}\n\n${message}`;
       };
 
-      // For OpenAI/Claude: separate system prompt + user message
-      const userContent = context
-        ? `CONTEXT:\n${context}\n\nUSER QUESTION:\n${message}`
-        : message;
       const finalGeminiPrompt = this.injectLanguageInstruction(HARD_SYSTEM_PROMPT);
       const finalGroqPrompt = alternateGroqMessage || this.injectLanguageInstruction(GROQ_SYSTEM_PROMPT);
 
@@ -1609,12 +1610,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         gemini: buildMessage(finalGeminiPrompt),
         groq: buildMessage(finalGroqPrompt),
       };
-      const contextScopes = context ? ['transcript' as ProviderDataScope, ...this.inferContextScopes(context)] : [];
+      const contextScopes = context ? ['transcript' as ProviderDataScope, ...extraDataScopes, ...this.inferContextScopes(context)] : extraDataScopes;
       const outboundScopes = this.scopesForPayload(message, imagePaths, contextScopes);
       const scopePolicy = this.getProviderScopePolicy();
       const deniedOutboundScopes = this.getDeniedOutboundScopes(message, imagePaths, contextScopes);
-      const shouldOmitContext = deniedOutboundScopes.some(scope => scope === 'transcript' || scope === 'reference_files' || scope === 'profile_history' || scope === 'post_call_summary');
-      const cloudContext = shouldOmitContext ? undefined : context;
+      const cloudContext = context;
       const buildCloudMessage = (systemPrompt: string) => {
         if (skipSystemPrompt) {
           return cloudContext
@@ -1642,6 +1642,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         if (ollamaAvailable) {
           return await this.callOllama(combinedMessages.gemini, imagePaths, undefined);
         }
+        return this.scopeBlockedResponse(deniedOutboundScopes);
       }
 
       // System prompts for OpenAI/Claude/Codex CLI (skipped if skipSystemPrompt)
@@ -1701,7 +1702,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           cloudCombinedMessages.gemini,
           customSystemPrompt,
           message,
-          shouldOmitContext ? "" : context || "",
+          context || "",
           cloudImagePaths?.[0]
         );
         return this.processResponse(response);
@@ -2949,11 +2950,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
    *
    * MULTIMODAL: Gemini-only (existing logic)
    */
-  public async * streamChatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  public async * streamChatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false, abortSignal?: AbortSignal, extraDataScopes: ProviderDataScope[] = []): AsyncGenerator<string, void, unknown> {
     console.log(`[LLMHelper] streamChatWithGemini called`, { messageLength: message.length, imageCount: imagePaths?.length ?? 0, hasContext: Boolean(context) });
 
     let isMultimodal = !!(imagePaths?.length);
-    const contextScopes = context ? ['transcript' as ProviderDataScope, ...this.inferContextScopes(context)] : [];
+    const contextScopes = context ? ['transcript' as ProviderDataScope, ...extraDataScopes, ...this.inferContextScopes(context)] : extraDataScopes;
     const deniedOutboundScopes = this.getDeniedOutboundScopes(message, imagePaths, contextScopes);
     if (deniedOutboundScopes.length > 0) {
       const ollamaAvailable = this.useOllama && await this.checkOllamaAvailable(deniedOutboundScopes.includes('screenshots'));
@@ -2965,9 +2966,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         yield await this.callOllama(localCombined, imagePaths, skipSystemPrompt ? undefined : this.injectLanguageInstruction(HARD_SYSTEM_PROMPT));
         return;
       }
-      if (deniedOutboundScopes.some(scope => scope === 'transcript' || scope === 'reference_files' || scope === 'profile_history' || scope === 'post_call_summary')) context = undefined;
-      if (deniedOutboundScopes.includes('screenshots')) imagePaths = undefined;
-      isMultimodal = !!(imagePaths?.length);
+      yield this.scopeBlockedResponse(deniedOutboundScopes);
+      return;
     }
 
     // Build single-string messages for Groq/Gemini (which use combined prompts)
@@ -3451,7 +3451,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // Preparation
     let isMultimodal = !!(imagePaths?.length);
-    const initialOutboundText = [context, message].filter(Boolean).join('\n\n');
     const contextScopes = [...extraDataScopes, ...this.inferContextScopes(context)];
     const deniedOutboundScopes = this.getDeniedOutboundScopes(message, imagePaths, contextScopes);
     if (deniedOutboundScopes.length > 0) {
@@ -3463,12 +3462,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         yield* this.streamWithOllama(message, context, this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT), imagePaths, abortSignal);
         return;
       }
-      if (deniedOutboundScopes.includes('transcript')) context = undefined;
-      if (deniedOutboundScopes.includes('reference_files')) context = undefined;
-      if (deniedOutboundScopes.includes('profile_history')) context = undefined;
-      if (deniedOutboundScopes.includes('post_call_summary')) context = undefined;
-      if (deniedOutboundScopes.includes('screenshots')) imagePaths = undefined;
-      isMultimodal = !!(imagePaths?.length);
+      yield this.scopeBlockedResponse(deniedOutboundScopes);
+      return;
     }
 
     // Determine the system prompt to use

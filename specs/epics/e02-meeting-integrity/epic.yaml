@@ -4,17 +4,17 @@ scope_item: P0-04
 delta: MODIFIED
 wsjf: 6.5
 total_bcps: 13
-status: planning
+status: done
 dependencies:
   - e01s01
 stories:
   - id: e02s01
     title: Finalize one authoritative meeting record
     bcps: 8
-    status: todo
+    status: done
     tasks: e02s01-finalize-authoritative-meeting-tasks.yaml
   - id: e02s02
     title: Exclude ephemeral meetings from recovery
     bcps: 5
-    status: todo
+    status: done
     tasks: e02s02-exclude-ephemeral-recovery-tasks.yaml

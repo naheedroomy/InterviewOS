@@ -2,8 +2,8 @@ release: phase-0
 status: planning
 stories:
   e01s01: todo
-  e02s01: todo
-  e02s02: todo
+  e02s01: done
+  e02s02: done
   e03s01: todo
   e04s01: todo
   e05s01: todo

@@ -1,6 +1,6 @@
 story_id: e02s01
 title: Finalize one authoritative meeting record
-status: todo
+status: done
 bcps: 8
 tasks:
   - id: e02s01-01
@@ -10,7 +10,7 @@ tasks:
     verify: >-
       npm run build:electron && node --test
       electron/db/__tests__/MeetingPersistenceLifecycle.test.mjs
-    status: todo
+    status: done
   - id: e02s01-02
     description: >-
       Make database connections enforce declared foreign-key behavior and make
@@ -18,7 +18,7 @@ tasks:
     verify: >-
       npm run build:electron && node --test
       electron/db/__tests__/MeetingPersistenceLifecycle.test.mjs
-    status: todo
+    status: done
   - id: e02s01-03
     description: >-
       Replace stale transcript and AI-interaction children during finalization
@@ -26,4 +26,4 @@ tasks:
     verify: >-
       npm run build:electron && node --test
       electron/db/__tests__/MeetingPersistenceLifecycle.test.mjs
-    status: todo
+    status: done

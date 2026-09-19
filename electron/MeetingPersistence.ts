@@ -553,6 +553,10 @@ Return ONLY valid JSON (no markdown code blocks):
     public async recoverUnprocessedMeetings(): Promise<void> {
         console.log('[MeetingPersistence] Checking for unprocessed meetings...');
         const db = DatabaseManager.getInstance();
+        const removedEphemeralIds = db.deleteEphemeralMeetings();
+        if (removedEphemeralIds.length > 0) {
+            console.log(`[MeetingPersistence] Removed ${removedEphemeralIds.length} interrupted live-indexing record(s).`);
+        }
         const unprocessed = db.getUnprocessedMeetings();
 
         if (unprocessed.length === 0) {

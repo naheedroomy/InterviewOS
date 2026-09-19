@@ -1,6 +1,6 @@
 story_id: e02s02
 title: Exclude ephemeral meetings from recovery
-status: todo
+status: done
 bcps: 5
 tasks:
   - id: e02s02-01
@@ -10,7 +10,7 @@ tasks:
     verify: >-
       npm run build:electron && node --test
       electron/rag/__tests__/MeetingRecovery.test.mjs
-    status: todo
+    status: done
   - id: e02s02-02
     description: >-
       Model ephemeral live-meeting state distinctly from persisted meeting state
@@ -18,7 +18,7 @@ tasks:
     verify: >-
       npm run build:electron && node --test
       electron/rag/__tests__/MeetingRecovery.test.mjs
-    status: todo
+    status: done
   - id: e02s02-03
     description: >-
       Ensure recovery removes ephemeral state without creating a user-visible
@@ -26,4 +26,4 @@ tasks:
     verify: >-
       npm run build:electron && node --test
       electron/rag/__tests__/MeetingRecovery.test.mjs
-    status: todo
+    status: done
