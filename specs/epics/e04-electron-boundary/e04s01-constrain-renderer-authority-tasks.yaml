@@ -1,0 +1,29 @@
+story_id: e04s01
+title: Constrain remote renderer authority
+status: todo
+bcps: 8
+tasks:
+  - id: e04s01-01
+    description: >-
+      Create an Electron-boundary regression suite covering navigation,
+      window creation, remote script loading, and exposed preload methods.
+    verify: >-
+      npm run build:electron && node --test
+      electron/test/__tests__/RendererBoundary.test.mjs
+    status: todo
+  - id: e04s01-02
+    description: >-
+      Remove remote renderer script execution and move any approved telemetry
+      transport behind a narrow main-process boundary.
+    verify: >-
+      npm run build:electron && node --test
+      electron/test/__tests__/RendererBoundary.test.mjs
+    status: todo
+  - id: e04s01-03
+    description: >-
+      Minimize per-window preload authority and protect file operations with
+      native user-selection capability checks.
+    verify: >-
+      npm run build:electron && node --test
+      electron/test/__tests__/RendererBoundary.test.mjs
+    status: todo

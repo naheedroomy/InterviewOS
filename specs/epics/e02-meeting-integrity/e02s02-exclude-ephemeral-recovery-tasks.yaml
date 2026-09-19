@@ -1,0 +1,29 @@
+story_id: e02s02
+title: Exclude ephemeral meetings from recovery
+status: todo
+bcps: 5
+tasks:
+  - id: e02s02-01
+    description: >-
+      Add a recovery regression test that simulates a crash while live RAG state
+      exists without a user-finalized meeting.
+    verify: >-
+      npm run build:electron && node --test
+      electron/rag/__tests__/MeetingRecovery.test.mjs
+    status: todo
+  - id: e02s02-02
+    description: >-
+      Model ephemeral live-meeting state distinctly from persisted meeting state
+      in the recovery path.
+    verify: >-
+      npm run build:electron && node --test
+      electron/rag/__tests__/MeetingRecovery.test.mjs
+    status: todo
+  - id: e02s02-03
+    description: >-
+      Ensure recovery removes ephemeral state without creating a user-visible
+      meeting or retaining its temporary artifacts.
+    verify: >-
+      npm run build:electron && node --test
+      electron/rag/__tests__/MeetingRecovery.test.mjs
+    status: todo

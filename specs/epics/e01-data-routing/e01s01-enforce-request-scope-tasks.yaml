@@ -1,0 +1,29 @@
+story_id: e01s01
+title: Enforce every outbound request scope
+status: todo
+bcps: 8
+tasks:
+  - id: e01s01-01
+    description: >-
+      Add request-policy tests for transcript, document, screenshot, and mixed
+      payloads, including denied-scope cases.
+    verify: >-
+      npm run build:electron && node --test
+      electron/llm/__tests__/ProviderScopePolicy.test.mjs
+    status: todo
+  - id: e01s01-02
+    description: >-
+      Derive a canonical union of data scopes from the actual outbound payload
+      before provider routing.
+    verify: >-
+      npm run build:electron && node --test
+      electron/llm/__tests__/ProviderScopePolicy.test.mjs
+    status: todo
+  - id: e01s01-03
+    description: >-
+      Reject requests whose real data scope is not permitted and verify that
+      denied content is absent from logs and provider requests.
+    verify: >-
+      npm run build:electron && node --test
+      electron/llm/__tests__/ProviderScopePolicy.test.mjs
+    status: todo

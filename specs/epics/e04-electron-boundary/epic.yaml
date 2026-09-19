@@ -1,0 +1,15 @@
+id: e04
+title: Electron desktop boundary
+scope_item: P0-02
+delta: MODIFIED
+wsjf: 5.8
+total_bcps: 8
+status: planning
+dependencies:
+  - e03s01
+stories:
+  - id: e04s01
+    title: Constrain remote renderer authority
+    bcps: 8
+    status: todo
+    tasks: e04s01-constrain-renderer-authority-tasks.yaml

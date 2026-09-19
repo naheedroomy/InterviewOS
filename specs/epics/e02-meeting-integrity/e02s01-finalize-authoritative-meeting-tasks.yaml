@@ -1,0 +1,29 @@
+story_id: e02s01
+title: Finalize one authoritative meeting record
+status: todo
+bcps: 8
+tasks:
+  - id: e02s01-01
+    description: >-
+      Create a temporary SQLite lifecycle test for placeholder creation,
+      finalization, retrieval, and deletion of one meeting.
+    verify: >-
+      npm run build:electron && node --test
+      electron/db/__tests__/MeetingPersistenceLifecycle.test.mjs
+    status: todo
+  - id: e02s01-02
+    description: >-
+      Make database connections enforce declared foreign-key behavior and make
+      meeting finalization atomic.
+    verify: >-
+      npm run build:electron && node --test
+      electron/db/__tests__/MeetingPersistenceLifecycle.test.mjs
+    status: todo
+  - id: e02s01-03
+    description: >-
+      Replace stale transcript and AI-interaction children during finalization
+      so the saved meeting has exactly one authoritative child set.
+    verify: >-
+      npm run build:electron && node --test
+      electron/db/__tests__/MeetingPersistenceLifecycle.test.mjs
+    status: todo

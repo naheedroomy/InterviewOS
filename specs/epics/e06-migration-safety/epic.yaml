@@ -1,0 +1,14 @@
+id: e06
+title: Database migration safety
+scope_item: P0-06
+delta: MODIFIED
+wsjf: 4.8
+total_bcps: 5
+status: planning
+dependencies: []
+stories:
+  - id: e06s01
+    title: Make failed migrations recoverable
+    bcps: 5
+    status: todo
+    tasks: e06s01-recoverable-migrations-tasks.yaml

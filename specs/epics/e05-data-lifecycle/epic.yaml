@@ -1,0 +1,20 @@
+id: e05
+title: User data lifecycle
+scope_item: P0-05
+delta: MODIFIED
+wsjf: 5.4
+total_bcps: 13
+status: planning
+dependencies:
+  - e02s01
+stories:
+  - id: e05s01
+    title: Delete the complete meeting footprint
+    bcps: 8
+    status: todo
+    tasks: e05s01-delete-meeting-footprint-tasks.yaml
+  - id: e05s02
+    title: Make displayed retention behavior true
+    bcps: 5
+    status: todo
+    tasks: e05s02-enforce-retention-policy-tasks.yaml

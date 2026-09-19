@@ -1,0 +1,29 @@
+story_id: e06s01
+title: Make failed migrations recoverable
+status: todo
+bcps: 5
+tasks:
+  - id: e06s01-01
+    description: >-
+      Add failure-injection tests for migration statements and assert that the
+      schema version is unchanged after an unsuccessful migration.
+    verify: >-
+      npm run build:electron && node --test
+      electron/db/__tests__/MigrationRecovery.test.mjs
+    status: todo
+  - id: e06s01-02
+    description: >-
+      Advance the database version only after the full migration commits and
+      schema verification succeeds.
+    verify: >-
+      npm run build:electron && node --test
+      electron/db/__tests__/MigrationRecovery.test.mjs
+    status: todo
+  - id: e06s01-03
+    description: >-
+      Provide an idempotent recovery path for a failed upgrade and make its
+      failure mode diagnosable to support.
+    verify: >-
+      npm run build:electron && node --test
+      electron/db/__tests__/MigrationRecovery.test.mjs
+    status: todo

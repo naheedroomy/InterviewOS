@@ -1,0 +1,14 @@
+id: e03
+title: Consent and truthful telemetry
+scope_item: P0-01
+delta: MODIFIED
+wsjf: 6.0
+total_bcps: 5
+status: planning
+dependencies: []
+stories:
+  - id: e03s01
+    title: Let users inspect legal terms and choose analytics
+    bcps: 5
+    status: todo
+    tasks: e03s01-consent-and-telemetry-tasks.yaml

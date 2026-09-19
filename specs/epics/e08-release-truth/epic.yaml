@@ -1,0 +1,16 @@
+id: e08
+title: Release and platform truthfulness
+scope_item: P0-07
+delta: MODIFIED
+wsjf: 3.9
+total_bcps: 8
+status: planning
+dependencies:
+  - e07s01
+  - e07s02
+stories:
+  - id: e08s01
+    title: Validate every advertised release path
+    bcps: 8
+    status: todo
+    tasks: e08s01-validate-release-paths-tasks.yaml

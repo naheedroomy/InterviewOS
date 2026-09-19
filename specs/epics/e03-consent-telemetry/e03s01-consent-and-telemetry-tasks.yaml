@@ -1,0 +1,29 @@
+story_id: e03s01
+title: Let users inspect legal terms and choose analytics
+status: todo
+bcps: 5
+tasks:
+  - id: e03s01-01
+    description: >-
+      Add IPC tests proving canonical Terms and Privacy destinations open while
+      unapproved external destinations remain blocked.
+    verify: >-
+      npm run build:electron && node --test
+      electron/services/__tests__/ExternalUrlPolicy.test.mjs
+    status: todo
+  - id: e03s01-02
+    description: >-
+      Make analytics disabled until informed consent and persist the user's
+      explicit preference without collecting interview activity beforehand.
+    verify: >-
+      npm run build:electron && node --test
+      electron/services/__tests__/ConsentTelemetry.test.mjs
+    status: todo
+  - id: e03s01-03
+    description: >-
+      Align telemetry disclosures, event identity, version identity, and the
+      enabled analytics route with the actual runtime behavior.
+    verify: >-
+      npm run build:electron && node --test
+      electron/services/__tests__/ConsentTelemetry.test.mjs
+    status: todo

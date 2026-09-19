@@ -1,0 +1,25 @@
+id: e07
+title: Behavior and desktop quality gates
+scope_item: P0-08
+delta: MODIFIED
+wsjf: 4.4
+total_bcps: 16
+status: planning
+dependencies:
+  - e01s01
+  - e02s01
+  - e03s01
+  - e04s01
+  - e05s01
+  - e06s01
+stories:
+  - id: e07s01
+    title: Run behavioral data-lifecycle tests by default
+    bcps: 8
+    status: todo
+    tasks: e07s01-default-behavior-gate-tasks.yaml
+  - id: e07s02
+    title: Smoke the packaged Electron trust boundary
+    bcps: 8
+    status: todo
+    tasks: e07s02-electron-smoke-gate-tasks.yaml
