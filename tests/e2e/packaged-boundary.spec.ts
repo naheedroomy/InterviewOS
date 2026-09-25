@@ -51,8 +51,8 @@ test('packaged app starts with isolated data and reports permission state throug
     await expect.poll(() => {
       page = app!.windows().find(candidate => {
         try {
-          const windowName = new URL(candidate.url()).searchParams.get('window');
-          return windowName === null || windowName === 'launcher';
+          const u = new URL(candidate.url());
+          return u.protocol === 'file:' && u.searchParams.get('window') === 'launcher';
         } catch {
           return false;
         }
@@ -63,7 +63,8 @@ test('packaged app starts with isolated data and reports permission state throug
     await app.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
     traceStarted = true;
 
-    await page.waitForLoadState('domcontentloaded');
+    await page!.waitForLoadState('domcontentloaded');
+    await page!.waitForFunction(() => typeof (window as any).electronAPI?.checkPermissions === 'function', { timeout: 30_000 });
     await expect.poll(() => page!.url(), { message: 'packaged UI should load from its local file bundle' })
       .toMatch(/^file:/);
 

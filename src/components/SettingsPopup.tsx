@@ -80,8 +80,7 @@ const SettingsPopup = () => {
             isFirstRender.current = false;
             // Ensure backend is synced on mount (even if no change)
             try {
-                // @ts-ignore
-                window.electronAPI?.invoke('set-groq-fast-text-mode', useGroqFastText);
+                (window.electronAPI as any)?.setGroqFastTextMode?.(useGroqFastText);
             } catch (e) {
                 console.error(e);
             }
@@ -91,8 +90,7 @@ const SettingsPopup = () => {
         // Apply Groq Text Mode
         localStorage.setItem('natively_groq_fast_text', String(useGroqFastText));
         try {
-            // @ts-ignore - electronAPI not typed in this file yet
-            window.electronAPI?.invoke('set-groq-fast-text-mode', useGroqFastText);
+            (window.electronAPI as any)?.setGroqFastTextMode?.(useGroqFastText);
         } catch (e) {
             console.error(e);
         }
