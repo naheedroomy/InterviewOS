@@ -1,0 +1,17 @@
+id: e09
+title: Provider and model configuration
+scope_item: P1-01
+delta: ADDED
+wsjf: 8.5
+total_bcps: 12
+status: in_progress
+dependencies:
+  - e01
+  - e03
+  - e04
+stories:
+  - id: e09s01
+    title: Modern AI provider registry, model discovery, and multi-endpoint configuration
+    bcps: 12
+    status: in_progress
+    tasks: e09s01-provider-configuration-tasks.yaml

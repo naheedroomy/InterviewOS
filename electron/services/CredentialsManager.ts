@@ -8,16 +8,45 @@ import fs from 'fs';
 import path from 'path';
 
 const CREDENTIALS_PATH = path.join(app.getPath('userData'), 'credentials.enc');
-const FALLBACK_DEFAULT_MODEL = 'gemini-3.5-flash';
+const FALLBACK_DEFAULT_MODEL = 'gemini-3.8-flash';
 const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
     natively: 'natively',
     openai: 'chat-latest',
     gemini: FALLBACK_DEFAULT_MODEL,
-    claude: 'claude-sonnet-4-6',
+    claude: 'claude-sonnet-5',
     groq: 'llama-3.3-70b-versatile',
-    deepseek: 'deepseek-v4-flash',
+    deepseek: 'deepseek-v4.1-flash',
 };
 const CONFIGURED_PROVIDER_ORDER = ['natively', 'openai', 'gemini', 'claude', 'groq', 'deepseek'];
+
+export function isLoopbackUrl(urlStr: string): boolean {
+    try {
+        const parsed = new URL(urlStr);
+        const hostname = parsed.hostname.toLowerCase();
+        return (
+            hostname === 'localhost' ||
+            hostname === '127.0.0.1' ||
+            hostname === '::1' ||
+            hostname === '0.0.0.0' ||
+            hostname.endsWith('.localhost')
+        );
+    } catch {
+        return false;
+    }
+}
+
+export interface OpenAICompatibleEndpoint {
+    id: string;                      // Unique slug (e.g. 'openrouter', 'vllm-local-qwen')
+    name: string;                    // User-facing label (e.g. 'OpenRouter DeepSeek', 'Local vLLM')
+    baseUrl: string;                 // Base URL (e.g. 'https://openrouter.ai/api/v1', 'http://127.0.0.1:8000/v1')
+    apiKey?: string;                 // Optional API key (required for cloud, optional for local)
+    modelId: string;                 // Selected model identifier (e.g. 'anthropic/claude-3.5-sonnet')
+    customHeaders?: Record<string, string>; // Optional headers (e.g. { 'HTTP-Referer': 'https://interviewos.dev' })
+    supportsVision: boolean;         // Multimodal screenshot analysis flag
+    isLocal: boolean;                // Auto-detected loopback (localhost / 127.0.0.1 / ::1) or user-flagged
+    timeoutMs?: number;              // Request timeout (defaults to 30000ms)
+    enabled: boolean;                // Active state toggle
+}
 
 export interface CustomProvider {
     id: string;
@@ -50,6 +79,8 @@ export interface StoredCredentials {
     googleServiceAccountPath?: string;
     customProviders?: CustomProvider[];
     curlProviders?: CurlProvider[];
+    openAiCompatibleEndpoints?: OpenAICompatibleEndpoint[];
+    thinkingEffort?: 'auto' | 'low' | 'medium' | 'high';
     defaultModel?: string;
     nativelyApiKey?: string;
     // STT Provider settings — runtime normalization in init() is authoritative;
@@ -256,6 +287,12 @@ export class CredentialsManager {
         if ([...(this.credentials.curlProviders || []), ...(this.credentials.customProviders || [])].some(provider => provider.id === modelId)) {
             return 'custom';
         }
+        const customEndpoint = (this.credentials.openAiCompatibleEndpoints || []).find(
+            e => e.id === modelId || `openai-compatible:${e.id}` === modelId
+        );
+        if (customEndpoint) {
+            return 'openai-compatible';
+        }
         return null;
     }
 
@@ -273,6 +310,7 @@ export class CredentialsManager {
                 return this.hasKey(this.credentials.groqApiKey);
             case 'deepseek':
                 return this.hasKey(this.credentials.deepseekApiKey);
+            case 'openai-compatible':
             case 'custom':
             case 'local':
                 return true;
@@ -286,7 +324,9 @@ export class CredentialsManager {
             if (this.isProviderConfigured(provider)) return DEFAULT_MODEL_BY_PROVIDER[provider];
         }
         const customProvider = [...(this.credentials.curlProviders || []), ...(this.credentials.customProviders || [])][0];
-        return customProvider?.id || null;
+        if (customProvider?.id) return customProvider.id;
+        const openAiEndpoint = (this.credentials.openAiCompatibleEndpoints || []).find(e => e.enabled);
+        return openAiEndpoint?.id || null;
     }
 
     private resolveDefaultModel(): string | null {
@@ -320,6 +360,9 @@ export class CredentialsManager {
         // Custom providers: only count if they have screenshots scope AND multimodal flag
         const custom = this.credentials.customProviders || [];
         if (custom.some(p => (p as any)?.multimodal === true)) return true;
+        // OpenAI-compatible endpoints with supportsVision
+        const openAiEndpoints = this.credentials.openAiCompatibleEndpoints || [];
+        if (openAiEndpoints.some(e => e.enabled && e.supportsVision)) return true;
         return this.anyLocalVisionProviderConfigured();
     }
 
@@ -336,6 +379,9 @@ export class CredentialsManager {
         // Codex CLI is local in normal install — capability is verified by ProviderRouter.
         const codexCliPath = (this.credentials as any).codexCliPath as string | undefined;
         if (codexCliPath && codexCliPath.trim().length > 0) return true;
+        // Local OpenAI-compatible endpoint with vision
+        const openAiEndpoints = this.credentials.openAiCompatibleEndpoints || [];
+        if (openAiEndpoints.some(e => e.enabled && e.isLocal && e.supportsVision)) return true;
         return false;
     }
 
@@ -577,6 +623,63 @@ export class CredentialsManager {
         this.credentials.curlProviders = this.credentials.curlProviders.filter(p => p.id !== id);
         this.saveCredentials();
         console.log(`[CredentialsManager] Curl Provider '${id}' deleted`);
+    }
+
+    // ── OpenAI-Compatible Custom Endpoints ─────────────────────
+    public getOpenAICompatibleEndpoints(): OpenAICompatibleEndpoint[] {
+        return this.credentials.openAiCompatibleEndpoints || [];
+    }
+
+    public getOpenAICompatibleEndpoint(id: string): OpenAICompatibleEndpoint | undefined {
+        return (this.credentials.openAiCompatibleEndpoints || []).find(e => e.id === id);
+    }
+
+    public saveOpenAICompatibleEndpoint(endpoint: OpenAICompatibleEndpoint): void {
+        if (!this.credentials.openAiCompatibleEndpoints) {
+            this.credentials.openAiCompatibleEndpoints = [];
+        }
+        const cleaned: OpenAICompatibleEndpoint = {
+            ...endpoint,
+            id: (endpoint.id || '').trim(),
+            name: (endpoint.name || '').trim(),
+            baseUrl: (endpoint.baseUrl || '').trim(),
+            modelId: (endpoint.modelId || '').trim(),
+            isLocal: endpoint.isLocal !== undefined ? endpoint.isLocal : isLoopbackUrl(endpoint.baseUrl),
+            enabled: endpoint.enabled !== undefined ? endpoint.enabled : true,
+            supportsVision: !!endpoint.supportsVision,
+        };
+
+        const index = this.credentials.openAiCompatibleEndpoints.findIndex(e => e.id === cleaned.id);
+        if (index !== -1) {
+            // Preserve existing key if replacement apiKey is omitted or empty
+            if (!cleaned.apiKey && this.credentials.openAiCompatibleEndpoints[index].apiKey) {
+                cleaned.apiKey = this.credentials.openAiCompatibleEndpoints[index].apiKey;
+            }
+            this.credentials.openAiCompatibleEndpoints[index] = cleaned;
+        } else {
+            this.credentials.openAiCompatibleEndpoints.push(cleaned);
+        }
+        this.saveCredentials();
+        console.log(`[CredentialsManager] OpenAI-compatible endpoint '${cleaned.name}' (${cleaned.id}) saved`);
+    }
+
+    public deleteOpenAICompatibleEndpoint(id: string): void {
+        if (!this.credentials.openAiCompatibleEndpoints) return;
+        this.credentials.openAiCompatibleEndpoints = this.credentials.openAiCompatibleEndpoints.filter(e => e.id !== id);
+        this.ensureDefaultModelCanRun();
+        this.saveCredentials();
+        console.log(`[CredentialsManager] OpenAI-compatible endpoint '${id}' deleted`);
+    }
+
+    // ── Thinking / Reasoning Effort Control ────────────────────
+    public getThinkingEffort(): 'auto' | 'low' | 'medium' | 'high' {
+        return this.credentials.thinkingEffort || 'auto';
+    }
+
+    public setThinkingEffort(effort: 'auto' | 'low' | 'medium' | 'high'): void {
+        this.credentials.thinkingEffort = effort;
+        this.saveCredentials();
+        console.log(`[CredentialsManager] Thinking effort set to: ${effort}`);
     }
 
     // ── Free Trial ─────────────────────────────────────────────

@@ -222,7 +222,7 @@ export interface ProviderChoice {
 }
 
 // Vision-capable providers (ordered by capability)
-const VISION_PROVIDERS = ['gemini', 'claude', 'openai', 'groq'];
+const VISION_PROVIDERS = ['gemini', 'claude', 'openai', 'groq', 'deepseek'];
 // Low-latency providers (ordered by speed)
 const LOW_LATENCY_PROVIDERS = ['groq', 'gemini'];
 // Quality providers (for summary/recap tasks)
@@ -332,7 +332,7 @@ export class ProviderRouter {
             // All providers down, return lowest priority
             return {
                 provider: 'gemini',
-                model: 'gemini-3.5-flash',
+                model: 'gemini-3.8-flash',
                 reason: 'all providers unhealthy, using Gemini as last resort'
             };
         }
@@ -416,11 +416,11 @@ export class ProviderRouter {
 
     private getDefaultModel(provider: string): string {
         const models: Record<string, string> = {
-            'gemini': 'gemini-3.5-flash',
+            'gemini': 'gemini-3.8-flash',
             'groq': 'llama-3.3-70b-versatile',
             'openai': 'chat-latest',
-            'claude': 'claude-sonnet-4-6',
-            'deepseek': 'deepseek-v4-flash',
+            'claude': 'claude-sonnet-5',
+            'deepseek': 'deepseek-v4.1-flash',
             'natively': 'default',
             'codex': 'default'
         };

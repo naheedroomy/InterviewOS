@@ -29,6 +29,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     const [activeTab, setActiveTab] = useState<'cloud' | 'custom' | 'local'>('cloud');
     const [ollamaModels, setOllamaModels] = useState<string[]>([]);
     const [customProviders, setCustomProviders] = useState<CustomProvider[]>([]);
+    const [openAIEndpoints, setOpenAIEndpoints] = useState<any[]>([]);
     const [cloudModels, setCloudModels] = useState<{ id: string; name: string; desc: string; provider: string }[]>([]);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -52,6 +53,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 // Load Custom
                 const custom = await window.electronAPI?.getCustomProviders() as CustomProvider[];
                 if (custom) setCustomProviders(custom);
+
+                // Load OpenAI-Compatible Endpoints
+                const endpoints = await window.electronAPI?.getOpenAICompatibleEndpoints?.() || [];
+                if (Array.isArray(endpoints)) setOpenAIEndpoints(endpoints);
 
                 // Load Ollama
                 const local = await window.electronAPI?.getAvailableOllamaModels() as string[];
@@ -162,24 +167,34 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         const codexCliName = getCodexCliModelDisplayName(model);
         if (codexCliName) return codexCliName;
         if (model.startsWith('ollama-')) return model.replace('ollama-', '');
+        if (model === 'gemini-3.8-flash' || model === 'models/gemini-3.8-flash') return 'Gemini 3.8 Flash';
+        if (model === 'gemini-3.8-live' || model === 'models/gemini-3.8-live') return 'Gemini 3.8 Live';
+        if (model === 'gemini-3.5-flash' || model === 'models/gemini-3.5-flash') return 'Gemini 3.5 Flash';
         if (model === 'gemini-2.5-flash' || model === 'models/gemini-2.5-flash') return 'Gemini 2.5 Flash';
         if (model === 'gemini-2.5-pro' || model === 'models/gemini-2.5-pro') return 'Gemini 2.5 Pro';
         if (model === 'gemini-2.0-flash' || model === 'models/gemini-2.0-flash') return 'Gemini 2.0 Flash';
         if (model === 'gemini-2.0-flash-lite' || model === 'models/gemini-2.0-flash-lite') return 'Gemini 2.0 Flash Lite';
         if (model === 'gemini-1.5-pro' || model === 'models/gemini-1.5-pro') return 'Gemini 1.5 Pro';
         if (model === 'gemini-1.5-flash' || model === 'models/gemini-1.5-flash') return 'Gemini 1.5 Flash';
-        if (model === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
         if (model === 'gemini-3.1-flash-lite-preview') return 'Gemini 3.1 Flash';
         if (model === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
-        if (model === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';
-        if (model === 'chat-latest') return 'GPT 5.5 Instant';
-        if (model === 'gpt-5.5') return 'GPT 5.5';
-        if (model === 'gpt-5.5-thinking-low') return 'GPT 5.5 Thinking';
-        if (model === 'gpt-5.4') return 'GPT 5.4';
+        if (model === 'claude-opus-5.5') return 'Claude Opus 5.5';
+        if (model === 'claude-sonnet-5') return 'Claude Sonnet 5';
+        if (model === 'claude-haiku-4.5') return 'Claude Haiku 4.5';
         if (model === 'claude-opus-4-8') return 'Opus 4.8';
         if (model === 'claude-opus-4-7') return 'Opus 4.7';
         if (model === 'claude-opus-4-6') return 'Opus 4.6';
         if (model === 'claude-sonnet-4-6') return 'Sonnet 4.6';
+        if (model === 'gpt-6-astra') return 'GPT 6 Astra';
+        if (model === 'gpt-6-sol') return 'GPT 6 Sol';
+        if (model === 'gpt-6-luna') return 'GPT 6 Luna';
+        if (model === 'chat-latest') return 'GPT 5.5 Instant';
+        if (model === 'gpt-5.5') return 'GPT 5.5';
+        if (model === 'gpt-5.5-thinking-low') return 'GPT 5.5 Thinking';
+        if (model === 'gpt-5.4') return 'GPT 5.4';
+        if (model === 'deepseek-v4.1-flash') return 'DeepSeek V4.1 Flash';
+        if (model === 'deepseek-v4-pro') return 'DeepSeek V4 Pro';
+        if (model === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';
 
         // Check dynamic cloud models
         const cloud = cloudModels.find(m => m.id === model || m.id === model.replace(/^models\//, '') || m.id === `models/${model}`);
@@ -188,6 +203,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         // Check custom providers
         const custom = customProviders.find(p => p.id === model || p.name === model);
         if (custom) return custom.name;
+
+        // Check OpenAI-compatible custom endpoints
+        const ep = openAIEndpoints.find(e => e.id === model);
+        if (ep) return `${ep.name} (${ep.modelId})`;
 
         return model;
     };
@@ -269,23 +288,36 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                         {/* Custom Models */}
                         {activeTab === 'custom' && (
                             <div className="space-y-1">
-                                {customProviders.length === 0 ? (
+                                {customProviders.length === 0 && openAIEndpoints.filter(e => e.enabled !== false).length === 0 ? (
                                     <div className="text-center py-6 text-text-tertiary">
-                                        <p className="text-xs mb-2">No custom providers.</p>
+                                        <p className="text-xs mb-2">No custom endpoints configured.</p>
                                         <button className="text-[10px] text-accent-primary hover:underline">Manage in Settings</button>
                                     </div>
                                 ) : (
-                                    customProviders.map(provider => (
-                                        <ModelOption
-                                            key={provider.id}
-                                            id={provider.id}
-                                            name={provider.name}
-                                            desc="Custom cURL"
-                                            icon={<Terminal size={14} />}
-                                            selected={currentModel === provider.id}
-                                            onSelect={() => handleSelect(provider.id)}
-                                        />
-                                    ))
+                                    <>
+                                        {customProviders.map(provider => (
+                                            <ModelOption
+                                                key={provider.id}
+                                                id={provider.id}
+                                                name={provider.name}
+                                                desc="Custom cURL"
+                                                icon={<Terminal size={14} />}
+                                                selected={currentModel === provider.id}
+                                                onSelect={() => handleSelect(provider.id)}
+                                            />
+                                        ))}
+                                        {openAIEndpoints.filter(e => e.enabled !== false).map(ep => (
+                                            <ModelOption
+                                                key={ep.id}
+                                                id={ep.id}
+                                                name={ep.name}
+                                                desc={`${ep.modelId} • Custom Endpoint`}
+                                                icon={<Server size={14} />}
+                                                selected={currentModel === ep.id}
+                                                onSelect={() => handleSelect(ep.id)}
+                                            />
+                                        ))}
+                                    </>
                                 )}
                             </div>
                         )}

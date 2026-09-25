@@ -1,0 +1,81 @@
+story_id: e09s01
+title: Modern AI provider registry, model discovery, and multi-endpoint configuration
+status: passed
+bcps: 12
+risk: P1
+tasks:
+  - id: e09s01-01
+    description: >-
+      Update model discovery in electron/utils/modelFetcher.ts to discover 2026
+      models (Gemini 3.8/3.5, Claude 5.5/5, OpenAI GPT-6/chat-latest, DeepSeek
+      v4.1/v4) and add custom OpenAI-compatible endpoint model fetching with
+      robust fallbacks.
+    verify: >-
+      npm run build:electron && node --test
+      electron/services/__tests__/GeminiModelDiscovery.test.mjs
+      electron/services/__tests__/ModelDiscovery2026.test.mjs
+    risk: P1
+    security: low
+    status: passed
+
+  - id: e09s01-02
+    description: >-
+      Extend CredentialsManager and IPC handlers to support multiple
+      OpenAI-compatible custom endpoints (baseUrl, apiKey, modelId, headers,
+      supportsVision, isLocal) with safeStorage encryption and loopback detection.
+    verify: >-
+      npm run build:electron && node --test
+      electron/services/__tests__/OpenAICompatibleEndpoints.test.mjs
+    risk: P1
+    security: high
+    status: passed
+
+  - id: e09s01-03
+    description: >-
+      Update ProviderRouter.ts and LLMHelper.ts to route to modern 2026 default
+      models (defaulting to gemini-3.8-flash for real-time assist when configured),
+      implement generic OpenAI-compatible streaming client adapter, and propagate
+      adaptive thinking / reasoning effort controls across OpenAI, Anthropic,
+      Gemini, and DeepSeek.
+    verify: >-
+      npm run build:electron && node --test
+      electron/llm/__tests__/ProviderRouter.test.mjs
+      electron/services/__tests__/LLMHelperStreamRoute.test.mjs
+      electron/services/__tests__/ThinkingEffortPropagation.test.mjs
+    risk: P1
+    security: medium
+    status: passed
+
+  - id: e09s01-04
+    description: >-
+      Update visionStreamFallback.ts to recognize multimodal capabilities of
+      Gemini 3.8, DeepSeek v4.1 Flash, Claude 5/5.5, OpenAI GPT-6, and custom
+      vision endpoints while preserving Phase 0 private_vision gating.
+    verify: >-
+      npm run build:electron && node --test
+      electron/services/__tests__/VisionStreamFallback.test.mjs
+    risk: P1
+    security: medium
+    status: passed
+
+  - id: e09s01-05
+    description: >-
+      Update Settings UI and IPC wiring to allow users to configure and toggle
+      multiple OpenAI-compatible custom endpoints, test connections, and select
+      the default active model.
+    verify: >-
+      npm run build:electron && node --test
+      electron/services/__tests__/SettingsAndModelSelectors.test.mjs
+    risk: P1
+    security: medium
+    status: passed
+
+  - id: e09s01-06
+    description: >-
+      Run full regression suite across all domains to prove zero regressions in
+      unit, integration, and packaged Electron smoke gates.
+    verify: >-
+      npm run build && npm run build:electron && npm test
+    risk: P1
+    security: high
+    status: passed
