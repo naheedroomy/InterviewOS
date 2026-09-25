@@ -498,11 +498,49 @@ export class LLMHelper {
     return modelId;
   }
 
-  private getOpenAiReasoningConfig(modelId: string): Record<string, any> {
-    if (modelId.toLowerCase() === OPENAI_GPT_55_THINKING_LOW_MODEL) {
+  public resolveThinkingEffort(context: 'live' | 'prep' = 'live'): 'low' | 'medium' | 'high' {
+    let configuredEffort: string = 'auto';
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      configuredEffort = CredentialsManager.getInstance().getThinkingEffort();
+    } catch {
+      configuredEffort = 'auto';
+    }
+
+    if (configuredEffort === 'low' || configuredEffort === 'medium' || configuredEffort === 'high') {
+      return configuredEffort;
+    }
+
+    // Auto behavior: 'low' in live interview (sub-300ms latency), 'medium' in prep/recap
+    return context === 'live' ? 'low' : 'medium';
+  }
+
+  public getOpenAiReasoningConfig(modelId: string, context: 'live' | 'prep' = 'live'): Record<string, any> {
+    const id = modelId.toLowerCase();
+    if (id === OPENAI_GPT_55_THINKING_LOW_MODEL) {
       return { reasoning_effort: 'low' };
     }
+    const isReasoningModel = id.startsWith('o1') || id.startsWith('o3') || id.startsWith('o4') || id.includes('reasoning') || id.startsWith('gpt-6');
+    if (isReasoningModel) {
+      const effort = this.resolveThinkingEffort(context);
+      return { reasoning_effort: effort };
+    }
     return {};
+  }
+
+  public getClaudeThinkingConfig(modelId: string, context: 'live' | 'prep' = 'live'): Record<string, any> {
+    const id = modelId.toLowerCase();
+    const supportsThinking = id.includes('opus-5') || id.includes('sonnet-5') || id.includes('thinking') || id.includes('3-7') || id.includes('4-');
+    if (!supportsThinking) return {};
+
+    const effort = this.resolveThinkingEffort(context);
+    const budget = effort === 'low' ? 1024 : effort === 'medium' ? 4096 : 8192;
+    return {
+      thinking: {
+        type: 'enabled',
+        budget_tokens: budget,
+      },
+    };
   }
 
   private getOpenAiFallbackModels(requestedModel: string): string[] {
@@ -558,7 +596,7 @@ export class LLMHelper {
 
   private isDeepseekModel(modelId: string): boolean {
     if (!modelId) return false;
-    return /^deepseek-v\d/.test(modelId.toLowerCase());
+    return /^deepseek(-v\d|\/|$)/i.test(modelId.toLowerCase()) || modelId.toLowerCase().startsWith('deepseek-');
   }
 
   private getDeepseekMaxOutput(_modelId: string): number {
@@ -567,11 +605,13 @@ export class LLMHelper {
 
   /**
    * Per-model max output token ceiling. Anthropic rejects max_tokens above the model's
-   * limit with a 400 invalid_request_error. AnswerCue exposes only Opus 4.8,
-   * Opus 4.7, Opus 4.6, and Sonnet 4.6. Unknown models fall back to a safe 8192.
+   * limit with a 400 invalid_request_error. Unknown models fall back to a safe 8192.
    */
   private getClaudeMaxOutput(modelId: string): number {
     const id = modelId.toLowerCase();
+    if (id.startsWith("claude-opus-5")) return 64000;
+    if (id.startsWith("claude-sonnet-5")) return 64000;
+    if (id.startsWith("claude-haiku-4")) return 16000;
     if (id.startsWith("claude-opus-4-")) return 32000;
     if (id.startsWith("claude-sonnet-4-6")) return 64000;
     return 8192;
@@ -903,17 +943,17 @@ export class LLMHelper {
     }
   }
 
-  private getGeminiThinkingConfig(model: string): Record<string, any> {
+  public getGeminiThinkingConfig(model: string, context: 'live' | 'prep' = 'live'): Record<string, any> {
     const normalized = model.toLowerCase().replace(/^models\//, '');
-    const isGemini3Flash = normalized.startsWith('gemini-3')
-      && normalized.includes('flash')
+    const isGemini3 = normalized.startsWith('gemini-3')
       && !normalized.includes('lite');
 
-    if (!isGemini3Flash) return {};
+    if (!isGemini3) return {};
 
+    const level = this.resolveThinkingEffort(context);
     return {
       thinkingConfig: {
-        thinkingLevel: 'low',
+        thinkingLevel: level,
       },
     };
   }
@@ -3633,6 +3673,27 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       return;
     }
 
+    // 2c. Generic OpenAI-Compatible Endpoints
+    const openAiEndpoints = this.getOpenAiCompatibleEndpoints();
+    const matchedEndpoint = openAiEndpoints.find(
+      (e: any) => e.id === this.currentModelId || `openai-compatible:${e.id}` === this.currentModelId
+    );
+    if (matchedEndpoint && matchedEndpoint.enabled) {
+      const openAiEndpointSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
+      const finalOpenAiEndpointSystem = this.injectLanguageInstruction(openAiEndpointSystem);
+      yield* this.recordRoutedStream(
+        'openai' as any,
+        this.streamWithOpenAICompatibleEndpoint(
+          matchedEndpoint,
+          userContent,
+          finalOpenAiEndpointSystem,
+          isMultimodal ? imagePaths : undefined,
+          abortSignal
+        )
+      );
+      return;
+    }
+
     // 3. Cloud Provider Routing
 
     // OpenAI
@@ -4236,6 +4297,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // CACHE BOUNDARY: system blocks are static; dynamic content lives in `messages` only.
       ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
       messages: [{ role: "user", content: userMessage }],
+      ...this.getClaudeThinkingConfig(model, 'live'),
     });
     const onAbort = () => { try { stream.abort(); } catch {} };
     abortSignal?.addEventListener('abort', onAbort, { once: true });
@@ -4272,13 +4334,18 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
     messages.push({ role: "user", content: userMessage });
 
+    const reasoningConfig = (model.includes('reasoner') || model.includes('pro'))
+      ? { reasoning_effort: this.resolveThinkingEffort('live') }
+      : {};
+
     if (abortSignal?.aborted) return;
     const stream = await this.deepseekClient.chat.completions.create({
       model,
       messages,
       stream: true,
       max_tokens: this.getDeepseekMaxOutput(model),
-    }, { signal: abortSignal });
+      ...reasoningConfig,
+    } as any, { signal: abortSignal });
 
     try {
       for await (const chunk of stream) {
@@ -4372,6 +4439,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           { type: "text", text: userMessage }
         ]
       }],
+      ...this.getClaudeThinkingConfig(model, 'live'),
     });
     const onAbort = () => { try { stream.abort(); } catch {} };
     abortSignal?.addEventListener('abort', onAbort, { once: true });
@@ -4903,6 +4971,83 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private getOpenAiCompatibleEndpoints(): any[] {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getOpenAICompatibleEndpoints();
+    } catch {
+      return [];
+    }
+  }
+
+  public async * streamWithOpenAICompatibleEndpoint(
+    endpoint: any,
+    userMessage: string,
+    systemPrompt?: string,
+    imagePaths?: string[],
+    abortSignal?: AbortSignal
+  ): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode && !endpoint.isLocal) {
+      throw new Error("Cloud providers disabled in local-only mode");
+    }
+
+    const client = new OpenAI({
+      apiKey: endpoint.apiKey || 'not-needed',
+      baseURL: endpoint.baseUrl,
+      defaultHeaders: endpoint.customHeaders,
+      timeout: endpoint.timeoutMs || 30000,
+    });
+
+    const messages: any[] = [];
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+
+    if (endpoint.supportsVision && imagePaths && imagePaths.length > 0) {
+      const contentParts: any[] = [{ type: 'text', text: userMessage }];
+      for (const imgPath of imagePaths) {
+        try {
+          if (fs.existsSync(imgPath)) {
+            const base64 = fs.readFileSync(imgPath).toString('base64');
+            contentParts.push({
+              type: 'image_url',
+              image_url: { url: `data:image/png;base64,${base64}` },
+            });
+          }
+        } catch (err) {
+          console.warn('[LLMHelper] Failed to read image for custom endpoint:', err);
+        }
+      }
+      messages.push({ role: 'user', content: contentParts });
+    } else {
+      messages.push({ role: 'user', content: userMessage });
+    }
+
+    const reasoningConfig = this.getOpenAiReasoningConfig(endpoint.modelId, 'live');
+    const stream = await client.chat.completions.create(
+      {
+        model: endpoint.modelId,
+        messages,
+        stream: true,
+        max_completion_tokens: MAX_OUTPUT_TOKENS,
+        ...reasoningConfig,
+      } as any,
+      { signal: abortSignal }
+    );
+
+    try {
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) return;
+        const text = chunk.choices?.[0]?.delta?.content;
+        if (text) yield text;
+      }
+    } finally {
+      if (abortSignal?.aborted && typeof (stream as any).abort === 'function') {
+        (stream as any).abort();
+      }
+    }
   }
 
 

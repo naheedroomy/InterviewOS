@@ -14,16 +14,16 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     },
     openai: {
         hasKeyCheck: (creds) => !!creds?.hasOpenaiKey,
-        ids: ['chat-latest', 'gpt-5.5', 'gpt-5.5-thinking-low', 'gpt-5.4'],
-        names: ['GPT 5.5 Instant', 'GPT 5.5', 'GPT 5.5 Thinking', 'GPT 5.4'],
-        descs: ['OpenAI chat-latest', 'OpenAI', 'Low reasoning', 'OpenAI'],
+        ids: ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'chat-latest', 'gpt-5.5', 'gpt-5.5-thinking-low', 'gpt-5.4', 'gpt-4o', 'gpt-4o-mini'],
+        names: ['GPT-6 Astra', 'GPT-6 Sol', 'GPT-6 Luna', 'GPT Instant (chat-latest)', 'GPT 5.5', 'GPT 5.5 Thinking', 'GPT 5.4', 'GPT-4o', 'GPT-4o mini'],
+        descs: ['OpenAI Frontier • Ultra-fast', 'OpenAI Frontier • General', 'OpenAI Frontier • High reasoning', 'OpenAI Auto-updating Instant', 'OpenAI', 'Low reasoning', 'OpenAI', 'Fast multimodal', 'Lightweight fast'],
         pmKey: 'openaiPreferredModel'
     },
     claude: {
         hasKeyCheck: (creds) => !!creds?.hasClaudeKey,
-        ids: ['claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6'],
-        names: ['Opus 4.8', 'Opus 4.7', 'Opus 4.6', 'Sonnet 4.6'],
-        descs: ['Anthropic • Highest reasoning', 'Anthropic • Opus', 'Anthropic • Opus', 'Anthropic • Sonnet'],
+        ids: ['claude-opus-5.5', 'claude-sonnet-5', 'claude-haiku-4.5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6'],
+        names: ['Claude Opus 5.5', 'Claude Sonnet 5', 'Claude Haiku 4.5', 'Claude Opus 4.8', 'Claude Opus 4.7', 'Claude Opus 4.6', 'Claude Sonnet 4.6'],
+        descs: ['Anthropic • Frontier reasoning', 'Anthropic • Optimal agentic speed/intellect', 'Anthropic • Ultra-fast lightweight', 'Anthropic • Highest reasoning', 'Anthropic • Opus', 'Anthropic • Opus', 'Anthropic • Sonnet'],
         pmKey: 'claudePreferredModel'
     },
     groq: {
@@ -35,9 +35,9 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     },
     deepseek: {
         hasKeyCheck: (creds) => !!creds?.hasDeepseekKey,
-        ids: ['deepseek-v4-flash', 'deepseek-v4-pro'],
-        names: ['DeepSeek V4 Flash', 'DeepSeek V4 Pro'],
-        descs: ['Fast • Text-only', 'Reasoning • Text-only'],
+        ids: ['deepseek-v4.1-flash', 'deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-chat', 'deepseek-reasoner'],
+        names: ['DeepSeek V4.1 Flash', 'DeepSeek V4 Pro', 'DeepSeek V4 Flash', 'DeepSeek Chat', 'DeepSeek Reasoner'],
+        descs: ['Ultra-fast • Native Multimodal', '1.6T params • Frontier Reasoning', 'Fast • Text-only', 'Standard Conversational', 'Deep Reasoning'],
         pmKey: 'deepseekPreferredModel'
     },
 };
@@ -60,8 +60,8 @@ export const isAllowedGeminiModel = (modelId: string): boolean => {
     const major = parseInt(versionMatch[1], 10);
     if (major < 2) return false;
 
-    const isFlashOrPro = clean.includes('flash') || clean.includes('pro');
-    if (!isFlashOrPro) return false;
+    const isFlashOrProOrLive = clean.includes('flash') || clean.includes('pro') || clean.includes('live');
+    if (!isFlashOrProOrLive) return false;
 
     const excludePatterns = [
         'antigravity',
@@ -70,7 +70,6 @@ export const isAllowedGeminiModel = (modelId: string): boolean => {
         'preview',
         'exp',
         'experimental',
-        'thinking',
         'vision',
         'custom',
         'tuned',

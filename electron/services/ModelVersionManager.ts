@@ -86,22 +86,25 @@ interface PersistedState {
 /** Hardcoded baseline models for vision Tier 1 (initial pinned stable) */
 const BASELINE_MODELS: Record<ModelFamily, string> = {
   [ModelFamily.OPENAI]: 'chat-latest',
-  [ModelFamily.GEMINI_FLASH]: 'gemini-3.5-flash',
+  [ModelFamily.GEMINI_FLASH]: 'gemini-3.8-flash',
   [ModelFamily.GEMINI_PRO]: 'gemini-3.1-pro-preview',
-  [ModelFamily.CLAUDE]: 'claude-sonnet-4-6',
+  [ModelFamily.CLAUDE]: 'claude-sonnet-5',
   [ModelFamily.GROQ_LLAMA]: 'meta-llama/llama-4-scout-17b-16e-instruct',
 };
 
 /** Hardcoded baseline models for text Tier 1 */
 const TEXT_BASELINE_MODELS: Record<TextModelFamily, string> = {
   [TextModelFamily.OPENAI]: 'chat-latest',
-  [TextModelFamily.GEMINI_FLASH]: 'gemini-3.5-flash',
+  [TextModelFamily.GEMINI_FLASH]: 'gemini-3.8-flash',
   [TextModelFamily.GEMINI_PRO]: 'gemini-3.1-pro-preview',
-  [TextModelFamily.CLAUDE]: 'claude-sonnet-4-6',
+  [TextModelFamily.CLAUDE]: 'claude-sonnet-5',
   [TextModelFamily.GROQ]: 'llama-3.3-70b-versatile',
 };
 
 const ALLOWED_CLAUDE_MODELS = new Set([
+  'claude-opus-5.5',
+  'claude-sonnet-5',
+  'claude-haiku-4.5',
   'claude-opus-4-8',
   'claude-opus-4-7',
   'claude-opus-4-6',
@@ -269,7 +272,7 @@ export function classifyModel(modelId: string): ModelFamily | null {
   }
 
   // Gemini Flash variants
-  if (lower.includes('gemini') && (lower.includes('flash') || lower.includes('lite'))) {
+  if (lower.includes('gemini') && (lower.includes('flash') || lower.includes('lite') || lower.includes('live'))) {
     return ModelFamily.GEMINI_FLASH;
   }
 
@@ -304,7 +307,7 @@ export function classifyTextModel(modelId: string): TextModelFamily | null {
   }
 
   // Gemini Flash variants
-  if (lower.includes('gemini') && (lower.includes('flash') || lower.includes('lite'))) {
+  if (lower.includes('gemini') && (lower.includes('flash') || lower.includes('lite') || lower.includes('live'))) {
     return TextModelFamily.GEMINI_FLASH;
   }
 

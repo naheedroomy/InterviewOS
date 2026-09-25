@@ -2233,6 +2233,208 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // ==========================================
+  // OpenAI-Compatible Custom Endpoints Handlers
+  // ==========================================
+
+  safeHandle('get-openai-compatible-endpoints', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const endpoints = CredentialsManager.getInstance().getOpenAICompatibleEndpoints();
+      return endpoints.map((ep: any) => ({
+        ...ep,
+        apiKey: ep.apiKey ? `sk-...${ep.apiKey.slice(-4)}` : undefined,
+      }));
+    } catch (error: any) {
+      console.error('[IPC] get-openai-compatible-endpoints error:', error);
+      return [];
+    }
+  });
+
+  safeHandle('save-openai-compatible-endpoint', async (_, endpoint: unknown) => {
+    try {
+      if (!endpoint || typeof endpoint !== 'object') {
+        return { success: false, error: 'Invalid endpoint payload' };
+      }
+      const ep = endpoint as Record<string, any>;
+      if (!ep.id || typeof ep.id !== 'string' || !ep.id.trim()) {
+        return { success: false, error: 'Endpoint id is required' };
+      }
+      if (!ep.name || typeof ep.name !== 'string' || !ep.name.trim()) {
+        return { success: false, error: 'Endpoint name is required' };
+      }
+      if (!ep.baseUrl || typeof ep.baseUrl !== 'string' || !ep.baseUrl.trim()) {
+        return { success: false, error: 'Endpoint baseUrl is required' };
+      }
+      // SSRF & protocol guard: must be valid http or https
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(ep.baseUrl.trim());
+        if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+          return { success: false, error: 'Endpoint baseUrl must use http or https protocol' };
+        }
+      } catch {
+        return { success: false, error: 'Endpoint baseUrl must be a valid URL' };
+      }
+
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+
+      // Masked key handling: if UI passes back a masked key like sk-...abcd, keep stored key
+      let apiKey = typeof ep.apiKey === 'string' ? ep.apiKey.trim() : undefined;
+      if (apiKey && apiKey.startsWith('sk-...') && cm.getOpenAICompatibleEndpoint(ep.id.trim())) {
+        apiKey = cm.getOpenAICompatibleEndpoint(ep.id.trim())?.apiKey;
+      }
+
+      cm.saveOpenAICompatibleEndpoint({
+        id: ep.id.trim(),
+        name: ep.name.trim(),
+        baseUrl: ep.baseUrl.trim().replace(/\/+$/, ''),
+        apiKey: apiKey || undefined,
+        modelId: (ep.modelId || '').trim(),
+        customHeaders: ep.customHeaders && typeof ep.customHeaders === 'object' ? ep.customHeaders : undefined,
+        supportsVision: Boolean(ep.supportsVision),
+        isLocal: ep.isLocal !== undefined ? Boolean(ep.isLocal) : undefined,
+        timeoutMs: typeof ep.timeoutMs === 'number' ? ep.timeoutMs : 30000,
+        enabled: ep.enabled !== false,
+      });
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('[IPC] save-openai-compatible-endpoint error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('delete-openai-compatible-endpoint', async (_, id: string) => {
+    try {
+      if (!id || typeof id !== 'string') {
+        return { success: false, error: 'Invalid endpoint id' };
+      }
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().deleteOpenAICompatibleEndpoint(id);
+      return { success: true };
+    } catch (error: any) {
+      console.error('[IPC] delete-openai-compatible-endpoint error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle(
+    'fetch-openai-compatible-models',
+    async (
+      _,
+      {
+        baseUrl,
+        apiKey,
+        customHeaders,
+        endpointId,
+      }: {
+        baseUrl: string;
+        apiKey?: string;
+        customHeaders?: Record<string, string>;
+        endpointId?: string;
+      },
+    ) => {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const { fetchOpenAICompatibleModels } = require('./utils/modelFetcher');
+
+        let resolvedApiKey = apiKey;
+        if (apiKey && apiKey.startsWith('sk-...') && endpointId) {
+          resolvedApiKey = CredentialsManager.getInstance().getOpenAICompatibleEndpoint(endpointId)?.apiKey;
+        }
+
+        const models = await fetchOpenAICompatibleModels(baseUrl, resolvedApiKey, customHeaders);
+        return { success: true, models };
+      } catch (error: any) {
+        console.error('[IPC] fetch-openai-compatible-models error:', error);
+        return { success: false, error: error.message || 'Failed to fetch models from endpoint' };
+      }
+    },
+  );
+
+  safeHandle(
+    'test-openai-compatible-endpoint',
+    async (
+      _,
+      {
+        endpoint,
+        apiKey,
+      }: {
+        endpoint: any;
+        apiKey?: string;
+      },
+    ) => {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        let resolvedApiKey = apiKey || endpoint.apiKey;
+        if (resolvedApiKey && resolvedApiKey.startsWith('sk-...') && endpoint.id) {
+          resolvedApiKey = CredentialsManager.getInstance().getOpenAICompatibleEndpoint(endpoint.id)?.apiKey;
+        }
+
+        const axios = require('axios');
+        const headers: Record<string, string> = {
+          'content-type': 'application/json',
+          ...(endpoint.customHeaders || {}),
+        };
+        if (resolvedApiKey) {
+          headers['Authorization'] = `Bearer ${resolvedApiKey}`;
+        }
+
+        const cleanBaseUrl = (endpoint.baseUrl || '').replace(/\/+$/, '');
+        const url = `${cleanBaseUrl}/chat/completions`;
+        const response = await axios.post(
+          url,
+          {
+            model: endpoint.modelId || 'default',
+            messages: [{ role: 'user', content: 'ping' }],
+            max_tokens: 5,
+          },
+          { headers, timeout: 15000 },
+        );
+
+        if (response && (response.status === 200 || response.status === 201)) {
+          return { success: true };
+        }
+        return { success: false, error: `Endpoint responded with status ${response?.status}` };
+      } catch (error: any) {
+        const rawMsg =
+          error?.response?.data?.error?.message ||
+          error?.response?.data?.message ||
+          error?.message ||
+          'Connection failed';
+        return { success: false, error: sanitizeErrorMessage(rawMsg) };
+      }
+    },
+  );
+
+  // ==========================================
+  // Thinking Effort Handlers
+  // ==========================================
+
+  safeHandle('get-thinking-effort', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getThinkingEffort();
+    } catch {
+      return 'auto';
+    }
+  });
+
+  safeHandle('set-thinking-effort', async (_, effort: 'auto' | 'low' | 'medium' | 'high') => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      if (['auto', 'low', 'medium', 'high'].includes(effort)) {
+        CredentialsManager.getInstance().setThinkingEffort(effort);
+        return { success: true };
+      }
+      return { success: false, error: 'Invalid thinking effort level' };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
   // Get stored API keys (masked for UI display)
   safeHandle('get-stored-credentials', async () => {
     try {
@@ -2279,6 +2481,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         openaiPreferredModel: creds.openaiPreferredModel || undefined,
         claudePreferredModel: creds.claudePreferredModel || undefined,
         deepseekPreferredModel: creds.deepseekPreferredModel || undefined,
+        thinkingEffort: creds.thinkingEffort || 'auto',
       };
     } catch (error: any) {
       // SECURITY FIX (P0): Error fallback returns masked keys, not raw strings
@@ -2309,6 +2512,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         sttAzureKey: '',
         sttIbmKey: '',
         sttSonioxKey: '',
+        thinkingEffort: 'auto' as const,
       };
     }
   });

@@ -503,6 +503,15 @@ interface ElectronAPI {
   getCustomProviders: () => Promise<any[]>;
   deleteCustomProvider: (id: string) => Promise<{ success: boolean; error?: string }>;
 
+  // OpenAI-Compatible Endpoints & Thinking Effort
+  getOpenAICompatibleEndpoints: () => Promise<any[]>;
+  saveOpenAICompatibleEndpoint: (endpoint: any) => Promise<{ success: boolean; endpoint?: any; error?: string }>;
+  deleteOpenAICompatibleEndpoint: (id: string) => Promise<{ success: boolean; error?: string }>;
+  fetchOpenAICompatibleModels: (params: { baseUrl: string; apiKey?: string; customHeaders?: Record<string, string>; endpointId?: string }) => Promise<{ success: boolean; models?: any[]; error?: string }>;
+  testOpenAICompatibleEndpoint: (params: { endpoint: any; apiKey?: string }) => Promise<{ success: boolean; error?: string }>;
+  getThinkingEffort: () => Promise<'auto' | 'low' | 'medium' | 'high'>;
+  setThinkingEffort: (effort: 'auto' | 'low' | 'medium' | 'high') => Promise<{ success: boolean; error?: string }>;
+
   // Follow-up Email
   generateFollowupEmail: (input: any) => Promise<string>;
   extractEmailsFromTranscript: (transcript: Array<{ text: string }>) => Promise<string[]>;
@@ -1805,6 +1814,17 @@ const electronAPI = {
   saveCustomProvider: (provider: any) => ipcRenderer.invoke('save-custom-provider', provider),
   getCustomProviders: () => ipcRenderer.invoke('get-custom-providers'),
   deleteCustomProvider: (id: string) => ipcRenderer.invoke('delete-custom-provider', id),
+
+  // OpenAI-Compatible Endpoints
+  getOpenAICompatibleEndpoints: () => ipcRenderer.invoke('get-openai-compatible-endpoints'),
+  saveOpenAICompatibleEndpoint: (endpoint: any) => ipcRenderer.invoke('save-openai-compatible-endpoint', endpoint),
+  deleteOpenAICompatibleEndpoint: (id: string) => ipcRenderer.invoke('delete-openai-compatible-endpoint', id),
+  fetchOpenAICompatibleModels: (params: { baseUrl: string; apiKey?: string; customHeaders?: Record<string, string>; endpointId?: string }) =>
+    ipcRenderer.invoke('fetch-openai-compatible-models', params),
+  testOpenAICompatibleEndpoint: (params: { endpoint: any; apiKey?: string }) =>
+    ipcRenderer.invoke('test-openai-compatible-endpoint', params),
+  getThinkingEffort: () => ipcRenderer.invoke('get-thinking-effort'),
+  setThinkingEffort: (effort: 'auto' | 'low' | 'medium' | 'high') => ipcRenderer.invoke('set-thinking-effort', effort),
 
   // Follow-up Email
   generateFollowupEmail: (input: any) => ipcRenderer.invoke('generate-followup-email', input),

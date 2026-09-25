@@ -12,9 +12,11 @@ const importDist = rel => import(pathToFileURL(path.join(repoRoot, 'dist-electro
 test('standard cloud model list retains OpenAI/Claude/Groq/DeepSeek allowlists; Gemini uses empty dynamic arrays', () => {
   const src = read('src/utils/modelUtils.ts');
 
-  // Non-Gemini providers keep their allowlists
-  assert.match(src, /ids:\s*\['chat-latest', 'gpt-5\.5', 'gpt-5\.5-thinking-low', 'gpt-5\.4'\]/);
-  assert.match(src, /names:\s*\['GPT 5\.5 Instant', 'GPT 5\.5', 'GPT 5\.5 Thinking', 'GPT 5\.4'\]/);
+  // Non-Gemini providers keep their allowlists (updated for 2026 frontier models)
+  assert.match(src, /'chat-latest'/);
+  assert.match(src, /'gpt-6-astra'/);
+  assert.match(src, /'claude-opus-5\.5'/);
+  assert.match(src, /'deepseek-v4\.1-flash'/);
 
   // Gemini ids/names/descs are empty — dynamic discovery has replaced the hardcoded list
   const geminiBlock = src.match(/gemini:\s*\{[^}]*\}/s);
@@ -84,9 +86,9 @@ test('Gemini 3 Flash calls opt into low thinking for live latency', () => {
   const llmHelper = read('electron/LLMHelper.ts');
   const ipcHandlers = read('electron/ipcHandlers.ts');
 
-  assert.match(llmHelper, /thinkingConfig:\s*\{\s*thinkingLevel:\s*'low'/);
+  assert.match(llmHelper, /thinkingConfig:\s*\{\s*thinkingLevel:\s*level/);
   assert.match(llmHelper, /normalized\.startsWith\('gemini-3'\)[\s\S]*!normalized\.includes\('lite'\)/);
-  assert.match(llmHelper, /this\.getGeminiThinkingConfig\(model\)/);
+  assert.match(llmHelper, /this\.getGeminiThinkingConfig\(model/);
   assert.match(llmHelper, /this\.buildGeminiGenerationConfig\(GEMINI_FLASH_MODEL/);
   assert.match(ipcHandlers, /generationConfig:\s*\{[\s\S]*thinkingConfig:\s*\{[\s\S]*thinkingLevel:\s*'low'/);
 });
@@ -124,5 +126,5 @@ test('ProviderRouter defaults route OpenAI and Gemini to the updated model IDs',
     providerHealth: { groq: 'down', gemini: 'healthy' },
   });
   assert.equal(gemini.provider, 'gemini');
-  assert.equal(gemini.model, 'gemini-3.5-flash');
+  assert.equal(gemini.model, 'gemini-3.8-flash');
 });

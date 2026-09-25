@@ -45,6 +45,7 @@ export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionP
     providers.push(claude(credentials, inputs));
     providers.push(geminiPro(credentials, inputs));
     providers.push(groqScout(credentials, inputs));
+    providers.push(deepseek(credentials, inputs));
   }
 
   // Local providers — always allowed, including in private_vision.
@@ -74,10 +75,11 @@ function natively(creds: CredentialsManager, _inputs: VisionProviderBuildInputs)
 
 function openai(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
   const apiKey = creds.getOpenaiApiKey();
+  const preferred = creds.getPreferredModel('openai');
   return {
     id: 'openai',
     displayName: 'OpenAI',
-    modelId: 'chat-latest',
+    modelId: preferred || 'chat-latest',
     isLocal: false,
     isConfigured: !!apiKey,
     supportsVision: !!apiKey,
@@ -89,10 +91,11 @@ function openai(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): 
 
 function geminiFlash(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
   const apiKey = creds.getGeminiApiKey();
+  const preferred = creds.getPreferredModel('gemini');
   return {
     id: 'gemini_flash',
     displayName: 'Gemini Flash',
-    modelId: 'gemini-3.5-flash',
+    modelId: preferred || 'gemini-3.8-flash',
     isLocal: false,
     isConfigured: !!apiKey,
     supportsVision: !!apiKey,
@@ -104,10 +107,11 @@ function geminiFlash(creds: CredentialsManager, _inputs: VisionProviderBuildInpu
 
 function claude(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
   const apiKey = creds.getClaudeApiKey();
+  const preferred = creds.getPreferredModel('claude');
   return {
     id: 'claude',
     displayName: 'Claude',
-    modelId: 'claude-sonnet-4-6',
+    modelId: preferred || 'claude-sonnet-5',
     isLocal: false,
     isConfigured: !!apiKey,
     supportsVision: !!apiKey,
@@ -144,6 +148,24 @@ function groqScout(creds: CredentialsManager, _inputs: VisionProviderBuildInputs
     scopeAllowsScreenshots: true,
     hint: 'groq',
     invoke: async (p) => callLLMHelperVision('groq_scout', p),
+  };
+}
+
+function deepseek(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getDeepseekApiKey();
+  const preferred = creds.getPreferredModel('deepseek');
+  const modelId = preferred || 'deepseek-v4.1-flash';
+  const isMultimodal = modelId.includes('v4.1') || modelId.includes('vision');
+  return {
+    id: 'deepseek',
+    displayName: 'DeepSeek Vision',
+    modelId,
+    isLocal: false,
+    isConfigured: !!apiKey,
+    supportsVision: !!apiKey && isMultimodal,
+    scopeAllowsScreenshots: true,
+    hint: 'deepseek',
+    invoke: async (p) => callLLMHelperVision('deepseek', p),
   };
 }
 

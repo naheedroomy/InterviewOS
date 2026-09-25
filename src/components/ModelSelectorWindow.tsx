@@ -38,6 +38,9 @@ const ModelSelectorWindow = () => {
                 // 2. Custom Providers
                 const customProviders = await window.electronAPI?.getCustomProviders?.() || [];
 
+                // 2b. OpenAI-Compatible Custom Endpoints
+                const openAICompatibleEndpoints = await window.electronAPI?.getOpenAICompatibleEndpoints?.() || [];
+
                 // 3. Codex CLI
                 const codexCliConfig = await window.electronAPI?.getCodexCliConfig?.();
 
@@ -112,6 +115,13 @@ const ModelSelectorWindow = () => {
                 // Custom Providers
                 customProviders.forEach((p: any) => {
                     models.push({ id: p.id, name: p.name, type: 'custom' });
+                });
+
+                // OpenAI-Compatible Endpoints
+                openAICompatibleEndpoints.forEach((ep: any) => {
+                    if (ep.enabled !== false) {
+                        models.push({ id: ep.id, name: `${ep.name} (${ep.modelId})`, type: 'custom', provider: 'openai-compatible' });
+                    }
                 });
 
                 // Codex CLI

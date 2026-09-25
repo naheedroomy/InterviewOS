@@ -168,10 +168,12 @@ describe('processGeminiModels — runtime (pure filtering)', () => {
     assert.deepEqual(result, []);
   });
 
-  test('FALLBACK_GEMINI_MODELS has exactly 3 curated entries', { skip: !canRunRuntime() }, () => {
+  test('FALLBACK_GEMINI_MODELS has curated entries including 3.8 and 3.5 series', { skip: !canRunRuntime() }, () => {
     assert.ok(Array.isArray(FALLBACK_GEMINI_MODELS_RUNTIME));
-    assert.equal(FALLBACK_GEMINI_MODELS_RUNTIME.length, 3);
+    assert.equal(FALLBACK_GEMINI_MODELS_RUNTIME.length, 5);
     const ids = FALLBACK_GEMINI_MODELS_RUNTIME.map(m => m.id);
+    assert.ok(ids.includes('gemini-3.8-flash'));
+    assert.ok(ids.includes('gemini-3.8-live'));
     assert.ok(ids.includes('gemini-3.5-flash'));
     assert.ok(ids.includes('gemini-2.5-flash'));
     assert.ok(ids.includes('gemini-2.5-pro'));
@@ -700,7 +702,7 @@ describe('FALLBACK_GEMINI_MODELS — single source of truth for curated IDs', ()
     for (const { id } of FALLBACK_GEMINI_MODELS_RUNTIME) {
       assert.equal(countOccurrences(fetcherSrc, `'${id}'`), 1, `${id} must be defined only once`);
       assert.ok(!utilsGeminiBlock.includes(id), `${id} must not be a static modelUtils choice`);
-      assert.match(id, /^gemini-(?:[2-9]|[1-9]\d)(?:\.\d+)?-(?:flash|pro)/);
+      assert.match(id, /^gemini-(?:[2-9]|[1-9]\d)(?:\.\d+)?-(?:flash|pro|live)/);
       assert.ok(!/(?:preview|exp|vision|nano)/.test(id), `${id} must be a supported general-purpose tier`);
     }
   });

@@ -9,7 +9,7 @@ import axios from 'axios';
  * Low-level HTTP GET signature injectable for pagination tests.
  * Production uses axios.get; tests supply a mock.
  */
-export type HttpGet = (url: string, options?: { timeout?: number }) => Promise<{ data: any }>;
+export type HttpGet = (url: string, options?: { timeout?: number; headers?: Record<string, string> }) => Promise<{ data: any }>;
 
 export interface ProviderModel {
     id: string;
@@ -18,12 +18,32 @@ export interface ProviderModel {
 
 type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek';
 
-const ALLOWED_CLAUDE_MODELS = new Set([
+export const ALLOWED_CLAUDE_MODELS = new Set([
+    'claude-opus-5.5',
+    'claude-opus-5',
+    'claude-sonnet-5',
+    'claude-haiku-4.5',
     'claude-opus-4-8',
     'claude-opus-4-7',
     'claude-opus-4-6',
     'claude-sonnet-4-6',
 ]);
+
+export const FALLBACK_CLAUDE_MODELS: ProviderModel[] = [
+    { id: 'claude-opus-5.5', label: 'Claude Opus 5.5' },
+    { id: 'claude-sonnet-5', label: 'Claude Sonnet 5' },
+    { id: 'claude-haiku-4.5', label: 'Claude Haiku 4.5' },
+    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+];
+
+export const FALLBACK_OPENAI_MODELS: ProviderModel[] = [
+    { id: 'gpt-6-astra', label: 'GPT-6 Astra' },
+    { id: 'gpt-6-sol', label: 'GPT-6 Sol' },
+    { id: 'gpt-6-luna', label: 'GPT-6 Luna' },
+    { id: 'chat-latest', label: 'ChatGPT Latest' },
+    { id: 'gpt-4o', label: 'GPT-4o' },
+    { id: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+];
 
 /**
  * Fetch available models from a provider's API.
@@ -52,31 +72,42 @@ export async function fetchProviderModels(
 // ─── OpenAI ──────────────────────────────────────────────────────────────────
 
 async function fetchOpenAIModels(apiKey: string): Promise<ProviderModel[]> {
-    const response = await axios.get('https://api.openai.com/v1/models', {
-        headers: { Authorization: `Bearer ${apiKey}` },
-        timeout: 15000,
-    });
+    try {
+        const response = await axios.get('https://api.openai.com/v1/models', {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            timeout: 15000,
+        });
 
-    const models: any[] = response.data?.data || [];
+        const models: any[] = response.data?.data || [];
 
-    // Only include: ChatGPT latest alias, gpt-4o series, gpt-5.x+, o1, o3, o4 series
-    const filtered = models.filter((m: any) => {
-        const id = (m.id || '').toLowerCase();
-        // Include the API alias for GPT 5.5 Instant
-        if (id === 'chat-latest') return true;
-        // Include gpt-4o variants
-        if (id.includes('gpt-4o')) return true;
-        // Include gpt-5 and above
-        if (/gpt-[5-9]/.test(id)) return true;
-        // Include o1/o3/o4 reasoning models (but not audio/realtime variants)
-        if (/^o[134]/.test(id) && !id.includes('audio') && !id.includes('realtime')) return true;
-        return false;
-    });
+        // Only include: ChatGPT latest alias, gpt-4o series, gpt-5.x+, gpt-6.x+, o1, o3, o4 series
+        const filtered = models.filter((m: any) => {
+            const id = (m.id || '').toLowerCase();
+            // Include the API alias for dynamic production snapshot
+            if (id === 'chat-latest') return true;
+            // Include gpt-4o variants
+            if (id.includes('gpt-4o')) return true;
+            // Include gpt-5 and above (gpt-5.x, gpt-6.x)
+            if (/gpt-[5-9]/.test(id)) return true;
+            // Include o1/o3/o4 reasoning models (but not audio/realtime variants)
+            if (/^o[134]/.test(id) && !id.includes('audio') && !id.includes('realtime')) return true;
+            return false;
+        });
 
-    return filtered
-        .map((m: any) => ({ id: m.id, label: m.id }))
-        .sort((a, b) => a.label.localeCompare(b.label));
+        if (filtered.length === 0) return FALLBACK_OPENAI_MODELS;
+
+        return filtered
+            .map((m: any) => ({ id: m.id, label: m.id }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+    } catch (error: any) {
+        const status = error?.response?.status;
+        if (status === 401 || status === 403) {
+            throw new Error('Invalid or unauthorized OpenAI API key');
+        }
+        return FALLBACK_OPENAI_MODELS;
+    }
 }
+
 
 // ─── Groq ────────────────────────────────────────────────────────────────────
 
@@ -107,35 +138,45 @@ async function fetchGroqModels(apiKey: string): Promise<ProviderModel[]> {
 // ─── Anthropic ───────────────────────────────────────────────────────────────
 
 async function fetchAnthropicModels(apiKey: string): Promise<ProviderModel[]> {
-    const response = await axios.get('https://api.anthropic.com/v1/models', {
-        headers: {
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-        },
-        timeout: 15000,
-    });
+    try {
+        const response = await axios.get('https://api.anthropic.com/v1/models', {
+            headers: {
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+            },
+            timeout: 15000,
+        });
 
-    const models: any[] = response.data?.data || [];
+        const models: any[] = response.data?.data || [];
 
-    // Keep the user-facing Claude list intentionally tight.
-    const filtered = models.filter((m: any) => {
-        const id = (m.id || '').toLowerCase();
-        return ALLOWED_CLAUDE_MODELS.has(id);
-    });
+        // Keep the user-facing Claude list focused on verified 2026 and stable 4.x tiers.
+        const filtered = models.filter((m: any) => {
+            const id = (m.id || '').toLowerCase();
+            return ALLOWED_CLAUDE_MODELS.has(id) || ALLOWED_CLAUDE_MODELS.has(id.replace(/-\d{8}$/, ''));
+        });
 
-    return filtered
-        .map((m: any) => ({ id: m.id, label: m.display_name || m.id }))
-        .sort((a, b) => a.label.localeCompare(b.label));
+        if (filtered.length === 0) return FALLBACK_CLAUDE_MODELS;
+
+        return filtered
+            .map((m: any) => ({ id: m.id, label: m.display_name || m.id }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+    } catch (error: any) {
+        const status = error?.response?.status;
+        if (status === 401 || status === 403) {
+            throw new Error('Invalid or unauthorized Anthropic API key');
+        }
+        return FALLBACK_CLAUDE_MODELS;
+    }
 }
 
 // ─── DeepSeek ────────────────────────────────────────────────────────────────
 
-// Documented current DeepSeek text models; used as fallback if /models call fails
-// or returns an unexpected shape. deepseek-chat / deepseek-reasoner are deprecated
-// (2026-07-24) and intentionally excluded.
-const DEEPSEEK_DEFAULT_MODELS: ProviderModel[] = [
-    { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
-    { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+export const DEEPSEEK_DEFAULT_MODELS: ProviderModel[] = [
+    { id: 'deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash (Multimodal)' },
+    { id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro (1M Context)' },
+    { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+    { id: 'deepseek-chat', label: 'DeepSeek Chat' },
+    { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner' },
 ];
 
 async function fetchDeepSeekModels(apiKey: string): Promise<ProviderModel[]> {
@@ -151,15 +192,16 @@ async function fetchDeepSeekModels(apiKey: string): Promise<ProviderModel[]> {
         }
 
         const excludePatterns = [
-            'embedding', 'embed', 'vision', 'image', 'audio',
+            'embedding', 'embed', 'image', 'audio',
             'tts', 'speech', 'whisper', 'stt',
         ];
 
         const filtered = models.filter((m: any) => {
             const id = (m.id || '').toLowerCase();
-            if (!/^deepseek-v\d/.test(id)) return false;
-            if (excludePatterns.some(p => id.includes(p))) return false;
-            return true;
+            if (/^deepseek-v\d/.test(id) || id === 'deepseek-chat' || id === 'deepseek-reasoner') {
+                return !excludePatterns.some(p => id.includes(p));
+            }
+            return false;
         });
 
         if (filtered.length === 0) return DEEPSEEK_DEFAULT_MODELS;
@@ -184,15 +226,17 @@ async function fetchDeepSeekModels(apiKey: string): Promise<ProviderModel[]> {
  * empty fetch returns [].
  */
 export const FALLBACK_GEMINI_MODELS: ProviderModel[] = [
-    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
+    { id: 'gemini-3.8-live', label: 'Gemini 3.8 Live' },
     { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
 ];
 
 let cachedDiscoveredGeminiModels: ProviderModel[] | null = null;
 
 /**
- * Predicate to check if a Gemini model is a supported Flash, Flash-Lite, or Pro tier (v2.0+).
+ * Predicate to check if a Gemini model is a supported Flash, Flash-Lite, Pro, or Live tier (v2.0+).
  * Excludes antigravity, deep research, preview, experimental, legacy 1.x, and non-chat models.
  */
 export function isAllowedGeminiModel(id: string): boolean {
@@ -205,9 +249,9 @@ export function isAllowedGeminiModel(id: string): boolean {
     const major = parseInt(versionMatch[1], 10);
     if (major < 2) return false;
 
-    // Must be a Flash (including Flash-Lite, Flash-8B) or Pro tier
-    const isFlashOrPro = clean.includes('flash') || clean.includes('pro');
-    if (!isFlashOrPro) return false;
+    // Must be a Flash (including Flash-Lite, Flash-8B), Pro, or Live tier
+    const isFlashOrProOrLive = clean.includes('flash') || clean.includes('pro') || clean.includes('live');
+    if (!isFlashOrProOrLive) return false;
 
     // Exclude antigravity, deep research, preview, experimental, and specialized variants
     const excludePatterns = [
@@ -217,7 +261,6 @@ export function isAllowedGeminiModel(id: string): boolean {
         'preview',
         'exp',
         'experimental',
-        'thinking',
         'vision',
         'custom',
         'tuned',
@@ -347,4 +390,50 @@ export async function fetchGeminiModelsWithFallback(
 /** Production entry-point for Gemini model discovery. */
 async function fetchGeminiModels(apiKey: string): Promise<ProviderModel[]> {
     return fetchGeminiModelsWithFallback(apiKey, (url, opts) => axios.get(url, opts));
+}
+
+// ─── Generic OpenAI-Compatible Endpoints ─────────────────────────────────────
+
+/**
+ * Fetch available models from any OpenAI-compatible API endpoint (OpenRouter,
+ * Together AI, local vLLM, LMStudio, Ollama /v1, etc.).
+ */
+export async function fetchOpenAICompatibleModels(
+    baseUrl: string,
+    apiKey?: string,
+    customHeaders?: Record<string, string>,
+    httpGet?: HttpGet
+): Promise<ProviderModel[]> {
+    const getFn = httpGet || ((url, opts) => axios.get(url, opts));
+    const cleanUrl = baseUrl.replace(/\/+$/, '');
+    const url = cleanUrl.endsWith('/models') ? cleanUrl : `${cleanUrl}/models`;
+
+    const headers: Record<string, string> = { ...customHeaders };
+    if (apiKey) {
+        headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+
+    try {
+        const response = await getFn(url, {
+            headers,
+            timeout: 15000,
+        });
+
+        const rawList: any[] = response?.data?.data || (Array.isArray(response?.data) ? response.data : []);
+        const filtered: ProviderModel[] = rawList
+            .filter((m: any) => m && (m.id || m.name))
+            .map((m: any) => {
+                const id = m.id || m.name;
+                return {
+                    id,
+                    label: m.display_name || m.name || id,
+                };
+            })
+            .sort((a, b) => a.label.localeCompare(b.label));
+
+        return filtered;
+    } catch (error: any) {
+        console.warn(`[modelFetcher] Failed to fetch models from OpenAI-compatible endpoint ${baseUrl}:`, error.message);
+        throw error;
+    }
 }
