@@ -5529,10 +5529,15 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ── Permissions ──────────────────────────────────────────────
   safeHandle('permissions:check', async () => {
     if (process.platform === 'darwin') {
-      const mic = systemPreferences.getMediaAccessStatus('microphone');
-      const screen = systemPreferences.getMediaAccessStatus('screen');
-      const accessibility = systemPreferences.isTrustedAccessibilityClient(false) ? 'granted' : 'denied';
-      return { microphone: mic, screen, accessibility, platform: 'darwin' };
+      try {
+        const mic = systemPreferences.getMediaAccessStatus('microphone');
+        const screen = systemPreferences.getMediaAccessStatus('screen');
+        const accessibility = systemPreferences.isTrustedAccessibilityClient(false) ? 'granted' : 'denied';
+        return { microphone: mic, screen, accessibility, platform: 'darwin' };
+      } catch (err) {
+        console.error('[IPC] permissions:check error:', err);
+        return { microphone: 'unknown', screen: 'unknown', accessibility: 'unknown', platform: 'darwin' };
+      }
     }
     // Windows/Linux: no TCC — permissions handled by OS at install/first-use time
     return { microphone: 'granted', screen: 'granted', accessibility: 'granted', platform: process.platform };
@@ -5540,6 +5545,9 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('permissions:request-mic', async () => {
     if (process.platform !== 'darwin') return true;
+    if (process.env.CI === 'true') {
+      return systemPreferences.getMediaAccessStatus('microphone') === 'granted';
+    }
     try {
       return await systemPreferences.askForMediaAccess('microphone');
     } catch {
