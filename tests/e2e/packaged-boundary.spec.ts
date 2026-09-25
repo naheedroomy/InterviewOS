@@ -35,11 +35,13 @@ test('packaged app starts with isolated data and reports permission state throug
         '--disable-background-networking',
         '--disable-component-update',
         '--disable-sync',
+        '--disable-gpu',
       ],
       env: {
         ...process.env,
         HOME: path.dirname(path.dirname(expectedUserDataRoot!)),
         USERPROFILE: path.dirname(path.dirname(expectedUserDataRoot!)),
+        INTERVIEWOS_DISABLE_SAFE_STORAGE: '1',
       },
       timeout: 45_000,
     });

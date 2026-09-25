@@ -147,10 +147,10 @@ export class CredentialsManager {
         // Normalize STT provider: any non-canonical persisted value → local-whisper.
         // This ensures forward-compatibility as old provider IDs are retired.
         const stt = this.credentials.sttProvider;
-        if (stt !== 'local-whisper' && stt !== 'google') {
+        if (stt && stt !== 'local-whisper' && stt !== 'google') {
             this.credentials.sttProvider = 'local-whisper';
             this.saveCredentials();
-            console.log(`[CredentialsManager] Normalized STT provider: ${stt || '(none)'} → local-whisper`);
+            console.log(`[CredentialsManager] Normalized STT provider: ${stt} → local-whisper`);
         }
 
         console.log('[CredentialsManager] Initialized');
@@ -749,9 +749,23 @@ export class CredentialsManager {
     // Storage (Encrypted)
     // =========================================================================
 
+    private isEncryptionAvailable(): boolean {
+        // Headless CI runners (e.g. GitHub Actions macOS runners) cannot present GUI
+        // dialogs; safeStorage triggers a blocking OS Keychain prompt for ad-hoc /
+        // unsigned builds, causing the process to hang indefinitely.
+        if (process.env.CI === 'true' || process.env.INTERVIEWOS_DISABLE_SAFE_STORAGE === '1') {
+            return false;
+        }
+        try {
+            return safeStorage.isEncryptionAvailable();
+        } catch {
+            return false;
+        }
+    }
+
     private saveCredentials(): void {
         try {
-            if (!safeStorage.isEncryptionAvailable()) {
+            if (!this.isEncryptionAvailable()) {
                 console.warn('[CredentialsManager] Encryption not available; credentials kept in memory only');
                 return;
             }
@@ -759,6 +773,7 @@ export class CredentialsManager {
             const data = JSON.stringify(this.credentials);
             const encrypted = safeStorage.encryptString(data);
             const tmpEnc = CREDENTIALS_PATH + '.tmp';
+            fs.mkdirSync(path.dirname(CREDENTIALS_PATH), { recursive: true });
             fs.writeFileSync(tmpEnc, encrypted);
             fs.renameSync(tmpEnc, CREDENTIALS_PATH);
         } catch (error) {
@@ -770,7 +785,7 @@ export class CredentialsManager {
         try {
             // Try encrypted file first
             if (fs.existsSync(CREDENTIALS_PATH)) {
-                if (!safeStorage.isEncryptionAvailable()) {
+                if (!this.isEncryptionAvailable()) {
                     console.warn('[CredentialsManager] Encryption not available for load');
                     return;
                 }

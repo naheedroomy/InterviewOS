@@ -112,6 +112,7 @@ const result = spawnSync(
       PLAYWRIGHT_HTML_OUTPUT_DIR: path.join(artifactDir, 'html-report'),
       // Chromium background services are unnecessary for this local file:// smoke.
       ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
+      INTERVIEWOS_DISABLE_SAFE_STORAGE: '1',
     },
   },
 );

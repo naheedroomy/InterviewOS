@@ -261,8 +261,19 @@ export class CalendarManager extends EventEmitter {
     // Token Storage (Encrypted)
     // =========================================================================
 
+    private isEncryptionAvailable(): boolean {
+        if (process.env.CI === 'true' || process.env.INTERVIEWOS_DISABLE_SAFE_STORAGE === '1') {
+            return false;
+        }
+        try {
+            return safeStorage.isEncryptionAvailable();
+        } catch {
+            return false;
+        }
+    }
+
     private saveTokens() {
-        if (!safeStorage.isEncryptionAvailable()) {
+        if (!this.isEncryptionAvailable()) {
             console.warn('[CalendarManager] Encryption not available, skipping token save');
             return;
         }
@@ -275,6 +286,7 @@ export class CalendarManager extends EventEmitter {
 
         const encrypted = safeStorage.encryptString(data);
         const tmpPath = TOKEN_PATH + '.tmp';
+        fs.mkdirSync(path.dirname(TOKEN_PATH), { recursive: true });
         fs.writeFileSync(tmpPath, encrypted);
         fs.renameSync(tmpPath, TOKEN_PATH);
     }
@@ -283,7 +295,7 @@ export class CalendarManager extends EventEmitter {
         if (!fs.existsSync(TOKEN_PATH)) return;
 
         try {
-            if (!safeStorage.isEncryptionAvailable()) return;
+            if (!this.isEncryptionAvailable()) return;
 
             const encrypted = fs.readFileSync(TOKEN_PATH);
             const decrypted = safeStorage.decryptString(encrypted);
