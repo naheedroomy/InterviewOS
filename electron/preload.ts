@@ -1,4 +1,5 @@
-import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
+import { filterPreloadApi, getPreloadRole } from './PreloadRolePolicy';
 
 // Types for the exposed Electron API
 interface ElectronAPI {
@@ -336,8 +337,8 @@ interface ElectronAPI {
     createdAt: string;
     updatedAt: string;
   }>>;
-  interviewDocsSelectFiles: () => Promise<{ success: boolean; cancelled: boolean; files: Array<{ path: string; name: string; size: number; ext: string }>; error?: string }>;
-  interviewDocsBatchUpload: (items: Array<{ filePath: string; contextKind?: string; contextDescription?: string }>) => Promise<{ success: boolean; documents?: any[]; error?: string }>;
+  interviewDocsSelectFiles: () => Promise<{ success: boolean; cancelled: boolean; files: Array<{ token: string; name: string; size: number; ext: string }>; error?: string }>;
+  interviewDocsBatchUpload: (items: Array<{ token?: string; name?: string; data?: Uint8Array; contextKind?: string; contextDescription?: string }>) => Promise<{ success: boolean; documents?: any[]; error?: string }>;
   interviewDocsUpload: () => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>;
   interviewDocsUpdateMetadata: (id: string, metadata: { contextKind: string; contextDescription?: string }) => Promise<{ success: boolean; document?: any; error?: string }>;
   interviewDocsDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
@@ -376,8 +377,7 @@ interface ElectronAPI {
     usage: Record<string, Array<{ workspaceId: string; workspaceTitle: string }>>;
     error?: string;
   }>;
-  interviewDocsUploadFromPath: (filePath: string, metadata?: { contextKind?: string; contextDescription?: string }) => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>;
-  getPathForFile: (file: File) => string;
+
 
   // Backward Compatibility Workspace APIs
   interviewWorkspaceGetByMeeting: (meetingId: string) => Promise<any | null>;
@@ -555,7 +555,7 @@ interface ElectronAPI {
     options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean; systemPrompt?: string; recordInSession?: boolean },
   ) => Promise<void>;
   onGeminiStreamToken: (callback: (token: string) => void) => () => void;
-  onGeminiStreamDone: (callback: () => void) => () => void;
+  onGeminiStreamDone: (callback: (route: { provider: string; model: string; isOllama: boolean } | null) => void) => () => void;
   onGeminiStreamError: (callback: (error: string) => void) => () => void;
 
   onUndetectableChanged: (callback: (state: boolean) => void) => () => void;
@@ -691,7 +691,7 @@ interface ElectronAPI {
   setDonationComplete: () => Promise<{ success: boolean }>;
 
   // Profile Engine API
-  profileUploadResume: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+  profileUploadResume: (token: string) => Promise<{ success: boolean; error?: string }>;
   profileGetStatus: () => Promise<{
     hasProfile: boolean;
     profileMode: boolean;
@@ -705,12 +705,13 @@ interface ElectronAPI {
   profileSelectFile: () => Promise<{
     success?: boolean;
     cancelled?: boolean;
-    filePath?: string;
+    token?: string;
+    displayName?: string;
     error?: string;
   }>;
 
   // JD & Research API
-  profileUploadJD: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+  profileUploadJD: (token: string) => Promise<{ success: boolean; error?: string }>;
   profileDeleteJD: () => Promise<{ success: boolean; error?: string }>;
   profileResearchCompany: (
     companyName: string,
@@ -744,6 +745,25 @@ interface ElectronAPI {
   // Overlay Opacity (Stealth Mode)
   setOverlayOpacity: (opacity: number) => Promise<void>;
   onOverlayOpacityChanged: (callback: (opacity: number) => void) => () => void;
+
+  // Consent, version, and debug settings
+  getAppVersion: () => Promise<string>;
+  getAnalyticsConsent: () => Promise<{
+    consent: 'unset' | 'granted' | 'denied';
+    legalAccepted: boolean;
+    legalAcceptanceVersion: string | null;
+    enabled: boolean;
+  }>;
+  setAnalyticsConsent: (
+    consent: 'granted' | 'denied',
+    legalAcceptance?: { version?: string },
+  ) => Promise<{
+    success: boolean;
+    consent?: 'granted' | 'denied';
+    enabled?: boolean;
+    error?: string;
+  }>;
+  onAnalyticsConsentChanged: (callback: (consent: 'granted' | 'denied') => void) => () => void;
 
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
@@ -921,8 +941,8 @@ export const PROCESSING_EVENTS = {
   DEBUG_ERROR: 'debug-error',
 } as const;
 
-// Expose the Electron API to the renderer process
-contextBridge.exposeInMainWorld('electronAPI', {
+// Build the same typed bridge once, then expose only the authority assigned by main.
+const electronAPI = {
   updateContentDimensions: (dimensions: { width: number; height: number }) =>
     ipcRenderer.invoke('update-content-dimensions', dimensions),
   updateContentDimensionsCentered: (dimensions: { width: number; height: number }) =>
@@ -1465,7 +1485,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Meeting Lifecycle
   interviewDocsList: () => ipcRenderer.invoke('interview-docs:list'),
   interviewDocsSelectFiles: () => ipcRenderer.invoke('interview-docs:select-files'),
-  interviewDocsBatchUpload: (items: Array<{ filePath: string; contextKind?: string; contextDescription?: string }>) =>
+  interviewDocsBatchUpload: (items: Array<{ token?: string; name?: string; data?: Uint8Array; contextKind?: string; contextDescription?: string }>) =>
     ipcRenderer.invoke('interview-docs:batch-upload', items),
   interviewDocsUpload: () => ipcRenderer.invoke('interview-docs:upload'),
   interviewDocsUpdateMetadata: (id: string, metadata: { contextKind: string; contextDescription?: string }) => ipcRenderer.invoke('interview-docs:update-metadata', id, metadata),
@@ -1527,15 +1547,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     aiPersonaOverride?: string;
   }) => ipcRenderer.invoke('interview-workspace:sync-llm-context', payload),
   knowledgeBankGetDocumentUsage: () => ipcRenderer.invoke('knowledge-bank:get-document-usage'),
-  interviewDocsUploadFromPath: (filePath: string, metadata?: { contextKind?: string; contextDescription?: string }) =>
-    ipcRenderer.invoke('interview-docs:upload-from-path', filePath, metadata),
-  getPathForFile: (file: File) => {
-    try {
-      return webUtils.getPathForFile(file);
-    } catch {
-      return (file as any).path || '';
-    }
-  },
+
 
   // Backward Compatibility Workspace APIs
   interviewWorkspaceGetByMeeting: (meetingId: string) => ipcRenderer.invoke('interview-workspace:get-by-meeting', meetingId),
@@ -1738,8 +1750,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
-  onGeminiStreamDone: (callback: () => void) => {
-    const subscription = () => callback();
+  onGeminiStreamDone: (callback: (route: { provider: string; model: string; isOllama: boolean } | null) => void) => {
+    const subscription = (_: Electron.IpcRendererEvent, route: { provider: string; model: string; isOllama: boolean } | null = null) => callback(route);
     ipcRenderer.on('gemini-stream-done', subscription);
     return () => {
       ipcRenderer.removeListener('gemini-stream-done', subscription);
@@ -2068,7 +2080,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setDonationComplete: () => ipcRenderer.invoke('set-donation-complete'),
 
   // Profile Engine API
-  profileUploadResume: (filePath: string) => ipcRenderer.invoke('profile:upload-resume', filePath),
+  profileUploadResume: (token: string) => ipcRenderer.invoke('profile:upload-resume', token),
   profileGetStatus: () => ipcRenderer.invoke('profile:get-status'),
   profileSetMode: (enabled: boolean) => ipcRenderer.invoke('profile:set-mode', enabled),
   profileDelete: () => ipcRenderer.invoke('profile:delete'),
@@ -2076,7 +2088,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   profileSelectFile: () => ipcRenderer.invoke('profile:select-file'),
 
   // JD & Research API
-  profileUploadJD: (filePath: string) => ipcRenderer.invoke('profile:upload-jd', filePath),
+  profileUploadJD: (token: string) => ipcRenderer.invoke('profile:upload-jd', token),
   profileDeleteJD: () => ipcRenderer.invoke('profile:delete-jd'),
   profileResearchCompany: (companyName: string) =>
     ipcRenderer.invoke('profile:research-company', companyName),
@@ -2130,6 +2142,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => {
       ipcRenderer.removeListener('overlay-opacity-changed', subscription);
     };
+  },
+
+  // Consent, version, and debug settings
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  getAnalyticsConsent: () => ipcRenderer.invoke('get-analytics-consent'),
+  setAnalyticsConsent: (consent: 'granted' | 'denied', legalAcceptance?: { version?: string }) =>
+    ipcRenderer.invoke('set-analytics-consent', consent, legalAcceptance),
+  onAnalyticsConsentChanged: (callback: (consent: 'granted' | 'denied') => void) => {
+    const subscription = (_: any, consent: 'granted' | 'denied') => callback(consent);
+    ipcRenderer.on('analytics-consent-changed', subscription);
+    return () => ipcRenderer.removeListener('analytics-consent-changed', subscription);
   },
 
   // Verbose / Debug Logging
@@ -2272,7 +2295,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cancelChatStream: () => {
     ipcRenderer.send('gemini-chat-stream-stop');
   },
-} as ElectronAPI);
+} as ElectronAPI;
+
+const preloadRole = getPreloadRole(process.argv);
+if (!preloadRole) {
+  console.error('[preload] Missing or unknown trusted window role; renderer bridge disabled');
+} else {
+  contextBridge.exposeInMainWorld('electronAPI', filterPreloadApi(
+    electronAPI as unknown as Record<string, unknown>,
+    preloadRole,
+  ));
+}
 
 // Renderer-side console forwarding to main-process log file.
 // When verbose logging is on, patch console.log/warn/error so that renderer

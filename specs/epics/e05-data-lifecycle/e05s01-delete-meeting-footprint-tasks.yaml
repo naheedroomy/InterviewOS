@@ -1,6 +1,6 @@
 story_id: e05s01
 title: Delete the complete meeting footprint
-status: todo
+status: done
 bcps: 8
 tasks:
   - id: e05s01-01
@@ -10,7 +10,7 @@ tasks:
     verify: >-
       npm run build:electron && node --test
       electron/db/__tests__/MeetingDeletionLifecycle.test.mjs
-    status: todo
+    status: done
   - id: e05s01-02
     description: >-
       Delete all persisted meeting artifacts and references as one recoverable
@@ -18,7 +18,7 @@ tasks:
     verify: >-
       npm run build:electron && node --test
       electron/db/__tests__/MeetingDeletionLifecycle.test.mjs
-    status: todo
+    status: done
   - id: e05s01-03
     description: >-
       Verify that post-call retrieval cannot locate deleted content after the
@@ -26,4 +26,4 @@ tasks:
     verify: >-
       npm run build:electron && node --test
       electron/db/__tests__/MeetingDeletionLifecycle.test.mjs
-    status: todo
+    status: done

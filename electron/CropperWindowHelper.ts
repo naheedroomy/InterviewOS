@@ -1,5 +1,6 @@
-import { BrowserWindow, screen, app, ipcMain, IpcMainEvent } from "electron"
+import { BrowserWindow, screen, app, ipcMain, IpcMainEvent, shell } from "electron"
 import path from "node:path"
+import { installRendererNavigationGuards } from "./RendererNavigationPolicy"
 
 const isDev = process.env.NODE_ENV === "development"
 
@@ -412,7 +413,8 @@ export class CropperWindowHelper {
             webPreferences: {
                 nodeIntegration: false,
                 contextIsolation: true,
-                preload: path.join(__dirname, "preload.js")
+                preload: path.join(__dirname, "preload.js"),
+                additionalArguments: ['--answercue-window-role=cropper']
             }
         }
 
@@ -425,6 +427,7 @@ export class CropperWindowHelper {
         }
 
         this.cropperWindow = new BrowserWindow(windowSettings)
+        installRendererNavigationGuards(this.cropperWindow.webContents, startUrl, async (url) => { await shell.openExternal(url); })
 
         // Apply NSPanel stealth attributes (becomesKeyOnlyIfNeeded +
         // _setPreventsActivation: SPI + sharingType=None + collectionBehavior).

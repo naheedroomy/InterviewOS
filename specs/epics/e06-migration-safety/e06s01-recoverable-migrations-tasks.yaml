@@ -1,6 +1,6 @@
 story_id: e06s01
 title: Make failed migrations recoverable
-status: todo
+status: done
 bcps: 5
 tasks:
   - id: e06s01-01
@@ -10,7 +10,7 @@ tasks:
     verify: >-
       npm run build:electron && node --test
       electron/db/__tests__/MigrationRecovery.test.mjs
-    status: todo
+    status: done
   - id: e06s01-02
     description: >-
       Advance the database version only after the full migration commits and
@@ -18,7 +18,7 @@ tasks:
     verify: >-
       npm run build:electron && node --test
       electron/db/__tests__/MigrationRecovery.test.mjs
-    status: todo
+    status: done
   - id: e06s01-03
     description: >-
       Provide an idempotent recovery path for a failed upgrade and make its
@@ -26,4 +26,4 @@ tasks:
     verify: >-
       npm run build:electron && node --test
       electron/db/__tests__/MigrationRecovery.test.mjs
-    status: todo
+    status: done

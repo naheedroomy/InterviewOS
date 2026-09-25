@@ -782,10 +782,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         setProfileError('');
                                                         try {
                                                             const fileResult = await window.electronAPI?.profileSelectFile?.();
-                                                            if (fileResult?.cancelled || !fileResult?.filePath) return;
+                                                            if (fileResult?.cancelled || !fileResult?.token) return;
 
                                                             setProfileUploading(true);
-                                                            const result = await window.electronAPI?.profileUploadResume?.(fileResult.filePath);
+                                                            const result = await window.electronAPI?.profileUploadResume?.(fileResult.token);
                                                             if (result?.success) {
                                                                 const status = await window.electronAPI?.profileGetStatus?.();
                                                                 if (status) setProfileStatus(status);
@@ -891,10 +891,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         setJdError('');
                                                         try {
                                                             const fileResult = await window.electronAPI?.profileSelectFile?.();
-                                                            if (fileResult?.cancelled || !fileResult?.filePath) return;
+                                                            if (fileResult?.cancelled || !fileResult?.token) return;
 
                                                             setJdUploading(true);
-                                                            const result = await window.electronAPI?.profileUploadJD?.(fileResult.filePath);
+                                                            const result = await window.electronAPI?.profileUploadJD?.(fileResult.token);
                                                             if (result?.success) {
                                                                 const data = await window.electronAPI?.profileGetProfile?.();
                                                                 if (data) setProfileData(data);

@@ -21,7 +21,7 @@ function sliceBetween(startNeedle, endNeedle) {
 
 test('live overlay quick actions expose Solve Code instead of the manual Answer button', () => {
   const quickActions = sliceBetween(
-    '{/* Quick Actions - Minimal & Clean */}',
+    '{/* Quick Actions - wrap to two rows at narrow widths */}',
     '{/* Input Area */}',
   );
 

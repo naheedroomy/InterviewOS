@@ -268,7 +268,7 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
       if (result?.cancelled || !result?.files?.length) return;
       const newStaged: StagedUploadFile[] = result.files.map((file, idx) => ({
         id: `${Date.now()}-${idx}-${file.name}`,
-        filePath: file.path,
+        token: file.token,
         name: file.name,
         sizeBytes: file.size,
         fileType: file.ext,
@@ -289,7 +289,7 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
       if (result?.cancelled || !result?.files?.length) return;
       const newStaged: StagedUploadFile[] = result.files.map((file, idx) => ({
         id: `${Date.now()}-${idx}-${file.name}`,
-        filePath: file.path,
+        token: file.token,
         name: file.name,
         sizeBytes: file.size,
         fileType: file.ext,
@@ -330,21 +330,16 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const ext = file.name.substring(file.name.lastIndexOf('.')).replace('.', '').toLowerCase();
-      if (!['pdf', 'docx', 'txt', 'md', 'markdown'].includes(ext)) {
-        continue;
-      }
-      const filePath = window.electronAPI?.getPathForFile?.(file) || (file as any).path;
-      if (filePath) {
-        newStaged.push({
-          id: `${Date.now()}-${i}-${file.name}`,
-          filePath,
-          name: file.name,
-          sizeBytes: file.size,
-          fileType: ext === 'markdown' ? 'md' : ext,
-          contextKind: detectContextKindFromName(file.name),
-          contextDescription: '',
-        });
-      }
+      if (!['pdf', 'docx', 'txt', 'md', 'markdown'].includes(ext) || file.size > 15 * 1024 * 1024) continue;
+      newStaged.push({
+        id: `${Date.now()}-${i}-${file.name}`,
+        data: new Uint8Array(await file.arrayBuffer()),
+        name: file.name,
+        sizeBytes: file.size,
+        fileType: ext === 'markdown' ? 'md' : ext,
+        contextKind: detectContextKindFromName(file.name),
+        contextDescription: '',
+      });
     }
 
     if (newStaged.length > 0) {
@@ -361,13 +356,20 @@ export const KnowledgeBankView: React.FC<KnowledgeBankViewProps> = ({
     setStagingUploadError(null);
     try {
       const items = filesToUpload.map(f => ({
-        filePath: f.filePath,
+        token: f.token,
+        name: f.name,
+        data: f.data,
         contextKind: f.contextKind,
         contextDescription: f.contextDescription.trim() || undefined,
       }));
       const res = await window.electronAPI?.interviewDocsBatchUpload?.(items);
       if (!res?.success) {
-        setStagingUploadError(res?.error || 'Failed to upload documents.');
+        if (res?.requiresReselection) {
+          setStagedUploadFiles(prev => prev.filter(file => !file.token));
+          setStagingUploadError('Selected files must be chosen again. Please reselect them before retrying.');
+        } else {
+          setStagingUploadError(res?.error || 'Failed to upload documents.');
+        }
         return;
       }
 

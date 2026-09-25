@@ -34,6 +34,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary"
 const queryClient = new QueryClient()
 
 const Cropper = React.lazy(() => import('./components/Cropper'));
+const LEGAL_ACCEPTANCE_VERSION = '2026-09-01';
 
 const CropperView: React.FC = () => (
   <React.Suspense fallback={<div className="w-screen h-screen bg-transparent" />}>
@@ -50,42 +51,44 @@ const MainAppContent: React.FC = () => {
   // Default to launcher if not specified (dev mode safety)
   const isDefault = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow;
 
-  // Initialize Analytics
+  const [showStartup, setShowStartup] = useState<boolean>(false);
+
+  // Initialize analytics only after the main process confirms explicit consent.
   useEffect(() => {
-    // Only init if we are in a main window context to avoid duplicate events from helper windows
-    // Actually, we probably want to track app open from the main entry point.
-    // Let's protect initialization to ensure single run per window.
-    // The service handles single-init, but let's be thoughtful about WHICH window tracks "App Open".
-    // Launcher is the main entry. Overlay is the "Assistant".
+    let disposed = false;
+    const initialize = async () => {
+      const consent = await window.electronAPI?.getAnalyticsConsent?.().catch(() => null);
+      if (disposed) return;
 
-    analytics.initAnalytics();
-
-    if (isLauncherWindow || isDefault) {
-      analytics.trackAppOpen();
-    }
-
-    if (isOverlayWindow) {
-      analytics.trackAssistantStart();
-    }
-
-    // Cleanup / Session End
-    const handleUnload = () => {
-      if (isOverlayWindow) {
-        analytics.trackAssistantStop();
+      // The legal/analytics consent surface is shown on the launcher until the
+      // user records a choice. Existing installs are intentionally re-prompted.
+      if ((isLauncherWindow || isDefault) && !consent?.legalAccepted) {
+        setShowStartup(true);
       }
-      if (isLauncherWindow || isDefault) {
-        analytics.trackAppClose();
-      }
+
+      await analytics.initAnalytics();
+      if (disposed) return;
+      if (isLauncherWindow || isDefault) analytics.trackAppOpen();
+      if (isOverlayWindow) analytics.trackAssistantStart();
     };
+    void initialize();
+    const unsubscribeConsent = window.electronAPI?.onAnalyticsConsentChanged?.((consent) => {
+      analytics.handleConsentChanged(consent);
+    });
 
+    const handleUnload = () => {
+      if (isOverlayWindow) analytics.trackAssistantStop();
+      if (isLauncherWindow || isDefault) analytics.trackAppClose();
+    };
     window.addEventListener('beforeunload', handleUnload);
     return () => {
+      disposed = true;
+      unsubscribeConsent?.();
       window.removeEventListener('beforeunload', handleUnload);
     };
   }, [isLauncherWindow, isOverlayWindow, isDefault]);
 
   // State
-  const [showStartup, setShowStartup] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string>('general');
   const openSettingsExclusive = useCallback((tab: string = 'general') => {
@@ -559,9 +562,13 @@ const MainAppContent: React.FC = () => {
             initial={{ opacity: 1 }}
             exit={{ opacity: 0, scale: 1.1, pointerEvents: "none", transition: { duration: 0.6, ease: "easeInOut" } }}
           >
-            <StartupSequence onComplete={() => {
-              try { localStorage.setItem('natively_seen_startup_v1', 'true'); } catch {}
+            <StartupSequence onComplete={async (analyticsConsent) => {
+              const result = await window.electronAPI?.setAnalyticsConsent?.(analyticsConsent, { version: LEGAL_ACCEPTANCE_VERSION });
+              if (!result?.success) return false;
+              if (analyticsConsent === 'granted') await analytics.initAnalytics();
               setShowStartup(false);
+              analytics.trackAppOpen();
+              return true;
             }} />
           </motion.div>
         ) : (

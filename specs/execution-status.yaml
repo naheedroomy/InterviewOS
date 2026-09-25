@@ -1,14 +1,14 @@
 release: phase-0
-status: planning
+status: done
 stories:
-  e01s01: todo
+  e01s01: done
   e02s01: done
   e02s02: done
-  e03s01: todo
-  e04s01: todo
-  e05s01: todo
-  e05s02: todo
-  e06s01: todo
-  e07s01: todo
-  e07s02: todo
-  e08s01: todo
+  e03s01: done
+  e04s01: done
+  e05s01: done
+  e05s02: done
+  e06s01: done
+  e07s01: done
+  e07s02: done
+  e08s01: done

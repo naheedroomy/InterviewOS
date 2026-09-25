@@ -1,6 +1,6 @@
 story_id: e08s01
 title: Validate every advertised release path
-status: todo
+status: done
 bcps: 8
 tasks:
   - id: e08s01-01
@@ -8,7 +8,7 @@ tasks:
       Define one source of truth for supported platform and capability claims
       across packaging, website, docs, and release checklists.
     verify: npm run verify:package-inputs
-    status: todo
+    status: done
   - id: e08s01-02
     description: >-
       Make download selection choose the intended installer deterministically
@@ -16,10 +16,10 @@ tasks:
     verify: >-
       npm --prefix website run build && node
       scripts/verify-release-platforms.mjs
-    status: todo
+    status: done
   - id: e08s01-03
     description: >-
       Verify native-module availability and installer contents for every
       advertised target, or remove the unverified release promise.
     verify: npm run verify:package-inputs
-    status: todo
+    status: done

@@ -65,6 +65,7 @@ export interface VisionFallbackHooks {
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   log?: (msg: string) => void;
   warn?: (msg: string) => void;
+  onCommitted?: (providerId: string) => void;
 }
 
 export const DEFAULT_VISION_FALLBACK_CONFIG: VisionFallbackConfig = {
@@ -254,6 +255,7 @@ export async function* runStreamingVisionFallback(
 
         // ── COMMIT ──────────────────────────────────────────────────────────
         committed = true;
+        hooks.onCommitted?.(provider.id);
         recordVisionTtft(health, provider.id, now() - attemptStart);
         markVisionHealthy(health, provider.id);
         log(`[Vision] committed to ${provider.name} (attempt ${attempt}/${cfg.maxAttempts}, ttft=${now() - attemptStart}ms)`);

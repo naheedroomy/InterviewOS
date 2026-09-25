@@ -56,13 +56,20 @@ assertFile('dist/index.html');
 assertFile('dist-electron/electron/main.js');
 
 if (requireNative) {
-  const nativeArtifact = process.platform === 'win32'
-    ? 'native-module/index.win32-x64-msvc.node'
-    : process.platform === 'darwin'
-      ? `native-module/index.darwin-${process.arch === 'arm64' ? 'arm64' : 'x64'}.node`
-      : `native-module/index.linux-${process.arch === 'arm64' ? 'arm64' : 'x64'}-gnu.node`;
-
-  assertFile(nativeArtifact);
+  if (process.platform === 'linux') {
+    fail('Linux is not a supported release target; native capture is unsupported on Linux.');
+  } else if (process.platform === 'win32') {
+    assertFile('native-module/index.win32-x64-msvc.node');
+  } else if (process.platform === 'darwin') {
+    if (args.includes('--all-mac-arches')) {
+      assertFile('native-module/index.darwin-arm64.node');
+      assertFile('native-module/index.darwin-x64.node');
+    } else {
+      assertFile(`native-module/index.darwin-${process.arch === 'arm64' ? 'arm64' : 'x64'}.node`);
+    }
+  } else {
+    fail(`Unsupported platform for release package: ${process.platform}`);
+  }
 }
 
 if (asarPath) {

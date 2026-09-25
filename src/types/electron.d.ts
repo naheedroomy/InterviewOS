@@ -330,8 +330,8 @@ export interface ElectronAPI {
 
   // Meeting Lifecycle
   interviewDocsList: () => Promise<Array<{ id: string; name: string; fileType: 'md' | 'txt' | 'pdf' | 'docx'; markdown: string; contextKind?: InterviewContextDocumentKind; contextDescription?: string; sizeBytes: number; createdAt: string; updatedAt: string }>>
-  interviewDocsSelectFiles: () => Promise<{ success: boolean; cancelled: boolean; files: Array<{ path: string; name: string; size: number; ext: string }>; error?: string }>
-  interviewDocsBatchUpload: (items: Array<{ filePath: string; contextKind?: InterviewContextDocumentKind; contextDescription?: string }>) => Promise<{ success: boolean; documents?: any[]; error?: string }>
+  interviewDocsSelectFiles: () => Promise<{ success: boolean; cancelled: boolean; files: Array<{ token: string; name: string; size: number; ext: string }>; error?: string }>
+  interviewDocsBatchUpload: (items: Array<{ token?: string; name?: string; data?: Uint8Array; contextKind?: InterviewContextDocumentKind; contextDescription?: string }>) => Promise<{ success: boolean; documents?: any[]; error?: string; requiresReselection?: boolean }>
   interviewDocsUpload: () => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>
   interviewDocsUpdateMetadata: (id: string, metadata: { contextKind: InterviewContextDocumentKind; contextDescription?: string }) => Promise<{ success: boolean; document?: any; error?: string }>
   interviewDocsDelete: (id: string) => Promise<{ success: boolean; error?: string }>
@@ -369,9 +369,7 @@ export interface ElectronAPI {
     usage: Record<string, Array<{ workspaceId: string; workspaceTitle: string }>>;
     error?: string;
   }>
-  interviewDocsUploadFromPath: (filePath: string, metadata?: { contextKind?: InterviewContextDocumentKind; contextDescription?: string }) => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>
   onInterviewDocsChanged?: (callback: () => void) => () => void
-  getPathForFile?: (file: File) => string
 
   // Backward Compatibility Workspace APIs
   interviewWorkspaceGetByMeeting: (meetingId: string) => Promise<any | null>
@@ -425,7 +423,7 @@ export interface ElectronAPI {
   // Streaming listeners
   streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean, systemPrompt?: string, recordInSession?: boolean }) => Promise<void>
   onGeminiStreamToken: (callback: (token: string) => void) => () => void
-  onGeminiStreamDone: (callback: () => void) => () => void
+  onGeminiStreamDone: (callback: (route: { provider: string; model: string; isOllama: boolean } | null) => void) => () => void
   onGeminiStreamError: (callback: (error: string) => void) => () => void;
   cancelChatStream: () => void;
 
@@ -552,15 +550,15 @@ export interface ElectronAPI {
   onStealthKeyCaptured: (cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void) => () => void
 
   // Profile Engine API
-  profileUploadResume: (filePath: string) => Promise<{ success: boolean; error?: string }>
+  profileUploadResume: (token: string) => Promise<{ success: boolean; error?: string }>
   profileGetStatus: () => Promise<{ hasProfile: boolean; profileMode: boolean; name?: string; role?: string; totalExperienceYears?: number }>
   profileSetMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
   profileDelete: () => Promise<{ success: boolean; error?: string }>
   profileGetProfile: () => Promise<any>
-  profileSelectFile: () => Promise<{ success?: boolean; cancelled?: boolean; filePath?: string; error?: string }>
+  profileSelectFile: () => Promise<{ success?: boolean; cancelled?: boolean; token?: string; displayName?: string; error?: string }>
 
   // JD & Research API
-  profileUploadJD: (filePath: string) => Promise<{ success: boolean; error?: string }>
+  profileUploadJD: (token: string) => Promise<{ success: boolean; error?: string }>
   profileDeleteJD: () => Promise<{ success: boolean; error?: string }>
   profileResearchCompany: (companyName: string) => Promise<{ success: boolean; dossier?: any; error?: string; searchQuotaExhausted?: boolean }>
   profileGenerateNegotiation: (force?: boolean) => Promise<{ success: boolean; script?: any; error?: string }>
@@ -592,6 +590,26 @@ export interface ElectronAPI {
   // Overlay Opacity (Stealth Mode)
   setOverlayOpacity: (opacity: number) => Promise<void>;
   onOverlayOpacityChanged: (callback: (opacity: number) => void) => () => void;
+
+  // Consent, version, and debug settings
+  getAppVersion: () => Promise<string>;
+  getAnalyticsConsent: () => Promise<{
+    consent: 'unset' | 'granted' | 'denied';
+    legalAccepted: boolean;
+    legalAcceptanceVersion: string | null;
+    enabled: boolean;
+    localTelemetryEnabled: boolean;
+  }>;
+  setAnalyticsConsent: (
+    consent: 'granted' | 'denied',
+    legalAcceptance?: { version?: string },
+  ) => Promise<{
+    success: boolean;
+    consent?: 'granted' | 'denied';
+    enabled?: boolean;
+    error?: string;
+  }>;
+  onAnalyticsConsentChanged: (callback: (consent: 'granted' | 'denied') => void) => () => void;
 
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;

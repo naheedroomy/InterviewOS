@@ -1,6 +1,6 @@
 story_id: e05s02
 title: Make displayed retention behavior true
-status: todo
+status: done
 bcps: 5
 tasks:
   - id: e05s02-01
@@ -9,21 +9,20 @@ tasks:
       including never-persist and elapsed-retention behavior.
     verify: >-
       npm run build:electron && node --test
-      electron/services/__tests__/RetentionPolicy.test.mjs
-    status: todo
+      electron/db/__tests__/MeetingRetentionPolicy.test.mjs
+    status: done
   - id: e05s02-02
     description: >-
       Implement verified retention enforcement or remove settings values that
       have no reliable behavior.
     verify: >-
       npm run build:electron && node --test
-      electron/services/__tests__/RetentionPolicy.test.mjs
-    status: todo
+      electron/db/__tests__/MeetingRetentionPolicy.test.mjs
+    status: done
   - id: e05s02-03
     description: >-
       Make the retention UI and privacy copy describe the exact enforced
       lifecycle and deletion outcome.
     verify: >-
-      npm run build:electron && node --test
-      electron/services/__tests__/RetentionPolicy.test.mjs
-    status: todo
+      npm run build && npm test
+    status: done

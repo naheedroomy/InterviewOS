@@ -114,7 +114,7 @@ const startBody = extractFunctionBody(
 );
 const stopBody = extractFunctionBody(
   mainSrc,
-  String.raw`public\s+stopAudioTest\s*\(\s*\)\s*:\s*void\s*\{`,
+  String.raw`public\s+async\s+stopAudioTest\s*\(\s*\)\s*:\s*Promise<void>\s*\{`,
 );
 
 describe('UX4: audio test probes system audio in parallel with the mic', () => {
@@ -173,12 +173,12 @@ describe('UX4: audio test probes system audio in parallel with the mic', () => {
       'BUG (UX4 REGRESSION): stopAudioTest no longer references `audioTestSystemCapture`. The parallel system probe must be torn down alongside the mic capture — leaving it running after the dialog closes leaks native capture threads and holds an exclusive system-audio handle into the next meeting.',
     );
     assert.ok(
-      /audioTestSystemCapture[\s\S]*?\.stop\s*\(\s*\)/.test(stopBody),
-      'BUG (UX4 REGRESSION): stopAudioTest references audioTestSystemCapture but never calls .stop() on it. Nulling the reference without stopping leaks the native capture thread.',
+      /const\s+sysCapture\s*=\s*this\.audioTestSystemCapture/.test(stopBody) && /await\s+sysCapture\.stop\s*\(\s*\)/.test(stopBody),
+      'BUG (UX4 REGRESSION): stopAudioTest must retain and await the system capture before releasing it.',
     );
     assert.ok(
       /this\.audioTestSystemCapture\s*=\s*null/.test(stopBody),
-      'BUG (UX4 REGRESSION): stopAudioTest does not null `this.audioTestSystemCapture` after .stop(). Leaving the dead wrapper around causes the next startAudioTest call to skip constructing a fresh probe (if the construction path is gated on the field being null).',
+      'BUG (UX4 REGRESSION): stopAudioTest must clear `this.audioTestSystemCapture` while retaining the local handle for awaited teardown.',
     );
   });
 

@@ -186,12 +186,7 @@ async function fetchDeepSeekModels(apiKey: string): Promise<ProviderModel[]> {
 export const FALLBACK_GEMINI_MODELS: ProviderModel[] = [
     { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
     { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-    { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
-    { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
     { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
-    { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite Preview' },
-    { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
 ];
 
 let cachedDiscoveredGeminiModels: ProviderModel[] | null = null;

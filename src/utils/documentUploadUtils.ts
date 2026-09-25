@@ -2,7 +2,8 @@ import type { InterviewContextDocumentKind } from '../types/electron';
 
 export interface StagedUploadFile {
   id: string;
-  filePath: string;
+  token?: string;
+  data?: Uint8Array;
   name: string;
   sizeBytes: number;
   fileType: string;

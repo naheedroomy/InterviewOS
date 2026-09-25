@@ -1,6 +1,7 @@
-import { BrowserWindow, screen, app } from "electron"
+import { BrowserWindow, screen, app, shell } from "electron"
 import { WindowHelper } from "./WindowHelper"
 import path from "node:path"
+import { installRendererNavigationGuards } from "./RendererNavigationPolicy"
 
 const isDev = process.env.NODE_ENV === "development"
 
@@ -172,6 +173,7 @@ export class SettingsWindowHelper {
                 nodeIntegration: false,
                 contextIsolation: true,
                 preload: path.join(__dirname, "preload.js"),
+                additionalArguments: ['--answercue-window-role=settings'],
                 backgroundThrottling: false // Keep window ready even when hidden
             },
             // ROUND 3 FIX: type: 'panel' is what makes this an NSPanel rather
@@ -191,6 +193,7 @@ export class SettingsWindowHelper {
         }
 
         this.settingsWindow = new BrowserWindow(windowSettings)
+        installRendererNavigationGuards(this.settingsWindow.webContents, startUrl, async (url) => { await shell.openExternal(url); })
 
         if (process.platform === "darwin") {
             this.settingsWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })

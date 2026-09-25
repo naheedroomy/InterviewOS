@@ -34,10 +34,8 @@ test('interview-docs mutation handlers broadcast interview-docs:changed to all w
   assert.ok(uploadHandler.length > 0, 'interview-docs:upload handler must exist');
   assert.match(uploadHandler, /broadcastInterviewDocsChanged\(\)/, 'upload must invoke broadcastInterviewDocsChanged');
 
-  // Verify upload-from-path broadcasts
-  const pathHandler = sliceSafeHandleBlock(source, 'interview-docs:upload-from-path');
-  assert.ok(pathHandler.length > 0, 'interview-docs:upload-from-path handler must exist');
-  assert.match(pathHandler, /broadcastInterviewDocsChanged\(\)/, 'upload-from-path must invoke broadcastInterviewDocsChanged');
+  // A renderer-supplied path must not be an alternate document ingestion route.
+  assert.equal(sliceSafeHandleBlock(source, 'interview-docs:upload-from-path'), '');
 
   // Verify update-metadata broadcasts
   const metaHandler = sliceSafeHandleBlock(source, 'interview-docs:update-metadata');

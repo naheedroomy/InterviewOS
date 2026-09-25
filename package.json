@@ -25,7 +25,7 @@
     "dist:signed": "npm run app:build:signed",
     "mac:reset": "bash scripts/reset-mac-permissions.sh",
     "build:native": "node scripts/build-native.js",
-    "test": "npm run build:electron && node --test 'electron/services/__tests__/**/*.test.mjs' 'electron/llm/__tests__/**/*.test.mjs' 'electron/audio/__tests__/**/*.test.mjs'",
+    "test": "npm run build:electron && node --test 'electron/services/__tests__/**/*.test.mjs' 'electron/db/__tests__/**/*.test.mjs' 'electron/llm/__tests__/**/*.test.mjs' 'electron/audio/__tests__/**/*.test.mjs' 'electron/rag/__tests__/**/*.test.mjs' 'electron/test/__tests__/**/*.test.mjs' 'electron/utils/__tests__/**/*.test.mjs'",
     "test:modes": "npm run build:electron && node --test electron/services/__tests__/Mode*.test.mjs electron/services/__tests__/ProfileIntelligenceGate.test.mjs electron/services/__tests__/AnswerCueApiE2E.test.mjs",
     "test:modes:no-build": "node --test electron/services/__tests__/Mode*.test.mjs electron/services/__tests__/ProfileIntelligenceGate.test.mjs electron/services/__tests__/AnswerCueApiE2E.test.mjs",
     "test:modes:collect-fixtures": "RUN_INTERNET_FIXTURE_COLLECTION=1 node --test electron/services/__tests__/ModeFixtureIntegrity.test.mjs",
@@ -34,6 +34,7 @@
     "test:e2e": "npx playwright test",
     "test:e2e:headed": "npx playwright test --headed",
     "test:e2e:parity": "ELECTRON_E2E=1 ELECTRON_APP_PORT=${ELECTRON_APP_PORT:-5173} npx playwright test tests/e2e/parity-gaps-evidence.spec.ts",
+    "test:smoke:packaged": "node scripts/run-packaged-smoke.mjs",
     "bench:screen-understanding": "npm run build:electron && node scripts/bench-screen-understanding.mjs",
     "doctor": "npx react-doctor@latest src"
   },
@@ -54,7 +55,9 @@
     ],
     "asarUnpack": [
       "**/*.node",
-      "**/*.dylib"
+      "**/*.dylib",
+      "dist-electron/electron/services/document-parser-worker.cjs",
+      "dist-electron/electron/pdf.worker.mjs"
     ],
     "directories": {
       "output": "release",
@@ -109,37 +112,12 @@
         {
           "target": "nsis",
           "arch": [
-            "x64",
-            "ia32"
-          ]
-        },
-        {
-          "target": "portable",
-          "arch": [
             "x64"
           ]
         }
       ],
       "icon": "assets/icons/win/icon.ico",
       "requestedExecutionLevel": "asInvoker"
-    },
-    "linux": {
-      "target": [
-        {
-          "target": "AppImage",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "deb",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "assets/icons/png/",
-      "category": "Office"
     },
     "nsis": {
       "oneClick": false,
@@ -257,7 +235,8 @@
     "three": "^0.182.0",
     "tree-kill": "^1.2.2",
     "uuid": "^11.0.3",
-    "ws": "^8.19.0"
+    "ws": "^8.19.0",
+    "yauzl": "^2.10.0"
   },
   "optionalDependencies": {
     "sqlite-vec-darwin-arm64": "^0.1.7-alpha.2",

@@ -390,7 +390,7 @@ console.error = (...args: any[]) => {
   } catch { }
 };
 
-import { initializeIpcHandlers } from "./ipcHandlers"
+import { initializeIpcHandlers, isLocalTelemetryEnabledAtStartup } from "./ipcHandlers"
 import { WindowHelper } from "./WindowHelper"
 import { SettingsWindowHelper } from "./SettingsWindowHelper"
 import { ModelSelectorWindowHelper } from "./ModelSelectorWindowHelper"
@@ -462,6 +462,7 @@ try {
 
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
+import { runMeetingRetentionSweep, type MeetingRetention } from "./services/MeetingRetentionPolicy"
 import { PhoneMirrorService } from "./services/PhoneMirrorService"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
@@ -4992,20 +4993,19 @@ async function initializeApp() {
   }
 
   // 3. Initialize Managers
-  // Phase 6 — bind TelemetryService to the Electron userData path. The
-  // singleton was constructed with cwd-relative paths at module-load time
-  // (before app.whenReady), so we reconfigure here. Honors the user's
-  // telemetry-enabled setting (default: on, local-only JSONL).
+  // Bind telemetry to the Electron userData path only after app readiness.
+  // Analytics is opt-in: legacy telemetryEnabled=true cannot grant consent,
+  // and local telemetry retained after GA consent is withdrawn requires its
+  // own marker from a previously explicit, legally accepted grant.
   try {
     const { telemetryService } = require('./services/telemetry/TelemetryService');
     const userDataPath = app.getPath('userData');
-    const telemetryEnabledSetting = SettingsManager.getInstance().get('telemetryEnabled');
-    telemetryService.configure({
-      userDataPath,
-      enabled: telemetryEnabledSetting !== false, // default true
-      localEnabled: true,
-    });
-    telemetryService.track({ name: 'app_start', properties: { platform: process.platform } });
+    const settings = SettingsManager.getInstance();
+    const telemetryEnabled = isLocalTelemetryEnabledAtStartup(settings);
+    telemetryService.configure({ userDataPath, enabled: telemetryEnabled, localEnabled: true });
+    if (telemetryEnabled) {
+      telemetryService.track({ name: 'app_start', properties: { platform: process.platform, appVersion: app.getVersion() } });
+    }
   } catch (err) {
     console.warn('[Init] TelemetryService configure threw (non-fatal):', err);
   }
@@ -5017,6 +5017,22 @@ async function initializeApp() {
 
   // 4. Initialize State
   const appState = AppState.getInstance()
+
+  // Timed retention is enforced on launch and while the app stays open. Never
+  // run a SQL-only shortcut: the complete deletion path also removes vectors,
+  // workspace links, and owned screenshot files (with durable cleanup retries).
+  const sweepMeetingRetention = () => {
+    try {
+      const retention = SettingsManager.getInstance().get('meetingRetention') ?? 'forever';
+      const result = runMeetingRetentionSweep(retention as MeetingRetention);
+      if (result.pending.length) console.warn('[Retention] Meeting cleanup pending retry:', result.pending.length);
+    } catch (error) {
+      console.error('[Retention] Sweep failed; will retry on the next interval or launch:', error);
+    }
+  };
+  sweepMeetingRetention();
+  const retentionInterval = setInterval(sweepMeetingRetention, 60 * 60 * 1000);
+  retentionInterval.unref();
 
   // Explicitly load credentials into helpers
   appState.processingHelper.loadStoredCredentials();

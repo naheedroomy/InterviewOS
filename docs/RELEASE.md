@@ -81,15 +81,15 @@ gh release create vX.Y.Z \
 
 ## Platform artifacts
 
+Supported release platforms are macOS (Apple Silicon arm64, Intel x64) and Windows (Intel x64 NSIS). Linux is not a supported target.
+
 | Platform | Artifact | Notes |
 | --- | --- | --- |
-| macOS Apple Silicon | `AnswerCue-X.Y.Z-arm64-mac.zip`, `AnswerCue-X.Y.Z-arm64.dmg` | Apple Silicon updater ZIP plus DMG |
-| macOS Intel | `AnswerCue-X.Y.Z.dmg`, `AnswerCue-X.Y.Z-mac.zip` | Intel x64 DMG plus updater ZIP |
+| macOS Apple Silicon | `InterviewOS-X.Y.Z-arm64.dmg`, `InterviewOS-X.Y.Z-arm64-mac.zip` | Apple Silicon DMG plus updater ZIP |
+| macOS Intel | `InterviewOS-X.Y.Z.dmg`, `InterviewOS-X.Y.Z-mac.zip` | Intel x64 DMG plus updater ZIP |
 | macOS update metadata | `latest-mac.yml` | Used by Electron updater |
-| Windows Intel x64 | `AnswerCue-Setup-X.Y.Z.exe` | NSIS installer and updater target |
+| Windows Intel x64 | `InterviewOS-Setup-X.Y.Z.exe` | NSIS installer and updater target |
 | Windows update metadata | `latest.yml` | Used by Electron updater |
-| Linux AppImage | `AnswerCue-X.Y.Z.AppImage` | Optional/manual — not produced by the documented macOS/Windows workflows |
-| Linux Debian | `answercue_X.Y.Z_amd64.deb` | Optional/manual — not produced by the documented macOS/Windows workflows |
 
 ## Artifact checks
 

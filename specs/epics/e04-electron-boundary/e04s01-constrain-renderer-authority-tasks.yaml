@@ -10,7 +10,7 @@ tasks:
     verify: >-
       npm run build:electron && node --test
       electron/test/__tests__/RendererBoundary.test.mjs
-    status: todo
+    status: done
   - id: e04s01-02
     description: >-
       Remove remote renderer script execution and move any approved telemetry
@@ -18,7 +18,7 @@ tasks:
     verify: >-
       npm run build:electron && node --test
       electron/test/__tests__/RendererBoundary.test.mjs
-    status: todo
+    status: done
   - id: e04s01-03
     description: >-
       Minimize per-window preload authority and protect file operations with
@@ -26,4 +26,4 @@ tasks:
     verify: >-
       npm run build:electron && node --test
       electron/test/__tests__/RendererBoundary.test.mjs
-    status: todo
+    status: done

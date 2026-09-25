@@ -1,38 +1,52 @@
-import { test } from 'node:test';
+import { before, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
-import { findSafeHandle } from './ipcTestUtils.mjs';
-import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(__dirname, '../../..');
+const require = createRequire(import.meta.url);
+const handlers = new Map();
+const opened = [];
 
-function read(relativePath) {
-  return fs.readFileSync(path.join(root, relativePath), 'utf8');
-}
+before(() => {
+  const { registerExternalUrlHandler } = require(path.resolve(process.cwd(), 'dist-electron/electron/ipcHandlers.js'));
+  registerExternalUrlHandler((channel, listener) => handlers.set(channel, listener), async (url) => {
+    opened.push(url);
+  });
+});
+beforeEach(() => { opened.length = 0; });
 
-test('open-external IPC only allows known external destinations', () => {
-  const source = read('electron/ipcHandlers.ts');
-  const start = findSafeHandle(source, 'open-external');
-  const end = source.indexOf('// ==========================================', start);
-  const handler = source.slice(start, end);
-
-  assert.ok(start >= 0, 'open-external handler should exist');
-  assert.match(handler, /parsed\.protocol === 'https:'[\s\S]{0,80}parsed\.hostname === 'mail\.google\.com'[\s\S]{0,80}parsed\.pathname === '\/mail\/'/);
-  assert.match(handler, /parsed\.protocol === 'x-apple\.systempreferences:' && process\.platform === 'darwin'/);
-  assert.doesNotMatch(handler, /\['http:', 'https:', 'mailto:'\]\.includes\(parsed\.protocol\)/);
-  assert.doesNotMatch(handler, /url\.startsWith\('x-apple\.systempreferences:'\)/);
+test('registered IPC opens exact canonical legal documents and Gmail', async () => {
+  const invoke = handlers.get('open-external');
+  const approved = [
+    'https://github.com/naheedroomy/InterviewOS/blob/main/termsandcondition.md',
+    'https://github.com/naheedroomy/InterviewOS/blob/main/PRIVACY.md',
+    'https://mail.google.com/mail/',
+  ];
+  for (const url of approved) await invoke({}, url);
+  assert.deepEqual(opened, approved);
 });
 
-test('open-external IPC does not log attacker-controlled URLs', () => {
-  const source = read('electron/ipcHandlers.ts');
-  const start = findSafeHandle(source, 'open-external');
-  const end = source.indexOf('// ==========================================', start);
-  const handler = source.slice(start, end);
-
-  assert.doesNotMatch(handler, /console\.warn\(`[^`]*\$\{url\}/);
-  assert.doesNotMatch(handler, /console\.warn\([^\n]*,\s*url\s*[),]/);
-  assert.match(handler, /Blocked open-external request',[\s\S]{0,120}protocol: parsed\.protocol,[\s\S]{0,80}hostname: parsed\.hostname/);
-  assert.match(handler, /Invalid URL in open-external'/);
+test('registered IPC blocks malformed, lookalike, redirect, and arbitrary destinations without logging raw URL', async () => {
+  const invoke = handlers.get('open-external');
+  const blocked = [
+    null,
+    'not a url',
+    'http://github.com/naheedroomy/InterviewOS/blob/main/PRIVACY.md',
+    'https://github.com/naheedroomy/InterviewOS/blob/main/PRIVACY.md?redirect=https://evil.invalid',
+    'https://github.com/naheedroomy/InterviewOS/blob/main/PRIVACY.md.evil',
+    'https://github.com/attacker/InterviewOS/blob/main/PRIVACY.md',
+    'https://mail.google.com/mail/attacker',
+    'javascript:alert(1)',
+  ];
+  const warnings = [];
+  const warn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    for (const url of blocked) await invoke({}, url);
+  } finally {
+    console.warn = warn;
+  }
+  assert.deepEqual(opened, []);
+  assert.equal(warnings.length, blocked.length);
+  assert.doesNotMatch(JSON.stringify(warnings), /evil\.invalid|attacker/);
 });

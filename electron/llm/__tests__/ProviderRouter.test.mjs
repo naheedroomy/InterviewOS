@@ -15,6 +15,39 @@ async function route(options) {
   return routeLLMProviders(options);
 }
 
+test('denied transcript and reference-file scopes block configured cloud providers while retaining local Ollama', async () => {
+  const { routeWithScopeFallback, assertProviderDataScopes, ProviderScopeError } = await loadRouter();
+  const scopes = ['transcript', 'reference_files'];
+  const policy = { transcript: false, reference_files: false };
+  const attempts = routeWithScopeFallback({
+    capability: 'stream_chat',
+    availability: { hasOpenAI: true, hasGemini: true, hasOllama: true },
+    models: { ollama: 'local-model' },
+    dataScopes: scopes,
+    scopePolicy: policy,
+  });
+  for (const provider of ['openai', 'gemini_flash', 'gemini_pro']) {
+    assert.equal(attempts.find(attempt => attempt.provider === provider)?.status, 'unavailable');
+    assert.equal(attempts.find(attempt => attempt.provider === provider)?.unavailableReason, 'disabled');
+    assert.throws(() => assertProviderDataScopes(provider, scopes, policy), error =>
+      error instanceof ProviderScopeError && error.provider === provider &&
+      error.deniedScopes.join(',') === scopes.join(','));
+  }
+  assert.equal(attempts.find(attempt => attempt.provider === 'ollama')?.status, 'available');
+});
+
+test('denied scopes never expose a cloud provider when no local fallback is configured', async () => {
+  const { routeWithScopeFallback } = await loadRouter();
+  const attempts = routeWithScopeFallback({
+    capability: 'chat',
+    availability: { hasOpenAI: true, hasAnswerCue: true, hasOllama: false },
+    dataScopes: ['post_call_summary'],
+    scopePolicy: { post_call_summary: false },
+  });
+  assert.equal(attempts.some(attempt => attempt.status === 'available'), false);
+  assert.equal(attempts.find(attempt => attempt.provider === 'ollama'), undefined);
+});
+
 test('routeLLMProviders returns deterministic text fallback order with availability', async () => {
   const attempts = await route({
     capability: 'chat',

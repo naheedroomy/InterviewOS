@@ -33,7 +33,7 @@ test('CredentialsManager.getSttProvider() returns canonical type without mutatin
   const getterBlock = source.slice(getterFrom, getterTo);
 
   assert.doesNotMatch(getterBlock, /saveCredentials/);
-  assert.doesNotMatch(getterBlock, /this\.credentials\.sttProvider =/);
+  assert.doesNotMatch(getterBlock, /this\.credentials\.sttProvider\s*=(?!=)/);
   // Must return the stored value, not hardcoded
   assert.match(getterBlock, /this\.credentials\.sttProvider/);
 });

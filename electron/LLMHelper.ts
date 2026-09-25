@@ -4,6 +4,7 @@ import OpenAI from "openai"
 import Anthropic from "@anthropic-ai/sdk"
 import fs from "fs"
 import { createHash } from "crypto"
+import { AsyncLocalStorage } from 'node:async_hooks'
 import sharp from "sharp"
 import { ModelVersionManager, ModelFamily, TextModelFamily } from './services/ModelVersionManager'
 import {
@@ -123,6 +124,22 @@ export class LLMHelper {
 
   // Local-only mode: when enabled, cloud providers are blocked
   private isLocalOnlyMode: boolean = false;
+  // Provider that produced the most recent completed stream, including fallback.
+  private lastRoutedProvider: CurrentLlmProvider | string | null = null;
+  private readonly streamRouteContext = new AsyncLocalStorage<{ provider: string | null }>();
+
+  /** Isolate the committed route of a chat request from overlapping streams. */
+  public async withStreamRoute<T>(work: () => Promise<T>): Promise<{ result: T; provider: string | null }> {
+    const route = { provider: null as string | null };
+    const result = await this.streamRouteContext.run(route, work);
+    return { result, provider: route.provider };
+  }
+
+  private commitStreamRoute(provider: string): void {
+    this.lastRoutedProvider = provider;
+    const route = this.streamRouteContext.getStore();
+    if (route) route.provider = provider;
+  }
 
   // Self-improving model version manager for vision analysis
   private modelVersionManager: ModelVersionManager;
@@ -3297,7 +3314,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       ordered,
       DEFAULT_VISION_FALLBACK_CONFIG,
       this.visionHealth,
-      { log: (m) => console.log(m), warn: (m) => console.warn(m) },
+      {
+        log: (m) => console.log(m),
+        warn: (m) => console.warn(m),
+        onCommitted: (providerId) => { this.commitStreamRoute(providerId); },
+      },
       abortSignal,
     );
   }
@@ -3314,6 +3335,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   public async * streamChat(
     ...args: Parameters<LLMHelper['_streamChatInner']>
   ): AsyncGenerator<string, void, unknown> {
+    // The per-request route is captured by withStreamRoute for IPC completion;
+    // retain the legacy last-route value only for other in-process consumers.
+    this.lastRoutedProvider = null;
     const { reduceDashesInChunk } = await import('./llm/postProcessor');
     // Pull the optional abort signal (always the last positional arg).
     // Use `instanceof AbortSignal` rather than duck-typing — duck-typing on
@@ -3325,6 +3349,20 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     for await (const chunk of this._streamChatInner(...args)) {
       if (abortSignal?.aborted) return;
       yield reduceDashesInChunk(chunk);
+    }
+  }
+
+  private async * recordRoutedStream(
+    provider: string,
+    stream: AsyncGenerator<string, void, unknown>,
+  ): AsyncGenerator<string, void, unknown> {
+    let committed = false;
+    for await (const chunk of stream) {
+      if (!committed) {
+        this.commitStreamRoute(provider);
+        committed = true;
+      }
+      yield chunk;
     }
   }
 
@@ -3459,7 +3497,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
       }
       if (ollamaAvailable) {
-        yield* this.streamWithOllama(message, context, this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT), imagePaths, abortSignal);
+        yield* this.recordRoutedStream('ollama', this.streamWithOllama(message, context, this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT), imagePaths, abortSignal));
         return;
       }
       yield this.scopeBlockedResponse(deniedOutboundScopes);
@@ -3525,7 +3563,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       if (this.codexCliConfig.enabled) {
         console.log(`[LLMHelper] ⚡️ Fast Text Mode Active (Streaming). Routing to Codex CLI...`);
         try {
-          yield* this.streamWithCodexCli(userContent, finalSystemPrompt, true, undefined, abortSignal);
+          yield* this.recordRoutedStream('codex-cli', this.streamWithCodexCli(userContent, finalSystemPrompt, true, undefined, abortSignal));
           return;
         } catch (e: any) {
           console.warn("[LLMHelper] Codex CLI Fast Text streaming failed, falling back:", e.message);
@@ -3540,7 +3578,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           // we'd send 'natively' or a Gemini ID as the Groq model name → 400.
           const groqModelId = this.isGroqModel(this.currentModelId) ? this.currentModelId : GROQ_MODEL;
           // CACHE: pass system separately so Groq prefix-cache hits across turns.
-          yield* this.streamWithGroq(userContent, groqModelId, finalGroqSystem, abortSignal);
+          yield* this.recordRoutedStream('groq', this.streamWithGroq(userContent, groqModelId, finalGroqSystem, abortSignal));
           return;
         } catch (e: any) {
           console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);
@@ -3555,7 +3593,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         // streamWithAnswerCue → generateWithAnswerCue → sends fast_mode:true → server Groq pool
         console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active (Streaming). Routing to AnswerCue server Groq pool...`);
         try {
-          yield* this.streamWithAnswerCue(userContent, finalSystemPrompt, undefined, abortSignal);
+          yield* this.recordRoutedStream('natively', this.streamWithAnswerCue(userContent, finalSystemPrompt, undefined, abortSignal));
           return;
         } catch (e: any) {
           console.warn("[LLMHelper] AnswerCue fast-mode failed, falling back:", e.message);
@@ -3565,18 +3603,18 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // 1. Ollama Streaming
     if (this.useOllama) {
-      yield* this.streamWithOllama(message, combinedContext || undefined, finalSystemPrompt, imagePaths, abortSignal);
+      yield* this.recordRoutedStream('ollama', this.streamWithOllama(message, combinedContext || undefined, finalSystemPrompt, imagePaths, abortSignal));
       return;
     }
 
     if (this.isCodexCliModel(this.currentModelId) && this.codexCliConfig.enabled) {
-      yield* this.streamWithCodexCli(userContent, finalSystemPrompt, false, imagePaths, abortSignal);
+      yield* this.recordRoutedStream('codex-cli', this.streamWithCodexCli(userContent, finalSystemPrompt, false, imagePaths, abortSignal));
       return;
     }
 
     // 2a. CustomProvider (switchToCustom path) — full SSE-capable streaming
     if (this.customProvider) {
-      yield* this.streamWithCustom(message, context, imagePaths, finalSystemPrompt, abortSignal);
+      yield* this.recordRoutedStream('custom', this.streamWithCustom(message, context, imagePaths, finalSystemPrompt, abortSignal));
       return;
     }
 
@@ -3590,6 +3628,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         context || "",
         imagePaths?.[0]
       );
+      if (response) this.commitStreamRoute('custom');
       yield response;
       return;
     }
@@ -3601,9 +3640,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const openAiSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
       const finalOpenAiSystem = this.injectLanguageInstruction(openAiSystem);
       if (isMultimodal && imagePaths) {
-        yield* this.streamWithOpenaiMultimodal(userContent, imagePaths, finalOpenAiSystem, undefined, abortSignal);
+        yield* this.recordRoutedStream('openai', this.streamWithOpenaiMultimodal(userContent, imagePaths, finalOpenAiSystem, undefined, abortSignal));
       } else {
-        yield* this.streamWithOpenai(userContent, finalOpenAiSystem, undefined, abortSignal);
+        yield* this.recordRoutedStream('openai', this.streamWithOpenai(userContent, finalOpenAiSystem, undefined, abortSignal));
       }
       return;
     }
@@ -3613,9 +3652,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const claudeSystem = systemPromptOverride || CLAUDE_SYSTEM_PROMPT;
       const finalClaudeSystem = this.injectLanguageInstruction(claudeSystem);
       if (isMultimodal && imagePaths) {
-        yield* this.streamWithClaudeMultimodal(userContent, imagePaths, finalClaudeSystem, undefined, abortSignal);
+        yield* this.recordRoutedStream('claude', this.streamWithClaudeMultimodal(userContent, imagePaths, finalClaudeSystem, undefined, abortSignal));
       } else {
-        yield* this.streamWithClaude(userContent, finalClaudeSystem, undefined, abortSignal);
+        yield* this.recordRoutedStream('claude', this.streamWithClaude(userContent, finalClaudeSystem, undefined, abortSignal));
       }
       return;
     }
@@ -3625,7 +3664,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (this.isDeepseekModel(this.currentModelId) && this.deepseekClient && !(isMultimodal && imagePaths)) {
       const deepseekSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
       const finalDeepseekSystem = this.injectLanguageInstruction(deepseekSystem);
-      yield* this.streamWithDeepseek(userContent, finalDeepseekSystem, undefined, abortSignal);
+      yield* this.recordRoutedStream('deepseek', this.streamWithDeepseek(userContent, finalDeepseekSystem, undefined, abortSignal));
       return;
     }
 
@@ -3635,14 +3674,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         // Route multimodal to Groq Llama 4 Scout (vision-capable)
         const groqSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
         const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
-        yield* this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem, abortSignal);
+        yield* this.recordRoutedStream('groq', this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem, abortSignal));
         return;
       }
       // Text-only Groq
       const groqSystem = systemPromptOverride ? baseSystemPrompt : GROQ_SYSTEM_PROMPT;
       const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
       // CACHE: pass system separately so Groq prefix-cache hits across turns.
-      yield* this.streamWithGroq(userContent, this.currentModelId, finalGroqSystem, abortSignal);
+      yield* this.recordRoutedStream('groq', this.streamWithGroq(userContent, this.currentModelId, finalGroqSystem, abortSignal));
       return;
     }
 
@@ -3652,7 +3691,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const nativelyKey = CredentialsManager.getInstance().getAnswerCueApiKey();
       if (nativelyKey) {
         try {
-          yield* this.streamWithAnswerCue(userContent, finalSystemPrompt, imagePaths, abortSignal);
+          yield* this.recordRoutedStream('natively', this.streamWithAnswerCue(userContent, finalSystemPrompt, imagePaths, abortSignal));
           return;
         } catch (err: any) {
           console.warn('[LLMHelper] AnswerCue API failed in streamChat, trying Groq fallback:', err.message);
@@ -3662,13 +3701,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
               if (isMultimodal && imagePaths) {
                 const groqSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
                 const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
-                yield* this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem, abortSignal);
+                yield* this.recordRoutedStream('groq', this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem, abortSignal));
               } else {
                 const groqSystem = systemPromptOverride ? baseSystemPrompt : GROQ_SYSTEM_PROMPT;
                 const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
                 // intentional: emergency fallback waterfall — use stable GROQ_MODEL baseline, not currentModelId
                 // CACHE: pass system separately so Groq prefix-cache hits across turns.
-                yield* this.streamWithGroq(userContent, GROQ_MODEL, finalGroqSystem, abortSignal);
+                yield* this.recordRoutedStream('groq', this.streamWithGroq(userContent, GROQ_MODEL, finalGroqSystem, abortSignal));
               }
               return;
             } catch (groqErr: any) {
@@ -3688,19 +3727,19 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // `userContent` is not the case — userContent is dynamic — so the system
       // instruction channel is the cacheable surface for Gemini.
       if (this.isGeminiModel(this.currentModelId)) {
-        yield* this.streamWithGeminiModel(userContent, this.currentModelId, imagePaths, finalSystemPrompt, abortSignal);
+        yield* this.recordRoutedStream('gemini', this.streamWithGeminiModel(userContent, this.currentModelId, imagePaths, finalSystemPrompt, abortSignal));
         return;
       }
 
       // Race strategy (default)
-      yield* this.streamWithGeminiParallelRace(userContent, imagePaths, finalSystemPrompt, abortSignal);
+      yield* this.recordRoutedStream('gemini', this.streamWithGeminiParallelRace(userContent, imagePaths, finalSystemPrompt, abortSignal));
       return;
     }
 
     // 5. Last-resort: AnswerCue API (if user has a key but no cloud provider configured)
     if (this.hasAnswerCue()) {
       try {
-        yield* this.streamWithAnswerCue(userContent, finalSystemPrompt, imagePaths, abortSignal);
+        yield* this.recordRoutedStream('natively', this.streamWithAnswerCue(userContent, finalSystemPrompt, imagePaths, abortSignal));
         return;
       } catch (e: any) {
         console.warn('[LLMHelper] AnswerCue last-resort fallback failed:', e.message);
@@ -5021,6 +5060,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       console.error("[LLMHelper] Failed to restart Ollama:", error);
       return false;
     }
+  }
+
+  public getLastRoutedProvider(): string | null {
+    return this.lastRoutedProvider;
   }
 
   public getCurrentProvider(): CurrentLlmProvider {

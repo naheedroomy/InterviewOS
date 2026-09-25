@@ -58,13 +58,17 @@ build({
   },
   logLevel: 'warning',
 }).then(() => {
-  const pdfWorkerSource = path.join(rootDir, 'node_modules/pdf-parse/dist/pdf-parse/cjs/pdf.worker.mjs');
-  const pdfWorkerTarget = path.join(outDir, 'electron/pdf.worker.mjs');
-  if (fs.existsSync(pdfWorkerSource)) {
-    fs.mkdirSync(path.dirname(pdfWorkerTarget), { recursive: true });
-    fs.copyFileSync(pdfWorkerSource, pdfWorkerTarget);
-  } else {
-    console.warn('[build-electron] pdf-parse worker not found; PDF document upload may fail.');
+  const resources = [
+    [path.join(rootDir, 'node_modules/pdf-parse/dist/pdf-parse/cjs/pdf.worker.mjs'), path.join(outDir, 'electron/pdf.worker.mjs')],
+    [path.join(rootDir, 'electron/services/document-parser-worker.cjs'), path.join(outDir, 'electron/services/document-parser-worker.cjs')],
+  ];
+  for (const [source, target] of resources) {
+    if (fs.existsSync(source)) {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(source, target);
+    } else {
+      throw new Error(`[build-electron] Required parser worker resource not found: ${source}`);
+    }
   }
   console.log(`[build-electron] Done in ${Date.now() - start}ms`);
 }).catch((err) => {
