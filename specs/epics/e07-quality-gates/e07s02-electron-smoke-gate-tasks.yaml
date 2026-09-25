@@ -1,0 +1,23 @@
+story_id: e07s02
+title: Smoke the packaged Electron trust boundary
+status: done
+bcps: 8
+tasks:
+  - id: e07s02-01
+    description: >-
+      Define a packaged Electron smoke scenario that exercises preload IPC,
+      startup, and permission-dependent failure reporting.
+    verify: npm run test:smoke:packaged
+    status: done
+  - id: e07s02-02
+    description: >-
+      Add a reproducible runner for the packaged smoke scenario with explicit
+      supported-platform prerequisites and artifact capture.
+    verify: npm run test:smoke:packaged
+    status: done
+  - id: e07s02-03
+    description: >-
+      Make CI preserve the smoke evidence and fail when the Electron boundary
+      cannot be exercised on a declared supported target.
+    verify: npm run test:smoke:packaged
+    status: done

@@ -31,9 +31,17 @@ export interface AppSettings {
     localWhisperPerChannelEnabled?: boolean;
     localWhisperModelMic?: string;
     localWhisperModelSystem?: string;
-    // Phase 6 — TelemetryService toggle. Defaults to true (local-only JSONL).
-    // When false, no telemetry is written to disk and no sinks fire.
+    // Analytics is opt-in. `unset` means the user has not made an informed
+    // choice yet; it must never be treated as enabled.
+    analyticsConsent?: 'unset' | 'granted' | 'denied';
+    // Legacy runtime toggle retained for settings-file compatibility. New
+    // consent flows update it together with analyticsConsent.
     telemetryEnabled?: boolean;
+    // Set only by consent flows that preserve local telemetry from an explicit grant.
+    localTelemetryConsent?: boolean;
+    // Set only after the user has inspected the legal links and continued.
+    legalConsentAt?: string;
+    legalConsentVersion?: string;
     // Phase 9 — privacy/retention controls. Foundation only. Encryption is
     // documented in docs/engineering/LOCAL_DB_ENCRYPTION_DESIGN.md.
     // 'forever' (default), '7d', '30d', or 'never' (do not store transcripts).
@@ -107,6 +115,17 @@ export class SettingsManager {
         this.saveSettings();
     }
 
+    /**
+     * Persist a related group of settings as one replacement. The in-memory
+     * state changes only after the durable rename succeeds, so callers can
+     * safely reconfigure runtime services after this method returns.
+     */
+    public setAtomic(updates: Partial<AppSettings>): void {
+        const nextSettings = { ...this.settings, ...updates };
+        this.writeSettings(nextSettings);
+        this.settings = nextSettings;
+    }
+
     // Resolved screen-understanding mode with default and runtime validation.
     // Use this instead of get('screenUnderstandingMode') from callers so the default applies consistently.
     public getScreenUnderstandingMode(): ScreenUnderstandingMode {
@@ -175,11 +194,20 @@ export class SettingsManager {
 
     private saveSettings(): void {
         try {
-            const tmpPath = this.settingsPath + '.tmp';
-            fs.writeFileSync(tmpPath, JSON.stringify(this.settings, null, 2));
-            fs.renameSync(tmpPath, this.settingsPath);
+            this.writeSettings(this.settings);
         } catch (e) {
             console.error('[SettingsManager] Failed to save settings:', e);
+        }
+    }
+
+    private writeSettings(settings: AppSettings): void {
+        const tmpPath = this.settingsPath + '.tmp';
+        try {
+            fs.writeFileSync(tmpPath, JSON.stringify(settings, null, 2));
+            fs.renameSync(tmpPath, this.settingsPath);
+        } catch (error) {
+            try { fs.rmSync(tmpPath, { force: true }); } catch { /* preserve original error */ }
+            throw error;
         }
     }
 }

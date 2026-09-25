@@ -26,8 +26,8 @@ jobs:
       - name: Build renderer
         run: npm run build
 
-      - name: Build Electron main process
-        run: npm run build:electron
+      - name: Run default behavioral suites
+        run: npm test
 
       - name: Verify package inputs exist
         run: npm run verify:package-inputs

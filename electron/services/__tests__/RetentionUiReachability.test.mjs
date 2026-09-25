@@ -15,6 +15,8 @@ test('meeting retention IPC exposes get/set and broadcasts updates', () => {
   assert.match(ipc, /safeHandle\(['"]set-meeting-retention['"]/);
   assert.match(ipc, /SettingsManager\.getInstance\(\)\.set\('meetingRetention', retention\)/);
   assert.match(ipc, /webContents\.send\('meeting-retention-changed', retention\)/);
+  assert.match(ipc, /runMeetingRetentionSweep\(retention\)/, 'setting change must immediately enforce timed expiry');
+  assert.match(ipc, /result\.deleted < result\.expired \|\| result\.pending\.length/, 'setting cannot report success if an expired row fails SQL deletion before journaling');
 });
 
 test('preload and renderer types expose meeting retention controls', () => {
@@ -28,14 +30,22 @@ test('preload and renderer types expose meeting retention controls', () => {
   assert.match(types, /setMeetingRetention: \(retention: 'forever' \| '7d' \| '30d' \| 'never'\) => Promise<\{ success: boolean; error\?: string \}>/);
 });
 
-test('SettingsOverlay renders a real do-not-save meetings control', () => {
+test('SettingsOverlay offers all retention policies and explains past versus future data', () => {
   const source = read('src/components/SettingsOverlay.tsx');
 
   assert.match(source, /const \[meetingRetention, setMeetingRetention\]/);
   assert.match(source, /getMeetingRetention\?\.\(\)\.then\(setMeetingRetention\)/);
-  assert.match(source, /setMeetingRetention\?\.\(nextRetention\)/);
-  assert.match(source, /Do not save meetings/);
-  assert.match(source, /transcripts, summaries, and history are discarded/);
+  assert.match(source, /window\.electronAPI\.setMeetingRetention\(nextRetention\)/);
+  assert.match(source, /<select[\s\S]*id="meeting-retention"[\s\S]*<option value="forever">[\s\S]*<option value="30d">[\s\S]*<option value="7d">[\s\S]*<option value="never">/);
+  assert.match(source, /Time limits remove meeting history, transcripts, summaries, and owned screenshots/);
+  assert.match(source, /keeps existing history/);
+  assert.match(source, /retention_cleanup_pending/);
+});
+
+test('main starts a retention sweep on launch and schedules periodic retries', () => {
+  const source = read('electron/main.ts');
+  assert.match(source, /const sweepMeetingRetention = \(\) =>/);
+  assert.match(source, /sweepMeetingRetention\(\);\s*const retentionInterval = setInterval\(sweepMeetingRetention, 60 \* 60 \* 1000\)/);
 });
 
 test('launcher startMeeting metadata carries doNotPersist when retention is never', () => {

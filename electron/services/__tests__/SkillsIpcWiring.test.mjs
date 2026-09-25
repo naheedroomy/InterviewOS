@@ -53,11 +53,15 @@ test('preload exposes skillsRefresh / skillsOpenFolder on window.electronAPI', (
   assert.match(preload, /skillsRefresh:\s*\(\)\s*=>\s*ipcRenderer\.invoke\(['"]skills:list['"]\)/);
   assert.match(preload, /skillsOpenFolder:\s*\(\)\s*=>\s*ipcRenderer\.invoke\(['"]skills:open-folder['"]\)/);
 
-  // Confirm they are inside the contextBridge.exposeInMainWorld('electronAPI', {...}) block.
-  const exposeIdx = preload.indexOf("contextBridge.exposeInMainWorld('electronAPI'");
-  assert.ok(exposeIdx >= 0, 'electronAPI must be exposed via contextBridge');
-  assert.ok(preload.indexOf('skillsRefresh:', exposeIdx) > exposeIdx,
-    'skillsRefresh must live inside the electronAPI contextBridge block');
+  // API methods are constructed before the trusted role filter and then exposed
+  // through contextBridge; keep the method inside that typed API object.
+  const apiStart = preload.indexOf('const electronAPI = {');
+  const apiEnd = preload.indexOf('} as ElectronAPI;', apiStart);
+  assert.ok(apiStart >= 0 && apiEnd > apiStart, 'electronAPI object must be constructed before filtering');
+  const skillsIndex = preload.indexOf('skillsRefresh:', apiStart);
+  assert.ok(skillsIndex > apiStart && skillsIndex < apiEnd,
+    'skillsRefresh must live inside the electronAPI object');
+  assert.match(preload, /contextBridge\.exposeInMainWorld\(\s*['"]electronAPI['"],\s*filterPreloadApi\(/);
 });
 
 test('electron.d.ts declares SkillSummary and the two skills methods', () => {

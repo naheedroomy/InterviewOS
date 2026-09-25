@@ -64,7 +64,9 @@ test('createSTTProvider preserves GoogleSTT permanent error handling', () => {
   assert.match(createFn, /401/);
   assert.match(createFn, /auth_timeout/);
   assert.match(createFn, /invalid_key/);
-  assert.match(createFn, /invalid api.*authentication/);
+  assert.match(createFn, /(?:includes\('invalid api'\)|includes\('authentication'\))/);
+  assert.match(createFn, /if \(isAuthError \|\| isPermanentGrpcError\) \{/);
+  assert.match(createFn, /state: 'failed'/);
 
   // Consecutive error counter must still be present
   assert.match(createFn, /_consecutiveErrors/);

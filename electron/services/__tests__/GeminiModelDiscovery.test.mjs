@@ -84,12 +84,12 @@ describe('processGeminiModels — runtime (pure filtering)', () => {
 
   test('label uses displayName, falls back to name', { skip: !canRunRuntime() }, () => {
     const input = [
-      { name: 'models/gemini-flash-has-display', displayName: 'My Display Name', supportedGenerationMethods: ['generateContent'] },
-      { name: 'models/gemini-pro-no-display', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-2.5-flash-has-display', displayName: 'My Display Name', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-2.5-pro-no-display', supportedGenerationMethods: ['generateContent'] },
     ];
     const result = processGeminiModelsRuntime(input);
-    assert.equal(result.find(m => m.id === 'models/gemini-flash-has-display').label, 'My Display Name');
-    assert.equal(result.find(m => m.id === 'models/gemini-pro-no-display').label, 'models/gemini-pro-no-display');
+    assert.equal(result.find(m => m.id === 'models/gemini-2.5-flash-has-display').label, 'My Display Name');
+    assert.equal(result.find(m => m.id === 'models/gemini-2.5-pro-no-display').label, 'models/gemini-2.5-pro-no-display');
   });
 
   test('filters to Flash, Flash-Lite, and Pro tiers only', { skip: !canRunRuntime() }, () => {
@@ -121,8 +121,8 @@ describe('processGeminiModels — runtime (pure filtering)', () => {
 
   test('dedup by exact id — first occurrence wins', { skip: !canRunRuntime() }, () => {
     const input = [
-      { name: 'models/gemini-flash', displayName: 'First label', supportedGenerationMethods: ['generateContent'] },
-      { name: 'models/gemini-flash', displayName: 'Second label (dupe)', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-2.5-flash', displayName: 'First label', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-2.5-flash', displayName: 'Second label (dupe)', supportedGenerationMethods: ['generateContent'] },
     ];
     const result = processGeminiModelsRuntime(input);
     assert.equal(result.length, 1);
@@ -131,23 +131,23 @@ describe('processGeminiModels — runtime (pure filtering)', () => {
 
   test('deterministic sort — id primary, label tie-break', { skip: !canRunRuntime() }, () => {
     const input = [
-      { name: 'models/gemini-b-flash', displayName: 'Beta', supportedGenerationMethods: ['generateContent'] },
-      { name: 'models/gemini-c-flash', displayName: 'Alpha', supportedGenerationMethods: ['generateContent'] },
-      { name: 'models/gemini-a-flash', displayName: 'Gamma', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-2.5-flash-b', displayName: 'Beta', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-2.5-flash-c', displayName: 'Alpha', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-2.5-flash-a', displayName: 'Gamma', supportedGenerationMethods: ['generateContent'] },
     ];
     const result = processGeminiModelsRuntime(input);
     // Primary sort by id: a, b, c
-    assert.equal(result[0].id, 'models/gemini-a-flash');
-    assert.equal(result[1].id, 'models/gemini-b-flash');
-    assert.equal(result[2].id, 'models/gemini-c-flash');
+    assert.equal(result[0].id, 'models/gemini-2.5-flash-a');
+    assert.equal(result[1].id, 'models/gemini-2.5-flash-b');
+    assert.equal(result[2].id, 'models/gemini-2.5-flash-c');
   });
 
   test('sort id tie-break falls back to label', { skip: !canRunRuntime() }, () => {
     // IDs are unique after dedup so tie-break normally never fires,
     // but verify the comparator handles equal ids gracefully.
     const input = [
-      { name: 'models/gemini-x-pro', displayName: 'Zeta', supportedGenerationMethods: ['generateContent'] },
-      { name: 'models/gemini-x-pro', displayName: 'Alpha', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-2.5-pro', displayName: 'Zeta', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-2.5-pro', displayName: 'Alpha', supportedGenerationMethods: ['generateContent'] },
     ];
     const result = processGeminiModelsRuntime(input);
     assert.equal(result.length, 1); // dedup keeps first
@@ -173,8 +173,8 @@ describe('processGeminiModels — runtime (pure filtering)', () => {
     assert.equal(FALLBACK_GEMINI_MODELS_RUNTIME.length, 3);
     const ids = FALLBACK_GEMINI_MODELS_RUNTIME.map(m => m.id);
     assert.ok(ids.includes('gemini-3.5-flash'));
-    assert.ok(ids.includes('gemini-3.1-flash-lite-preview'));
-    assert.ok(ids.includes('gemini-3.1-pro-preview'));
+    assert.ok(ids.includes('gemini-2.5-flash'));
+    assert.ok(ids.includes('gemini-2.5-pro'));
   });
 });
 
@@ -208,8 +208,8 @@ describe('fetchGeminiModelsPaginated — pagination behaviour', () => {
   });
 
   test('multi-page accumulation with nextPageToken', { skip: !canRunPagination() }, async () => {
-    const page1 = { name: 'models/gemini-a', supportedGenerationMethods: ['generateContent'] };
-    const page2 = { name: 'models/gemini-b', supportedGenerationMethods: ['generateContent'] };
+    const page1 = { name: 'models/gemini-2.5-flash-a', supportedGenerationMethods: ['generateContent'] };
+    const page2 = { name: 'models/gemini-2.5-flash-b', supportedGenerationMethods: ['generateContent'] };
     const httpGet = mockHttpGet([
       { models: [page1], nextPageToken: 'token1' },
       { models: [page2] },
@@ -217,14 +217,14 @@ describe('fetchGeminiModelsPaginated — pagination behaviour', () => {
     const result = await fetchGeminiModelsPaginatedRuntime('test-key', httpGet);
     assert.equal(result.length, 2);
     // sort by id:
-    assert.equal(result[0].id, 'models/gemini-a');
-    assert.equal(result[1].id, 'models/gemini-b');
+    assert.equal(result[0].id, 'models/gemini-2.5-flash-a');
+    assert.equal(result[1].id, 'models/gemini-2.5-flash-b');
   });
 
   test('stops when no nextPageToken (even before 10 pages)', { skip: !canRunPagination() }, async () => {
     const httpGet = mockHttpGet([
       { models: [contentModel], nextPageToken: 'tok' },
-      { models: [{ name: 'models/gemini-b', supportedGenerationMethods: ['generateContent'] }] },
+      { models: [{ name: 'models/gemini-2.5-flash-b', supportedGenerationMethods: ['generateContent'] }] },
     ]);
     const result = await fetchGeminiModelsPaginatedRuntime('test-key', httpGet);
     assert.equal(result.length, 2); // did not fetch a third page
@@ -234,7 +234,7 @@ describe('fetchGeminiModelsPaginated — pagination behaviour', () => {
     const responses = [];
     const models = [];
     for (let i = 0; i < 12; i++) {
-      const m = { name: `models/gemini-p${i}`, supportedGenerationMethods: ['generateContent'] };
+      const m = { name: `models/gemini-2.5-flash-p${i}`, supportedGenerationMethods: ['generateContent'] };
       models.push(m);
       responses.push({ models: [m], nextPageToken: `tok${i}` });
     }
@@ -242,20 +242,20 @@ describe('fetchGeminiModelsPaginated — pagination behaviour', () => {
     const result = await fetchGeminiModelsPaginatedRuntime('test-key', httpGet);
     // Only 10 pages are fetched (models from pages 0-9)
     assert.equal(result.length, 10, 'must cap at 10 pages');
-    assert.equal(result[0].id, 'models/gemini-p0');
-    assert.equal(result[9].id, 'models/gemini-p9');
+    assert.equal(result[0].id, 'models/gemini-2.5-flash-p0');
+    assert.equal(result[9].id, 'models/gemini-2.5-flash-p9');
   });
 
   test('accumulation + dedup across pages', { skip: !canRunPagination() }, async () => {
-    const dup = { name: 'models/gemini-dup', displayName: 'Dupe', supportedGenerationMethods: ['generateContent'] };
+    const dup = { name: 'models/gemini-2.5-flash-dup', displayName: 'Dupe', supportedGenerationMethods: ['generateContent'] };
     const httpGet = mockHttpGet([
       { models: [dup], nextPageToken: 'tok1' },
-      { models: [dup, { name: 'models/gemini-new', supportedGenerationMethods: ['generateContent'] }] },
+      { models: [dup, { name: 'models/gemini-2.5-flash-new', supportedGenerationMethods: ['generateContent'] }] },
     ]);
     const result = await fetchGeminiModelsPaginatedRuntime('test-key', httpGet);
     assert.equal(result.length, 2); // dedup keeps first occurrence
-    assert.equal(result[0].id, 'models/gemini-dup');
-    assert.equal(result[1].id, 'models/gemini-new');
+    assert.equal(result[0].id, 'models/gemini-2.5-flash-dup');
+    assert.equal(result[1].id, 'models/gemini-2.5-flash-new');
   });
 
   test('encoded nextPageToken via URLSearchParams', { skip: !canRunPagination() }, async () => {
@@ -400,12 +400,10 @@ describe('fetchGeminiModels — minimal source-level structural guards', () => {
     assert.equal(match, null, 'Version-gating regex on Gemini model versions must be absent');
   });
 
-  test('no hardcoded model name exclusion list in Gemini section', () => {
+  test('specialized non-chat variants are excluded before rendering model choices', () => {
     const geminiSection = src.slice(src.indexOf('// ─── Gemini'));
-    assert.ok(
-      !geminiSection.includes("'nano'") && !geminiSection.includes('"nano"'),
-      'Hardcoded name exclusion patterns must be removed from Gemini section'
-    );
+    assert.match(geminiSection, /if \(!isAllowedGeminiModel\(id\)\) continue/);
+    assert.match(geminiSection, /'nano'/);
   });
 
   test('FALLBACK_GEMINI_MODELS appears only in the catch return', () => {
@@ -694,28 +692,16 @@ describe('ModelSelectorWindow.tsx — Gemini dynamic fetch', () => {
 // ─── Source-code analysis: FALLBACK_GEMINI_MODELS is unique ──────────────────
 
 describe('FALLBACK_GEMINI_MODELS — single source of truth for curated IDs', () => {
-  test('the three curated IDs appear only in the fallback constant definition', () => {
+  test('curated fallback IDs have a single definition and match the supported tiers', { skip: !canRunRuntime() }, () => {
     const fetcherSrc = read('electron/utils/modelFetcher.ts');
     const utilsSrc = read('src/utils/modelUtils.ts');
+    const utilsGeminiBlock = utilsSrc.match(/gemini:\s*\{[^}]*\}/s)?.[0] || '';
 
-    // In modelUtils, the old ids array must NOT contain the curated IDs
-    const utilsGeminiBlock = utilsSrc.match(/gemini:\s*\{[^}]*\}/s);
-    if (utilsGeminiBlock) {
-      assert.ok(
-        !utilsGeminiBlock[0].includes('gemini-3.5-flash'),
-        'modelUtils must NOT contain the curated Gemini IDs'
-      );
+    for (const { id } of FALLBACK_GEMINI_MODELS_RUNTIME) {
+      assert.equal(countOccurrences(fetcherSrc, `'${id}'`), 1, `${id} must be defined only once`);
+      assert.ok(!utilsGeminiBlock.includes(id), `${id} must not be a static modelUtils choice`);
+      assert.match(id, /^gemini-(?:[2-9]|[1-9]\d)(?:\.\d+)?-(?:flash|pro)/);
+      assert.ok(!/(?:preview|exp|vision|nano)/.test(id), `${id} must be a supported general-purpose tier`);
     }
-
-    // In modelFetcher, count occurrences of each curated ID
-    // They should appear ONLY in the FALLBACK_GEMINI_MODELS definition
-    const flashCount = countOccurrences(fetcherSrc, 'gemini-3.5-flash');
-    const liteCount = countOccurrences(fetcherSrc, 'gemini-3.1-flash-lite-preview');
-    const proCount = countOccurrences(fetcherSrc, 'gemini-3.1-pro-preview');
-
-    // Each should appear at least once (in the fallback constant)
-    assert.ok(flashCount >= 1, 'gemini-3.5-flash must appear in modelFetcher');
-    assert.ok(liteCount >= 1, 'gemini-3.1-flash-lite-preview must appear in modelFetcher');
-    assert.ok(proCount >= 1, 'gemini-3.1-pro-preview must appear in modelFetcher');
   });
 });

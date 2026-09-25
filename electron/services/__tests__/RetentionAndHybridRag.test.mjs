@@ -67,8 +67,9 @@ describe('Phase 9 — Retention & doNotPersist gate in MeetingPersistence', () =
   test('do-not-persist still emits a sanitized meeting_stop telemetry event', () => {
     const src = read('electron/MeetingPersistence.ts');
     // Find the doNotPersist branch and assert it tracks meeting_stop.
-    const idx = src.indexOf('doNotPersist');
-    const window = src.slice(idx, idx + 1500);
+    const idx = src.indexOf('if (doNotPersist) {');
+    assert.notEqual(idx, -1, 'do-not-persist branch must exist');
+    const window = src.slice(idx, src.indexOf('return null;', idx) + 'return null;'.length);
     assert.match(window, /name:\s*['"]meeting_stop['"]/, 'do-not-persist path should still emit meeting_stop');
     assert.match(window, /persisted:\s*false/, 'event must record persisted:false');
     assert.match(window, /reason:\s*['"]do_not_persist['"]/, 'event must record reason');

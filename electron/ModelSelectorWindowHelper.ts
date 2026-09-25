@@ -1,5 +1,6 @@
-import { BrowserWindow, screen, app } from "electron"
+import { BrowserWindow, screen, app, shell } from "electron"
 import path from "node:path"
+import { installRendererNavigationGuards } from "./RendererNavigationPolicy"
 
 const isDev = process.env.NODE_ENV === "development"
 
@@ -137,6 +138,7 @@ export class ModelSelectorWindowHelper {
                 nodeIntegration: false,
                 contextIsolation: true,
                 preload: path.join(__dirname, "preload.js"),
+                additionalArguments: ['--answercue-window-role=model-selector'],
                 backgroundThrottling: false
             },
             // ROUND 3 FIX: type:'panel' makes this an NSPanel rather than a
@@ -160,6 +162,7 @@ export class ModelSelectorWindowHelper {
         }
 
         this.window = new BrowserWindow(windowSettings)
+        installRendererNavigationGuards(this.window.webContents, startUrl, async (url) => { await shell.openExternal(url); })
 
         if (process.platform === "darwin") {
             // Initial defaults - will be updated in showWindow

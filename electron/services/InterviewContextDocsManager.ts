@@ -2,7 +2,8 @@ import { app } from 'electron';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import { pathToFileURL } from 'url';
+import { readSelectedDocument } from './SelectedDocumentReader';
+import { parseDocumentInWorker } from './DocumentParserWorker';
 
 export type InterviewContextDocumentKind =
   | 'resume'
@@ -44,35 +45,8 @@ export interface IngestedMarkdownDocument {
 
 const ALLOWED_EXTENSIONS = new Set(['.md', '.markdown', '.txt', '.pdf', '.docx']);
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
-const PARSE_TIMEOUT_MS = 15_000;
-let pdfWorkerConfigured = false;
-
-function configurePdfWorker(PDFParse: any): void {
-  if (pdfWorkerConfigured || typeof PDFParse?.setWorker !== 'function') return;
-
-  const workerCandidates = [
-    path.join(__dirname, 'pdf.worker.mjs'),
-    path.join(process.cwd(), 'node_modules/pdf-parse/dist/pdf-parse/cjs/pdf.worker.mjs'),
-  ];
-
-  const workerPath = workerCandidates.find(candidate => fs.existsSync(candidate));
-  if (workerPath) {
-    PDFParse.setWorker(pathToFileURL(workerPath).href);
-    pdfWorkerConfigured = true;
-    console.log('[InterviewContextDocsManager] PDF worker configured:', workerPath);
-  } else {
-    console.warn('[InterviewContextDocsManager] PDF worker not found; PDF upload may fail.');
-  }
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
-    ),
-  ]);
-}
+const MAX_EXTRACTED_MARKDOWN_BYTES = 1024 * 1024;
+const MAX_BATCH_EXTRACTED_BYTES = 5 * 1024 * 1024;
 
 function decodeTextFile(buffer: Buffer, fileName: string, ext: string): string {
   if (buffer.length === 0) {
@@ -104,7 +78,14 @@ function decodeTextFile(buffer: Buffer, fileName: string, ext: string): string {
   return buffer.toString('utf8');
 }
 
+export function assertBatchOutputLimit(totalBytes: number): void {
+  if (totalBytes > MAX_BATCH_EXTRACTED_BYTES) throw new Error('Batch extracts to more than the 5 MB total text limit.');
+}
+
 function normalizeMarkdown(input: string, fileName: string): string {
+  if (Buffer.byteLength(input, 'utf8') > MAX_EXTRACTED_MARKDOWN_BYTES) {
+    throw new Error(`"${fileName}" extracts to more than the 1 MB text limit.`);
+  }
   const normalized = input
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
@@ -131,6 +112,15 @@ function plainTextToMarkdown(input: string, fileName: string): string {
 function extensionToFileType(ext: string): InterviewContextDocument['fileType'] {
   if (ext === '.markdown') return 'md';
   return ext.replace('.', '') as InterviewContextDocument['fileType'];
+}
+
+function normalizeDocumentMetadata(contextKind?: InterviewContextDocumentKind, contextDescription?: string) {
+  if (contextKind !== undefined && !VALID_DOCUMENT_KINDS.includes(contextKind)) {
+    throw new Error('Unsupported document type.');
+  }
+  const description = typeof contextDescription === 'string' ? contextDescription.trim().slice(0, 500) : '';
+  if (contextKind === 'other' && !description) throw new Error('Please describe what this document is.');
+  return { contextKind, contextDescription: description || undefined };
 }
 
 export class InterviewContextDocsManager {
@@ -226,20 +216,24 @@ export class InterviewContextDocsManager {
     return doc;
   }
 
-  public async addDocumentsFromFiles(
-    items: Array<{ filePath: string; contextKind?: InterviewContextDocumentKind; contextDescription?: string }>,
+  public async addDocumentsFromBuffers(
+    items: Array<{ name: string; data: Buffer; contextKind?: InterviewContextDocumentKind; contextDescription?: string }>,
   ): Promise<InterviewContextDocument[]> {
     const newDocs: InterviewContextDocument[] = [];
+    let aggregateOutputBytes = 0;
     for (const item of items) {
-      const { fileName, fileType, markdown, sizeBytes } = await ingestMarkdownDocument(item.filePath);
+      const { fileName, fileType, markdown, sizeBytes } = await ingestMarkdownBuffer(item.name, item.data);
+      aggregateOutputBytes += Buffer.byteLength(markdown, 'utf8');
+      assertBatchOutputLimit(aggregateOutputBytes);
+      const context = normalizeDocumentMetadata(item.contextKind, item.contextDescription);
       const now = new Date().toISOString();
       newDocs.push({
         id: crypto.randomUUID(),
         name: fileName,
         fileType,
         markdown,
-        contextKind: item.contextKind,
-        contextDescription: item.contextDescription?.trim() || undefined,
+        contextKind: context.contextKind,
+        contextDescription: context.contextDescription,
         sizeBytes,
         createdAt: now,
         updatedAt: now,
@@ -258,56 +252,41 @@ export class InterviewContextDocsManager {
   }
 }
 
-export async function ingestMarkdownDocument(filePath: string): Promise<IngestedMarkdownDocument> {
-  const fileName = path.basename(filePath);
-  const ext = path.extname(filePath).toLowerCase();
-
+export async function ingestMarkdownBuffer(fileNameInput: string, buffer: Buffer): Promise<IngestedMarkdownDocument> {
+  const fileName = path.basename(fileNameInput).slice(0, 255);
+  const ext = path.extname(fileName).toLowerCase();
+  if (!fileName || fileName === '.' || fileName === '..') throw new Error('Invalid document name.');
   if (!ALLOWED_EXTENSIONS.has(ext)) {
     throw new Error(`Unsupported file type "${ext || 'none'}". Supported formats: MD, TXT, PDF, DOCX.`);
   }
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new Error(`"${fileName}" is empty.`);
+  if (buffer.length > MAX_FILE_BYTES) throw new Error('File exceeds the 15 MB maximum.');
 
-  let stats: fs.Stats;
-  try {
-    stats = fs.lstatSync(filePath);
-  } catch {
-    throw new Error('Could not read the selected file. It may have moved or been deleted.');
-  }
-
-  if (!stats.isFile()) {
-    throw new Error('Selected path is not a regular file.');
-  }
-
-  if (stats.size > MAX_FILE_BYTES) {
-    const mb = (stats.size / (1024 * 1024)).toFixed(1);
-    throw new Error(`File is ${mb} MB; the maximum is 15 MB.`);
-  }
-
-  let markdown = '';
-  if (ext === '.pdf') {
-    const { PDFParse } = require('pdf-parse');
-    configurePdfWorker(PDFParse);
-    const parser = new PDFParse({ data: fs.readFileSync(filePath) });
-    const data = await withTimeout<any>(parser.getText(), PARSE_TIMEOUT_MS, 'PDF parse');
-    markdown = plainTextToMarkdown(data.text || '', fileName);
-  } else if (ext === '.docx') {
-    const mammoth = require('mammoth');
-    const result = await withTimeout<any>(
-      mammoth.convertToMarkdown({ path: filePath }),
-      PARSE_TIMEOUT_MS,
-      'DOCX parse',
-    );
-    markdown = normalizeMarkdown(result.value || '', fileName);
+  let markdown: string;
+  if (ext === '.pdf' || ext === '.docx') {
+    const parsed = await parseDocumentInWorker(buffer, ext.slice(1) as 'pdf' | 'docx', fileName);
+    markdown = parsed.markdown;
   } else {
-    const content = decodeTextFile(fs.readFileSync(filePath, { encoding: null }), fileName, ext);
+    const content = decodeTextFile(buffer, fileName, ext);
     markdown = ext === '.md' || ext === '.markdown'
       ? normalizeMarkdown(content, fileName)
       : plainTextToMarkdown(content, fileName);
   }
+  return { fileName, fileType: extensionToFileType(ext), markdown, sizeBytes: buffer.length };
+}
 
-  return {
-    fileName,
-    fileType: extensionToFileType(ext),
-    markdown,
-    sizeBytes: stats.size,
-  };
+export async function ingestMarkdownDocument(filePath: string): Promise<IngestedMarkdownDocument> {
+  const fileName = path.basename(filePath);
+  const ext = path.extname(filePath).toLowerCase();
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    throw new Error(`Unsupported file type "${ext || 'none'}". Supported formats: MD, TXT, PDF, DOCX.`);
+  }
+  let original: fs.Stats;
+  try { original = fs.lstatSync(filePath); } catch {
+    throw new Error('Could not read the selected file. It may have moved or been deleted.');
+  }
+  if (!original.isFile()) throw new Error('Selected path is not a regular file.');
+  if (original.size > MAX_FILE_BYTES) throw new Error('File exceeds the 15 MB maximum.');
+  const buffer = readSelectedDocument(filePath, { size: original.size, ino: original.ino, dev: original.dev, mtimeMs: original.mtimeMs, ctimeMs: original.ctimeMs });
+  return ingestMarkdownBuffer(fileName, buffer);
 }

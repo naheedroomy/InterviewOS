@@ -60,7 +60,9 @@ export class SessionTracker {
 
     // Full Session Tracking (Persisted)
     private fullTranscript: TranscriptSegment[] = [];
-    private fullUsage: any[] = []; // UsageInteraction
+    private fullUsage: any[] = [];
+    private screenshotPaths = new Set<string>();
+    private static readonly MAX_TRACKED_SCREENSHOT_PATHS = 5000; // UsageInteraction
     private sessionStartTime: number = Date.now();
 
     // Rolling summarization: epoch summaries preserve early context when arrays are compacted
@@ -506,6 +508,10 @@ export class SessionTracker {
         return this.fullUsage;
     }
 
+    getFullScreenshotPaths(): string[] {
+        return [...this.screenshotPaths];
+    }
+
     getSessionStartTime(): number {
         return this.sessionStartTime;
     }
@@ -536,7 +542,12 @@ export class SessionTracker {
     }
 
     logScreenshot(path: string, preview: string, captureKind: 'full' | 'selective' = 'full'): void {
-        if (!path || !preview) return;
+        if (!path) return;
+        this.screenshotPaths.add(path);
+        if (this.screenshotPaths.size > SessionTracker.MAX_TRACKED_SCREENSHOT_PATHS) {
+            this.screenshotPaths.delete(this.screenshotPaths.values().next().value as string);
+        }
+        if (!preview) return;
         this.fullUsage.push({
             type: 'screenshot',
             timestamp: Date.now(),
@@ -580,6 +591,7 @@ export class SessionTracker {
         this.contextItems = [];
         this.fullTranscript = [];
         this.fullUsage = [];
+        this.screenshotPaths.clear();
         this.transcriptEpochSummaries = [];
         this.sessionStartTime = Date.now();
         this.lastAssistantMessage = null;

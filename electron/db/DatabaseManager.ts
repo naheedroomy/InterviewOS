@@ -4,6 +4,7 @@ import path from 'path';
 import { app } from 'electron';
 import fs from 'fs';
 import * as sqliteVec from 'sqlite-vec';
+import { InterviewWorkspaceStateManager } from '../services/InterviewWorkspaceStateManager';
 
 // Interfaces for our data objects
 export interface Meeting {
@@ -29,6 +30,7 @@ export interface Meeting {
         text: string;
         timestamp: number;
     }>;
+    screenshotPaths?: string[];
     usage?: Array<{
         type: 'assist' | 'followup' | 'chat' | 'followup_questions' | 'screenshot';
         timestamp: number;
@@ -42,6 +44,7 @@ export interface Meeting {
     calendarEventId?: string;
     source?: 'manual' | 'calendar';
     isProcessed?: boolean;
+    isEphemeral?: boolean;
     titleSource?: 'placeholder' | 'auto' | 'manual' | 'calendar';
 }
 
@@ -91,6 +94,10 @@ export class DatabaseManager {
 
             this.db = new Database(this.dbPath);
             this.db.pragma('journal_mode = WAL');
+            // SQLite leaves foreign-key enforcement disabled unless every
+            // connection opts in. The schema declares cascades for meeting
+            // children, so enforce them before any lifecycle write.
+            this.db.pragma('foreign_keys = ON');
 
             // Load sqlite-vec extension for native vector search
             try {
@@ -112,6 +119,8 @@ export class DatabaseManager {
             }
 
             this.runMigrations();
+            this.retryEphemeralVectorCleanup();
+            this.retryPendingMeetingDeletionCleanups();
         } catch (error) {
             console.error('[DatabaseManager] Failed to initialize database:', error);
             throw error;
@@ -129,8 +138,15 @@ export class DatabaseManager {
         if (!this.db) return;
 
         const version = (this.db.pragma('user_version', { simple: true }) as number) || 0;
+        const latestVersion = 20;
+        if (version > latestVersion) {
+            throw new Error(`[DatabaseManager] Database schema version ${version} is newer than supported version ${latestVersion}`);
+        }
         console.log(`[DatabaseManager] Current schema version: ${version}`);
 
+        // Keep an upgrade retryable: DDL, data movement, and all user_version changes
+        // roll back together if any required statement or verification fails.
+        const migrate = this.db.transaction(() => {
         // Version 0 → 1: Initial schema (all core tables)
         if (version < 1) {
             console.log('[DatabaseManager] Applying migration v0 → v1: Initial schema');
@@ -145,6 +161,7 @@ export class DatabaseManager {
                     calendar_event_id TEXT,
                     source TEXT,
                     is_processed INTEGER DEFAULT 1,
+                    is_ephemeral INTEGER DEFAULT 0,
                     title_source TEXT DEFAULT 'auto'
                 );
 
@@ -202,6 +219,14 @@ export class DatabaseManager {
                     processed_at TEXT
                 );
 
+                CREATE TABLE IF NOT EXISTS ephemeral_vector_cleanup (
+                    meeting_id TEXT PRIMARY KEY,
+                    chunk_ids_json TEXT NOT NULL,
+                    summary_ids_json TEXT NOT NULL,
+                    tables_json TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_chunks_meeting ON chunks(meeting_id);
 
                 CREATE TABLE IF NOT EXISTS user_profile (
@@ -226,7 +251,7 @@ export class DatabaseManager {
                     embedding BLOB
                 );
             `);
-            this.db.pragma('user_version = 1');
+            this.advanceMigrationVersion(1);
         }
 
         // Version 1 → 2: Add columns for existing installs (safe for fresh installs too)
@@ -235,87 +260,72 @@ export class DatabaseManager {
             // For fresh installs these columns already exist from v1, so we guard with try/catch.
             // Unlike the old code, these are versioned and run exactly once.
             const columnsToAdd = [
-                "ALTER TABLE meetings ADD COLUMN calendar_event_id TEXT",
-                "ALTER TABLE meetings ADD COLUMN source TEXT",
-                "ALTER TABLE meetings ADD COLUMN is_processed INTEGER DEFAULT 1"
-            ];
-            for (const sql of columnsToAdd) {
-                try { this.db.exec(sql); } catch (e) { /* Column already exists from v1 CREATE */ }
+                ['calendar_event_id', "ALTER TABLE meetings ADD COLUMN calendar_event_id TEXT"],
+                ['source', "ALTER TABLE meetings ADD COLUMN source TEXT"],
+                ['is_processed', "ALTER TABLE meetings ADD COLUMN is_processed INTEGER DEFAULT 1"]
+            ] as const;
+            for (const [column, sql] of columnsToAdd) {
+                const existing = this.db.prepare('PRAGMA table_info(meetings)').all() as Array<{ name: string }>;
+                if (!existing.some(item => item.name === column)) this.db.exec(sql);
             }
-            this.db.pragma('user_version = 2');
+            this.advanceMigrationVersion(2);
         }
 
         // Version 2 → 3: sqlite-vec virtual tables for native vector search
         if (version < 3) {
             console.log('[DatabaseManager] Applying migration v2 → v3: vec0 virtual tables');
-            try {
-                // Create vec0 virtual table for chunk embeddings (dynamic dimension)
-                this.db.exec(`
-                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
-                        chunk_id INTEGER PRIMARY KEY,
-                        embedding float
-                    );
-                `);
-
-                // Create vec0 virtual table for summary embeddings (dynamic dimension)
-                this.db.exec(`
-                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_summaries USING vec0(
-                        summary_id INTEGER PRIMARY KEY,
-                        embedding float
-                    );
-                `);
-
-                // Migrate existing chunk embeddings from BLOB column to vec0 table
-                this.migrateExistingEmbeddings();
-
-                console.log('[DatabaseManager] vec0 virtual tables created successfully');
-            } catch (e) {
-                console.error('[DatabaseManager] vec0 migration failed (sqlite-vec may not be loaded):', e);
-                console.warn('[DatabaseManager] VectorStore will fall back to JS cosine similarity');
-            }
-            this.db.pragma('user_version = 3');
+            // Vector search may fall back at runtime, but these migration objects are
+            // required schema. Do not claim this version when sqlite-vec DDL is unavailable.
+            this.db.exec(`
+                CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
+                    chunk_id INTEGER PRIMARY KEY,
+                    embedding float[768]
+                );
+            `);
+            this.db.exec(`
+                CREATE VIRTUAL TABLE IF NOT EXISTS vec_summaries USING vec0(
+                    summary_id INTEGER PRIMARY KEY,
+                    embedding float[768]
+                );
+            `);
+            this.migrateExistingEmbeddings();
+            this.advanceMigrationVersion(3);
         }
 
         // Version 3 → 4: Drop strict 768-dim vec0 tables to allow flexible embedding dimensions
         if (version < 4) {
             console.log('[DatabaseManager] Applying migration v3 → v4: Drop strict dimension vec0 tables');
-            try {
-                this.db.exec('DROP TABLE IF EXISTS vec_chunks;');
-                this.db.exec('DROP TABLE IF EXISTS vec_summaries;');
-
-                this.db.exec(`
-                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
-                        chunk_id INTEGER PRIMARY KEY,
-                        embedding float
-                    );
-                `);
-
-                this.db.exec(`
-                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_summaries USING vec0(
-                        summary_id INTEGER PRIMARY KEY,
-                        embedding float
-                    );
-                `);
-
-                this.migrateExistingEmbeddings();
-                console.log('[DatabaseManager] vec0 virtual tables recreated for flexible dimensions');
-            } catch (e) {
-                console.error('[DatabaseManager] vec0 migration v4 failed:', e);
-            }
-            this.db.pragma('user_version = 4');
+            this.db.exec('DROP TABLE IF EXISTS vec_chunks;');
+            this.db.exec('DROP TABLE IF EXISTS vec_summaries;');
+            this.db.exec(`
+                CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
+                    chunk_id INTEGER PRIMARY KEY,
+                    embedding float[768]
+                );
+            `);
+            this.db.exec(`
+                CREATE VIRTUAL TABLE IF NOT EXISTS vec_summaries USING vec0(
+                    summary_id INTEGER PRIMARY KEY,
+                    embedding float[768]
+                );
+            `);
+            this.migrateExistingEmbeddings();
+            console.log('[DatabaseManager] vec0 virtual tables recreated for flexible dimensions');
+            this.advanceMigrationVersion(4);
         }
 
         // Version 4 → 5: Add embedding provider and dimensions columns
         if (version < 5) {
             console.log('[DatabaseManager] Applying migration v4 → v5: Add embedding provider/dimensions columns');
             const columnsToAdd = [
-                "ALTER TABLE meetings ADD COLUMN embedding_provider TEXT",
-                "ALTER TABLE meetings ADD COLUMN embedding_dimensions INTEGER"
-            ];
-            for (const sql of columnsToAdd) {
-                try { this.db.exec(sql); } catch (e) { /* Column already exists */ }
+                ['embedding_provider', "ALTER TABLE meetings ADD COLUMN embedding_provider TEXT"],
+                ['embedding_dimensions', "ALTER TABLE meetings ADD COLUMN embedding_dimensions INTEGER"]
+            ] as const;
+            for (const [column, sql] of columnsToAdd) {
+                const existing = this.db.prepare('PRAGMA table_info(meetings)').all() as Array<{ name: string }>;
+                if (!existing.some(item => item.name === column)) this.db.exec(sql);
             }
-            this.db.pragma('user_version = 5');
+            this.advanceMigrationVersion(5);
         }
 
         // Version 5 → 6: Add app_state table for KV storage (Ollama pull state, etc)
@@ -327,21 +337,17 @@ export class DatabaseManager {
                     value TEXT
                 );
             `);
-            this.db.pragma('user_version = 6');
+            this.advanceMigrationVersion(6);
         }
 
         // Version 6 → 7: Add indexes on transcripts and ai_interactions meeting_id
         // (Previously missing — causes O(N) full-table scans when fetching meeting details)
         if (version < 7) {
             console.log('[DatabaseManager] Applying migration v6 → v7: Add meeting_id indexes');
-            try {
-                this.db.exec('CREATE INDEX IF NOT EXISTS idx_transcripts_meeting ON transcripts(meeting_id);');
-                this.db.exec('CREATE INDEX IF NOT EXISTS idx_ai_interactions_meeting ON ai_interactions(meeting_id, timestamp);');
-                console.log('[DatabaseManager] Meeting ID indexes created successfully');
-            } catch (e) {
-                console.error('[DatabaseManager] Failed to create indexes (non-fatal):', e);
-            }
-            this.db.pragma('user_version = 7');
+            this.db.exec('CREATE INDEX IF NOT EXISTS idx_transcripts_meeting ON transcripts(meeting_id);');
+            this.db.exec('CREATE INDEX IF NOT EXISTS idx_ai_interactions_meeting ON ai_interactions(meeting_id, timestamp);');
+            console.log('[DatabaseManager] Meeting ID indexes created successfully');
+            this.advanceMigrationVersion(7);
         }
 
         // Version 7 → 8: Provision per-dimension vec0 tables (NOTE: this v8 ran in two broken
@@ -350,14 +356,14 @@ export class DatabaseManager {
         if (version < 8) {
             console.log('[DatabaseManager] Applying migration v7 → v8: Provision per-dimension vec0 tables');
             // Drop the legacy single-dim tables from v3/v4 if they exist and are unusable
-            try { this.db.exec('DROP TABLE IF EXISTS vec_chunks;'); } catch (_) {}
-            try { this.db.exec('DROP TABLE IF EXISTS vec_summaries;'); } catch (_) {}
+            this.db.exec('DROP TABLE IF EXISTS vec_chunks;');
+            this.db.exec('DROP TABLE IF EXISTS vec_summaries;');
 
             for (const dim of DatabaseManager.KNOWN_DIMS) {
-                this.ensureVecTableForDim(dim);
+                this.ensureVecTableForDim(dim, true);
             }
             console.log('[DatabaseManager] v8 migration: per-dimension vec0 tables provisioned');
-            this.db.pragma('user_version = 8');
+            this.advanceMigrationVersion(8);
         }
 
         // Version 8 → 9: Ensure per-dimension tables exist.
@@ -366,26 +372,16 @@ export class DatabaseManager {
         if (version < 9) {
             console.log('[DatabaseManager] Applying migration v8 → v9: Ensure per-dimension vec0 tables exist');
             // Drop old single-dim orphan tables if they exist (float[1536] schema)
-            try { this.db.exec('DROP TABLE IF EXISTS vec_chunks;'); } catch (_) {}
-            try { this.db.exec('DROP TABLE IF EXISTS vec_summaries;'); } catch (_) {}
+            this.db.exec('DROP TABLE IF EXISTS vec_chunks;');
+            this.db.exec('DROP TABLE IF EXISTS vec_summaries;');
 
-            let allOk = true;
             for (const dim of DatabaseManager.KNOWN_DIMS) {
-                this.ensureVecTableForDim(dim);
-                // Verify the table actually exists after provisioning
-                try {
-                    this.db.prepare(`SELECT count(*) FROM vec_chunks_${dim} LIMIT 1`).get();
-                } catch (e) {
-                    console.error(`[DatabaseManager] v9: vec_chunks_${dim} still missing after provisioning:`, e);
-                    allOk = false;
-                }
+                this.ensureVecTableForDim(dim, true);
+                this.db.prepare(`SELECT count(*) FROM vec_chunks_${dim} LIMIT 1`).get();
+                this.db.prepare(`SELECT count(*) FROM vec_summaries_${dim} LIMIT 1`).get();
             }
-            if (allOk) {
-                console.log('[DatabaseManager] v9 migration: all per-dimension vec0 tables verified ✓');
-            } else {
-                console.warn('[DatabaseManager] v9 migration: some tables missing — sqlite-vec extension may not be loaded');
-            }
-            this.db.pragma('user_version = 9');
+            console.log('[DatabaseManager] v9 migration: all per-dimension vec0 tables verified ✓');
+            this.advanceMigrationVersion(9);
         }
 
         // Version 9 → 10: Add UNIQUE constraint on embedding_queue(meeting_id, chunk_id).
@@ -432,14 +428,10 @@ export class DatabaseManager {
                 migrate();
                 console.log('[DatabaseManager] v10 migration: embedding_queue UNIQUE constraint added ✓');
             } catch (e) {
-                console.error('[DatabaseManager] v10 migration failed — table structure unchanged:', e);
-                // user_version still advances. We do NOT retry — a failed rename leaves
-                // embedding_queue_old behind; retrying would cause "table already exists".
-                // In the failure case, INSERT OR IGNORE in queueMeeting() will still work
-                // for natural uniqueness (same meeting queued twice picks up existing rows),
-                // just without DB-enforced deduplication.
+                console.error('[DatabaseManager] v10 migration failed; the surrounding migration transaction will restore embedding_queue:', e);
+                throw e;
             }
-            this.db.pragma('user_version = 10');
+            this.advanceMigrationVersion(10);
         }
 
         // Version 10 → 11: Add modes, mode_reference_files, and mode_note_sections tables
@@ -480,7 +472,7 @@ export class DatabaseManager {
                 INSERT OR IGNORE INTO modes (id, name, template_type, custom_context, is_active)
                 VALUES (?, ?, ?, ?, 1)
             `).run(defaultModeId, 'General', 'general', '');
-            this.db.pragma('user_version = 11');
+            this.advanceMigrationVersion(11);
         }
 
         // Version 11 → 12: Seed note sections for the default General mode if missing
@@ -504,7 +496,7 @@ export class DatabaseManager {
                     insertSection.run(`ns_general_${i}`, defaultModeId, s.title, s.description, i);
                 });
             }
-            this.db.pragma('user_version = 12');
+            this.advanceMigrationVersion(12);
         }
 
         // Version 12 → 13: Backfill note sections for any mode instance that has none
@@ -576,7 +568,7 @@ export class DatabaseManager {
                     }
                 }
             }
-            this.db.pragma('user_version = 13');
+            this.advanceMigrationVersion(13);
         }
 
         // Version 13 → 14: Add profile_custom_notes table
@@ -590,7 +582,7 @@ export class DatabaseManager {
                 );
                 INSERT OR IGNORE INTO profile_custom_notes (id, content) VALUES (1, '');
             `);
-            this.db.pragma('user_version = 14');
+            this.advanceMigrationVersion(14);
         }
 
         // Version 14 → 15: Add profile_persona table
@@ -604,7 +596,7 @@ export class DatabaseManager {
                 );
                 INSERT OR IGNORE INTO profile_persona (id, content) VALUES (1, '');
             `);
-            this.db.pragma('user_version = 15');
+            this.advanceMigrationVersion(15);
         }
 
         // Version 15 → 16: Track whether a title is generated or manually set.
@@ -624,10 +616,157 @@ export class DatabaseManager {
                 END
                 WHERE title_source IS NULL OR TRIM(title_source) = '';
             `);
-            this.db.pragma('user_version = 16');
+            this.advanceMigrationVersion(16);
         }
 
+        // Version 16 → 17: distinguish temporary live-RAG rows from recoverable meetings.
+        if (version < 17) {
+            console.log('[DatabaseManager] Applying migration v16 → v17: Mark ephemeral live meetings');
+            try {
+                this.db.exec('ALTER TABLE meetings ADD COLUMN is_ephemeral INTEGER DEFAULT 0');
+            } catch (error) {
+                // Fresh schemas already include the column.
+            }
+            this.db.exec('CREATE INDEX IF NOT EXISTS idx_meetings_ephemeral ON meetings(is_ephemeral, is_processed)');
+            // Prior versions used this reserved live-index row without a
+            // discriminator, so classify unprocessed residue during migration.
+            this.db.exec(`
+                UPDATE meetings
+                SET is_ephemeral = 1
+                WHERE id = 'live-meeting-current' AND is_processed = 0;
+            `);
+            this.advanceMigrationVersion(17);
+        }
+
+        // Version 17 → 18: retain retryable vector cleanup identities after SQL deletion.
+        if (version < 18) {
+            console.log('[DatabaseManager] Applying migration v17 → v18: Add ephemeral vector cleanup tombstones');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS ephemeral_vector_cleanup (
+                    meeting_id TEXT PRIMARY KEY,
+                    chunk_ids_json TEXT NOT NULL,
+                    summary_ids_json TEXT NOT NULL,
+                    tables_json TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+            `);
+            this.advanceMigrationVersion(18);
+        }
+
+        // Version 18 → 19: durable retry journal for meeting-owned external cleanup.
+        if (version < 19) {
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS meeting_deletion_cleanup (
+                    meeting_id TEXT PRIMARY KEY,
+                    screenshot_paths_json TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+            `);
+            this.advanceMigrationVersion(19);
+        }
+
+        // Version 19 → 20: durable deletion guards and uncapped screenshot ownership.
+        if (version < 20) {
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS deleted_meetings (meeting_id TEXT PRIMARY KEY, deleted_at TEXT DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE IF NOT EXISTS meeting_screenshot_paths (
+                    meeting_id TEXT NOT NULL, screenshot_path TEXT NOT NULL,
+                    PRIMARY KEY (meeting_id, screenshot_path),
+                    FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
+                );
+            `);
+            this.advanceMigrationVersion(20);
+        }
+
+        this.verifyMigrationSchema();
         console.log('[DatabaseManager] Migrations completed.');
+        });
+        try {
+            migrate();
+        } catch (error) {
+            // A rolled-back CREATE VIRTUAL TABLE must not leave its dimension
+            // marked as provisioned in this manager's process-local cache.
+            this.ensuredDims.clear();
+            console.error(`[DatabaseManager] Schema migration failed; user_version remains ${version}:`, error);
+            throw error;
+        }
+    }
+
+    private advanceMigrationVersion(version: number): void {
+        this.verifyMigrationSchema(version);
+        this.db!.pragma(`user_version = ${version}`);
+    }
+
+    private verifyMigrationSchema(version = (this.db!.pragma('user_version', { simple: true }) as number) || 0): void {
+        if (!this.db) throw new Error('Database is not open during schema verification');
+        const tableExists = (name: string) => !!this.db!.prepare(
+            "SELECT 1 FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?"
+        ).get(name);
+        const requireTable = (name: string) => {
+            if (!tableExists(name)) throw new Error(`Required migration table is missing: ${name}`);
+        };
+        const columns = (table: string) => new Set((this.db!.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(column => column.name));
+        const requireColumns = (table: string, names: string[]) => {
+            requireTable(table);
+            const existing = columns(table);
+            for (const name of names) if (!existing.has(name)) throw new Error(`Required migration column is missing: ${table}.${name}`);
+        };
+
+        if (version >= 1) {
+            for (const table of ['meetings', 'transcripts', 'ai_interactions', 'chunks', 'chunk_summaries', 'embedding_queue']) requireTable(table);
+        }
+        if (version >= 2) requireColumns('meetings', ['calendar_event_id', 'source', 'is_processed']);
+        if (version >= 3 && version < 8) {
+            requireTable('vec_chunks');
+            requireTable('vec_summaries');
+        }
+        if (version >= 5) requireColumns('meetings', ['embedding_provider', 'embedding_dimensions']);
+        if (version >= 6) requireTable('app_state');
+        if (version >= 7) {
+            const indexNames = new Set((this.db.prepare("SELECT name FROM sqlite_master WHERE type='index'").all() as Array<{ name: string }>).map(index => index.name));
+            for (const name of ['idx_transcripts_meeting', 'idx_ai_interactions_meeting']) {
+                if (!indexNames.has(name)) throw new Error(`Required migration index is missing: ${name}`);
+            }
+        }
+        if (version >= 8) {
+            for (const dim of DatabaseManager.KNOWN_DIMS) {
+                requireTable(`vec_chunks_${dim}`);
+                requireTable(`vec_summaries_${dim}`);
+                // An existing schema remains usable in JS fallback mode when
+                // sqlite-vec cannot load on this connection. Query the virtual
+                // tables only when their module is available; pending upgrades
+                // still fail if they cannot create the required schema.
+                if (this.resolvedExtPath) {
+                    this.db.prepare(`SELECT count(*) FROM vec_chunks_${dim} LIMIT 1`).get();
+                    this.db.prepare(`SELECT count(*) FROM vec_summaries_${dim} LIMIT 1`).get();
+                }
+            }
+        }
+        if (version >= 11) {
+            for (const table of ['modes', 'mode_reference_files', 'mode_note_sections']) requireTable(table);
+        }
+        if (version >= 14) requireTable('profile_custom_notes');
+        if (version >= 15) requireTable('profile_persona');
+        if (version >= 16) requireColumns('meetings', ['title_source']);
+        if (version >= 17) {
+            requireColumns('meetings', ['is_ephemeral']);
+            if (!this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_meetings_ephemeral'").get()) {
+                throw new Error('Required migration index is missing: idx_meetings_ephemeral');
+            }
+        }
+        if (version >= 18) requireTable('ephemeral_vector_cleanup');
+        if (version >= 19) requireTable('meeting_deletion_cleanup');
+        if (version >= 20) {
+            requireTable('deleted_meetings');
+            requireTable('meeting_screenshot_paths');
+        }
+        if (version >= 10) {
+            requireColumns('embedding_queue', ['meeting_id', 'chunk_id']);
+            const uniqueIndexes = this.db.prepare('PRAGMA index_list(embedding_queue)').all() as Array<{ name: string; unique: number }>;
+            const hasPairConstraint = uniqueIndexes.some(index => index.unique &&
+                (this.db!.prepare(`PRAGMA index_info(${JSON.stringify(index.name)})`).all() as Array<{ name: string }>).map(column => column.name).join(',') === 'meeting_id,chunk_id');
+            if (!hasPairConstraint) throw new Error('Required migration constraint is missing: embedding_queue(meeting_id, chunk_id) UNIQUE');
+        }
     }
 
     // ============================================
@@ -914,12 +1053,10 @@ export class DatabaseManager {
                 );
                 const migrateAll = this.db.transaction(() => {
                     for (const row of chunkRows) {
-                        try {
-                            insert.run(row.id, row.embedding);
-                        } catch (err) {
-                            // On mismatch (e.g. mixed 768 and 3072 dims), nullify to re-embed later
-                            this.db.prepare('UPDATE chunks SET embedding = NULL WHERE id = ?').run(row.id);
-                        }
+                        // The legacy vec table has a fixed 768-float column. Preserve
+                        // other dimensions in the source BLOB for later re-embedding.
+                        if ((row.embedding as Buffer)?.byteLength !== 768 * Float32Array.BYTES_PER_ELEMENT) continue;
+                        insert.run(row.id, row.embedding);
                     }
                 });
                 migrateAll();
@@ -927,6 +1064,7 @@ export class DatabaseManager {
             }
         } catch (e) {
             console.error('[DatabaseManager] Failed to migrate chunk embeddings:', e);
+            throw e;
         }
 
         // Migrate summary embeddings
@@ -941,11 +1079,8 @@ export class DatabaseManager {
                 );
                 const migrateAll = this.db.transaction(() => {
                     for (const row of summaryRows) {
-                        try {
-                            insert.run(row.id, row.embedding);
-                        } catch (err) {
-                            this.db.prepare('UPDATE chunk_summaries SET embedding = NULL WHERE id = ?').run(row.id);
-                        }
+                        if ((row.embedding as Buffer)?.byteLength !== 768 * Float32Array.BYTES_PER_ELEMENT) continue;
+                        insert.run(row.id, row.embedding);
                     }
                 });
                 migrateAll();
@@ -953,6 +1088,7 @@ export class DatabaseManager {
             }
         } catch (e) {
             console.error('[DatabaseManager] Failed to migrate summary embeddings:', e);
+            throw e;
         }
     }
 
@@ -961,7 +1097,7 @@ export class DatabaseManager {
      * Used by the v8 migration, delete operations, and table provisioning.
      * When a new provider dimension is encountered at runtime, ensureVecTableForDim() handles it.
      */
-    public static readonly KNOWN_DIMS: readonly number[] = [768, 1536, 3072];
+    public static readonly KNOWN_DIMS: readonly number[] = [384, 768, 1536, 3072];
 
     /** Cache: dimensions for which vec0 tables have already been verified/created this session. */
     private ensuredDims = new Set<number>();
@@ -971,12 +1107,14 @@ export class DatabaseManager {
      * Called by v8 migration and at runtime when a new embedding dimension is first seen.
      * Uses an in-memory cache to avoid redundant CREATE TABLE IF NOT EXISTS on every insert.
      */
-    public ensureVecTableForDim(dim: number): void {
+    public ensureVecTableForDim(dim: number, required = false): void {
         if (this.ensuredDims.has(dim)) return; // Already verified this session
         if (!this.db) return;
         // Guard against SQL injection: dim must be a positive integer
         if (!Number.isInteger(dim) || dim <= 0 || dim > 100_000) {
-            console.error(`[DatabaseManager] Invalid dimension for vec0 table: ${dim}`);
+            const error = new Error(`[DatabaseManager] Invalid dimension for vec0 table: ${dim}`);
+            if (required) throw error;
+            console.error(error.message);
             return;
         }
         try {
@@ -995,6 +1133,7 @@ export class DatabaseManager {
             this.ensuredDims.add(dim);
             console.log(`[DatabaseManager] Ensured vec0 tables for dim=${dim}`);
         } catch (e) {
+            if (required) throw new Error(`[DatabaseManager] Required vec0 migration tables unavailable for dim=${dim}`, { cause: e });
             console.error(`[DatabaseManager] Failed to create vec0 tables for dim=${dim}:`, e);
         }
     }
@@ -1043,9 +1182,20 @@ export class DatabaseManager {
             return;
         }
 
-        const insertMeeting = this.db.prepare(`
-            INSERT OR REPLACE INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed, title_source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        const upsertMeeting = this.db.prepare(`
+            INSERT INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed, is_ephemeral, title_source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                title = excluded.title,
+                start_time = excluded.start_time,
+                duration_ms = excluded.duration_ms,
+                summary_json = excluded.summary_json,
+                created_at = excluded.created_at,
+                calendar_event_id = excluded.calendar_event_id,
+                source = excluded.source,
+                is_processed = excluded.is_processed,
+                is_ephemeral = excluded.is_ephemeral,
+                title_source = excluded.title_source
         `);
         const existingMeetingStmt = this.db.prepare('SELECT title, title_source FROM meetings WHERE id = ?');
 
@@ -1058,6 +1208,9 @@ export class DatabaseManager {
             INSERT INTO ai_interactions (meeting_id, type, timestamp, user_query, ai_response, metadata_json)
             VALUES (?, ?, ?, ?, ?, ?)
         `);
+        const deleteTranscripts = this.db.prepare('DELETE FROM transcripts WHERE meeting_id = ?');
+        const deleteInteractions = this.db.prepare('DELETE FROM ai_interactions WHERE meeting_id = ?');
+        const insertScreenshotPath = this.db.prepare('INSERT OR IGNORE INTO meeting_screenshot_paths (meeting_id, screenshot_path) VALUES (?, ?)');
 
         const summaryJson = JSON.stringify({
             legacySummary: meeting.summary,
@@ -1065,6 +1218,9 @@ export class DatabaseManager {
         });
 
         const runTransaction = this.db.transaction(() => {
+            if (this.db!.prepare('SELECT 1 FROM deleted_meetings WHERE meeting_id = ?').get(meeting.id)) {
+                throw new Error('Meeting has been permanently deleted');
+            }
             const existingMeeting = existingMeetingStmt.get(meeting.id) as { title?: string; title_source?: string } | undefined;
             const incomingTitleSource = meeting.titleSource || (meeting.source === 'calendar' ? 'calendar' : 'auto');
             const shouldPreserveManualTitle = existingMeeting?.title_source === 'manual' && incomingTitleSource !== 'manual';
@@ -1075,8 +1231,14 @@ export class DatabaseManager {
                 ? 'manual'
                 : incomingTitleSource;
 
-            // 1. Insert Meeting
-            insertMeeting.run(
+            // A finalized meeting replaces the placeholder's child rows.
+            // Deleting inside this transaction prevents duplicate transcript
+            // and interaction sets without exposing a partial lifecycle state.
+            deleteTranscripts.run(meeting.id);
+            deleteInteractions.run(meeting.id);
+
+            // 1. Insert or update the authoritative meeting record
+            upsertMeeting.run(
                 meeting.id,
                 titleToSave,
                 startTimeMs,
@@ -1086,6 +1248,7 @@ export class DatabaseManager {
                 meeting.calendarEventId || null,
                 meeting.source || 'manual',
                 meeting.isProcessed ? 1 : 0,
+                meeting.isEphemeral ? 1 : 0,
                 titleSourceToSave
             );
 
@@ -1100,6 +1263,13 @@ export class DatabaseManager {
                     );
                 }
             }
+
+            // Keep screenshot ownership independent of capped interaction/usage history.
+            const screenshotPaths = new Set(meeting.screenshotPaths || []);
+            for (const usage of meeting.usage || []) {
+                if (typeof usage?.metadata?.screenshotPath === 'string') screenshotPaths.add(usage.metadata.screenshotPath);
+            }
+            for (const screenshotPath of screenshotPaths) insertScreenshotPath.run(meeting.id, screenshotPath);
 
             // 3. Insert Interactions
             if (meeting.usage) {
@@ -1202,6 +1372,7 @@ export class DatabaseManager {
 
         const stmt = this.db.prepare(`
             SELECT * FROM meetings
+            WHERE COALESCE(is_ephemeral, 0) = 0
             ORDER BY created_at DESC
             LIMIT ?
         `);
@@ -1305,8 +1476,25 @@ export class DatabaseManager {
             isProcessed: meetingRow.is_processed !== 0,
             titleSource: meetingRow.title_source,
             transcript: transcript,
-            usage: usage
+            usage: usage,
+            screenshotPaths: (this.db.prepare('SELECT screenshot_path FROM meeting_screenshot_paths WHERE meeting_id = ?').all(id) as Array<{ screenshot_path: string }>).map(row => row.screenshot_path)
         };
+    }
+
+    /** Return persisted meetings past a retention deadline; live provisional rows are excluded. */
+    public getExpiredMeetingIds(cutoffMs: number): string[] {
+        if (!this.db || !Number.isFinite(cutoffMs)) return [];
+        const rows = this.db.prepare('SELECT id, created_at FROM meetings WHERE COALESCE(is_ephemeral, 0) = 0').all() as Array<{ id: string; created_at: string }>;
+        return rows.filter(row => {
+            const createdAt = Date.parse(row.created_at);
+            return Number.isFinite(createdAt) && createdAt <= cutoffMs;
+        }).map(row => row.id);
+    }
+
+    public getPendingMeetingDeletionIds(): string[] {
+        if (!this.db) return [];
+        return (this.db.prepare(`SELECT meeting_id FROM meeting_deletion_cleanup
+            UNION SELECT meeting_id FROM ephemeral_vector_cleanup`).all() as Array<{ meeting_id: string }>).map(row => row.meeting_id);
     }
 
     public deleteMeeting(id: string): boolean {
@@ -1323,13 +1511,138 @@ export class DatabaseManager {
         }
     }
 
+    /** Delete persisted and owned meeting data; external cleanup failures remain retryable. */
+    public deleteMeetingCompletely(id: string): boolean {
+        if (!this.db || typeof id !== 'string' || !id.trim()) return false;
+        try {
+            const existingCleanup = this.db.prepare('SELECT meeting_id FROM meeting_deletion_cleanup WHERE meeting_id = ?').get(id);
+            const meetingExists = this.db.prepare('SELECT id FROM meetings WHERE id = ?').get(id);
+            if (!meetingExists && !existingCleanup) return false;
+
+            if (meetingExists) {
+                const chunkIds = (this.db.prepare('SELECT id FROM chunks WHERE meeting_id = ?').all(id) as Array<{ id: number }>).map(row => row.id);
+                const summaryIds = (this.db.prepare('SELECT id FROM chunk_summaries WHERE meeting_id = ?').all(id) as Array<{ id: number }>).map(row => row.id);
+                const otherPaths = this.getScreenshotPathsForOtherMeetings(id);
+                const screenshotPaths = this.getScreenshotPaths(id).filter(filePath => !otherPaths.has(filePath));
+                const tables = this.getVectorTableNames();
+                this.db.transaction(() => {
+                    this.db!.prepare('INSERT OR IGNORE INTO deleted_meetings (meeting_id) VALUES (?)').run(id);
+                    this.db!.prepare(`INSERT INTO meeting_deletion_cleanup (meeting_id, screenshot_paths_json) VALUES (?, ?)
+                        ON CONFLICT(meeting_id) DO UPDATE SET screenshot_paths_json = excluded.screenshot_paths_json`)
+                        .run(id, JSON.stringify(screenshotPaths));
+                    this.db!.prepare(`INSERT INTO ephemeral_vector_cleanup (meeting_id, chunk_ids_json, summary_ids_json, tables_json)
+                        VALUES (?, ?, ?, ?) ON CONFLICT(meeting_id) DO UPDATE SET
+                        chunk_ids_json = excluded.chunk_ids_json, summary_ids_json = excluded.summary_ids_json, tables_json = excluded.tables_json`)
+                        .run(id, JSON.stringify(chunkIds), JSON.stringify(summaryIds), JSON.stringify(tables));
+                    this.db!.prepare('DELETE FROM embedding_queue WHERE meeting_id = ?').run(id);
+                    this.db!.prepare('DELETE FROM meetings WHERE id = ?').run(id);
+                })();
+                this.retryEphemeralVectorCleanup();
+                const vectorCleanupPending = !!this.db.prepare('SELECT 1 FROM ephemeral_vector_cleanup WHERE meeting_id = ?').get(id);
+                return !vectorCleanupPending && this.finishMeetingDeletionCleanup(id);
+            }
+
+            this.retryEphemeralVectorCleanup();
+            return this.finishMeetingDeletionCleanup(id);
+        } catch (error) {
+            console.error(`[DatabaseManager] Full deletion cleanup failed for meeting ${id}:`, error);
+            return false;
+        }
+    }
+
+    /** Retry durable external cleanup journal entries after startup or another deletion. */
+    public retryPendingMeetingDeletionCleanups(): string[] {
+        if (!this.db) return [];
+        const rows = this.db.prepare('SELECT meeting_id FROM meeting_deletion_cleanup').all() as Array<{ meeting_id: string }>;
+        const completed: string[] = [];
+        for (const row of rows) {
+            try {
+                if (this.finishMeetingDeletionCleanup(row.meeting_id)) completed.push(row.meeting_id);
+            } catch (error) {
+                console.error(`[DatabaseManager] Pending meeting cleanup failed for ${row.meeting_id}:`, error);
+            }
+        }
+        return completed;
+    }
+
+    private finishMeetingDeletionCleanup(id: string): boolean {
+        if (!this.db) return false;
+        // A journal is complete only when both vector and external cleanup finish.
+        if (this.db.prepare('SELECT 1 FROM ephemeral_vector_cleanup WHERE meeting_id = ?').get(id)) return false;
+        const cleanup = this.db.prepare('SELECT screenshot_paths_json FROM meeting_deletion_cleanup WHERE meeting_id = ?').get(id) as { screenshot_paths_json: string } | undefined;
+        if (!cleanup) return true;
+        let screenshotPaths: string[];
+        try {
+            const parsed = JSON.parse(cleanup.screenshot_paths_json);
+            if (!Array.isArray(parsed) || parsed.some(item => typeof item !== 'string')) return false;
+            screenshotPaths = parsed;
+        } catch { return false; }
+
+        InterviewWorkspaceStateManager.getInstance().unlinkMeetingReferences(id);
+        const currentlyShared = this.getScreenshotPathsForOtherMeetings(id);
+        let deletionFailed = false;
+        for (const screenshotPath of screenshotPaths) {
+            if (currentlyShared.has(screenshotPath)) continue;
+            try {
+                this.deleteOwnedScreenshot(screenshotPath);
+            } catch (error) {
+                deletionFailed = true;
+                console.error(`[DatabaseManager] Failed to delete owned screenshot: ${screenshotPath}`, error);
+            }
+        }
+        if (deletionFailed) return false;
+        this.db.prepare('DELETE FROM meeting_deletion_cleanup WHERE meeting_id = ?').run(id);
+        return true;
+    }
+
+    private getScreenshotPaths(meetingId: string): string[] {
+        if (!this.db) return [];
+        const rows = this.db.prepare('SELECT metadata_json FROM ai_interactions WHERE meeting_id = ?').all(meetingId) as Array<{ metadata_json: string | null }>;
+        const paths = new Set<string>((this.db.prepare('SELECT screenshot_path FROM meeting_screenshot_paths WHERE meeting_id = ?').all(meetingId) as Array<{ screenshot_path: string }>).map(row => row.screenshot_path));
+        for (const row of rows) {
+            try {
+                const metadata = JSON.parse(row.metadata_json || '{}');
+                if (typeof metadata?.screenshotPath === 'string') paths.add(metadata.screenshotPath);
+            } catch { /* malformed historical metadata is not a path authority */ }
+        }
+        return [...paths];
+    }
+
+    private getScreenshotPathsForOtherMeetings(meetingId: string): Set<string> {
+        if (!this.db) return new Set();
+        const rows = this.db.prepare('SELECT metadata_json FROM ai_interactions WHERE meeting_id != ?').all(meetingId) as Array<{ metadata_json: string | null }>;
+        const paths = new Set<string>((this.db.prepare('SELECT screenshot_path FROM meeting_screenshot_paths WHERE meeting_id != ?').all(meetingId) as Array<{ screenshot_path: string }>).map(row => row.screenshot_path));
+        for (const row of rows) {
+            try {
+                const metadata = JSON.parse(row.metadata_json || '{}');
+                if (typeof metadata?.screenshotPath === 'string') paths.add(metadata.screenshotPath);
+            } catch { /* ignore malformed metadata */ }
+        }
+        return paths;
+    }
+
+    private deleteOwnedScreenshot(filePath: string): void {
+        const userData = app.getPath('userData');
+        if (!path.isAbsolute(filePath) || path.normalize(filePath) !== filePath) return;
+        const resolved = path.resolve(filePath);
+        const roots = ['screenshots', 'extra_screenshots'].map(name => path.resolve(userData, name));
+        const root = roots.find(candidate => path.dirname(resolved) === candidate);
+        if (!root || path.basename(resolved) !== path.basename(filePath)) return;
+
+        for (const candidate of [root, resolved]) {
+            if (fs.existsSync(candidate) && fs.lstatSync(candidate).isSymbolicLink()) return;
+        }
+        if (fs.existsSync(resolved)) fs.unlinkSync(resolved);
+    }
+
+
     public getUnprocessedMeetings(): Meeting[] {
         if (!this.db) return [];
 
         // is_processed = 0 means false
         const stmt = this.db.prepare(`
             SELECT * FROM meetings
-            WHERE is_processed = 0
+            WHERE is_processed = 0 AND COALESCE(is_ephemeral, 0) = 0
             ORDER BY created_at DESC
         `);
 
@@ -1357,6 +1670,154 @@ export class DatabaseManager {
                 usage: [] as any[]
             };
         });
+    }
+
+    private getVectorTableNames(): string[] {
+        if (!this.db) return [];
+        return (this.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND (name LIKE 'vec_chunks_%' OR name LIKE 'vec_summaries_%')").all() as Array<{ name: string }>)
+            .map(row => row.name)
+            .filter(name => /^vec_(?:chunks|summaries)_\d+$/.test(name));
+    }
+
+    /** Retry vector deletion recorded after an optional sqlite-vec failure. */
+    public retryEphemeralVectorCleanup(): string[] {
+        if (!this.db) return [];
+
+        const select = this.db.prepare('SELECT meeting_id, chunk_ids_json, summary_ids_json, tables_json FROM ephemeral_vector_cleanup');
+        const remove = this.db.prepare('DELETE FROM ephemeral_vector_cleanup WHERE meeting_id = ?');
+        const cleared: string[] = [];
+
+        try {
+            const availableTables = new Set(this.getVectorTableNames());
+            for (const row of select.all() as Array<{ meeting_id: string; chunk_ids_json: string; summary_ids_json: string; tables_json: string }>) {
+                let chunkIds: number[];
+                let summaryIds: number[];
+                let tables: string[];
+                try {
+                    chunkIds = JSON.parse(row.chunk_ids_json);
+                    summaryIds = JSON.parse(row.summary_ids_json);
+                    tables = JSON.parse(row.tables_json);
+                } catch (error) {
+                    console.error(`[DatabaseManager] Invalid vector cleanup tombstone for ${row.meeting_id}:`, error);
+                    continue;
+                }
+
+                let failed = false;
+                for (const table of tables) {
+                    if (!availableTables.has(table)) continue;
+                    try {
+                        if (table.startsWith('vec_chunks_') && chunkIds.length > 0) {
+                            const placeholders = chunkIds.map(() => '?').join(',');
+                            this.db.prepare(`DELETE FROM ${table} WHERE chunk_id IN (${placeholders})`).run(...chunkIds);
+                        } else if (table.startsWith('vec_summaries_')) {
+                            for (const summaryId of summaryIds) {
+                                this.db.prepare(`DELETE FROM ${table} WHERE summary_id = ?`).run(summaryId);
+                            }
+                        }
+                    } catch (error) {
+                        failed = true;
+                        console.warn(`[DatabaseManager] Vector cleanup retry failed for ${table}:`, error);
+                    }
+                }
+
+                if (!failed) {
+                    remove.run(row.meeting_id);
+                    cleared.push(row.meeting_id);
+                }
+            }
+        } catch (error) {
+            console.error('[DatabaseManager] Failed to retry ephemeral vector cleanup:', error);
+        }
+        return cleared;
+    }
+
+    /** Remove interrupted live-indexing state before ordinary meeting recovery. */
+    public deleteEphemeralMeetings(): string[] {
+        if (!this.db) return [];
+
+        // Resolve older tombstones whenever vector tables are available before
+        // collecting new cleanup work.
+        this.retryEphemeralVectorCleanup();
+
+        const selectIds = this.db.prepare('SELECT id FROM meetings WHERE is_ephemeral = 1');
+        const selectChunkIds = this.db.prepare('SELECT id FROM chunks WHERE meeting_id = ?');
+        const selectSummary = this.db.prepare('SELECT id FROM chunk_summaries WHERE meeting_id = ?');
+        const deleteQueue = this.db.prepare('DELETE FROM embedding_queue WHERE meeting_id = ?');
+        const deleteMeeting = this.db.prepare('DELETE FROM meetings WHERE id = ? AND is_ephemeral = 1');
+        const selectTombstone = this.db.prepare('SELECT chunk_ids_json, summary_ids_json, tables_json FROM ephemeral_vector_cleanup WHERE meeting_id = ?');
+        const upsertTombstone = this.db.prepare(`
+            INSERT INTO ephemeral_vector_cleanup (meeting_id, chunk_ids_json, summary_ids_json, tables_json)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(meeting_id) DO UPDATE SET
+                chunk_ids_json = excluded.chunk_ids_json,
+                summary_ids_json = excluded.summary_ids_json,
+                tables_json = excluded.tables_json
+        `);
+
+        try {
+            const ids = (selectIds.all() as Array<{ id: string }>).map(row => row.id);
+            const vectorTables = this.getVectorTableNames();
+            const failedTablesByMeeting = new Map<string, { chunkIds: number[]; summaryIds: number[]; tables: string[] }>();
+
+            // Vector tables are optional. A missing extension or one broken
+            // dimension must not roll back authoritative SQL cleanup.
+            for (const id of ids) {
+                const chunkIds = (selectChunkIds.all(id) as Array<{ id: number }>).map(row => row.id);
+                const summaryId = (selectSummary.get(id) as { id: number } | undefined)?.id;
+                const failedTables: string[] = [];
+                for (const table of vectorTables) {
+                    try {
+                        if (chunkIds.length > 0 && table.startsWith('vec_chunks_')) {
+                            const placeholders = chunkIds.map(() => '?').join(',');
+                            this.db.prepare(`DELETE FROM ${table} WHERE chunk_id IN (${placeholders})`).run(...chunkIds);
+                        }
+                        if (summaryId !== undefined && table.startsWith('vec_summaries_')) {
+                            this.db.prepare(`DELETE FROM ${table} WHERE summary_id = ?`).run(summaryId);
+                        }
+                    } catch (error) {
+                        failedTables.push(table);
+                        console.warn(`[DatabaseManager] Best-effort vector cleanup failed for ${table}:`, error);
+                    }
+                }
+                if (failedTables.length > 0) {
+                    failedTablesByMeeting.set(id, {
+                        chunkIds,
+                        summaryIds: summaryId === undefined ? [] : [summaryId],
+                        tables: failedTables,
+                    });
+                }
+            }
+
+            // Keep authoritative SQL cleanup in its own transaction. Tombstones
+            // preserve vector identities for a later retry after extension recovery.
+            return this.db.transaction(() => {
+                for (const id of ids) {
+                    const failed = failedTablesByMeeting.get(id);
+                    if (failed) {
+                        const existing = selectTombstone.get(id) as { chunk_ids_json: string; summary_ids_json: string; tables_json: string } | undefined;
+                        const parseArray = <T>(value: string | undefined): T[] => {
+                            try {
+                                const parsed = value ? JSON.parse(value) : [];
+                                return Array.isArray(parsed) ? parsed : [];
+                            } catch {
+                                return [];
+                            }
+                        };
+                        const chunkIds = [...new Set([...parseArray<number>(existing?.chunk_ids_json), ...failed.chunkIds])];
+                        const summaryIds = [...new Set([...parseArray<number>(existing?.summary_ids_json), ...failed.summaryIds])];
+                        const tables = [...new Set([...parseArray<string>(existing?.tables_json), ...failed.tables])];
+                        upsertTombstone.run(id, JSON.stringify(chunkIds), JSON.stringify(summaryIds), JSON.stringify(tables));
+                    }
+                    deleteQueue.run(id);
+                    // FK cascades remove transcripts, chunks, and summaries.
+                    deleteMeeting.run(id);
+                }
+                return ids;
+            })();
+        } catch (error) {
+            console.error('[DatabaseManager] Failed to remove ephemeral meetings:', error);
+            return [];
+        }
     }
 
     public clearAllData(): boolean {

@@ -417,7 +417,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
 
     const [verboseLogging, setVerboseLogging] = useState(false);
+    const [analyticsConsent, setAnalyticsConsent] = useState<'unset' | 'granted' | 'denied'>('unset');
+    const [localTelemetryEnabled, setLocalTelemetryEnabled] = useState(false);
+    const [savingAnalytics, setSavingAnalytics] = useState(false);
+    const [analyticsError, setAnalyticsError] = useState('');
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
+    const [retentionError, setRetentionError] = useState<string | null>(null);
     const [showVerboseToast, setShowVerboseToast] = useState(false);
     const verboseToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -432,6 +437,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             window.electronAPI?.getOverlayMousePassthrough?.().then(setIsMousePassthrough).catch(() => { });
             window.electronAPI?.getDisguise?.().then(setDisguiseMode).catch(() => { });
             window.electronAPI?.getVerboseLogging?.().then(setVerboseLogging).catch(() => { });
+            window.electronAPI?.getAnalyticsConsent?.().then((state) => {
+                setAnalyticsConsent(state.consent);
+                setLocalTelemetryEnabled(state.localTelemetryEnabled);
+            }).catch(() => { });
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
         }
     }, [isOpen]);
@@ -464,6 +473,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             const unsubscribe = window.electronAPI.onUndetectableChanged((newState: boolean) => {
                 setIsUndetectable(newState);
             });
+            return () => unsubscribe();
+        }
+    }, []);
+
+    useEffect(() => {
+        if (window.electronAPI?.onAnalyticsConsentChanged) {
+            const unsubscribe = window.electronAPI.onAnalyticsConsentChanged(setAnalyticsConsent);
             return () => unsubscribe();
         }
     }, []);
@@ -1610,36 +1626,83 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 </div>
 
                                                 {/* Meeting Retention */}
-                                                <div className="flex items-start justify-between px-4 py-3 gap-4">
-                                                    <div className="flex items-start gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            meetingRetention === 'never'
-                                                                ? isLight
-                                                                    ? 'border-emerald-500/30 text-emerald-600 bg-emerald-50/50'
-                                                                    : 'border-emerald-500/40 text-emerald-400 bg-emerald-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
+                                                <div className="flex items-start justify-between px-4 py-3 gap-4 flex-wrap">
+                                                    <div className="flex items-start gap-4 flex-1 min-w-[220px]">
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-tertiary flex items-center justify-center shrink-0">
                                                             <Shield size={20} />
                                                         </div>
-                                                        <div className="flex-1">
-                                                            <h3 className="text-sm font-bold text-text-primary">Do not save meetings</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5 leading-normal">When enabled, live assistance works but transcripts, summaries, and history are discarded when the meeting ends</p>
+                                                        <div>
+                                                            <label htmlFor="meeting-retention" className="text-sm font-bold text-text-primary">Save meetings</label>
+                                                            <p className="text-xs text-text-secondary mt-0.5 leading-normal">Time limits remove meeting history, transcripts, summaries, and owned screenshots when InterviewOS runs. “Don’t save new meetings” keeps existing history.</p>
+                                                            {retentionError && <p role="alert" className="text-xs text-red-400 mt-1">{retentionError}</p>}
                                                         </div>
                                                     </div>
-                                                    <div
-                                                        onClick={() => {
-                                                            const nextRetention = meetingRetention === 'never' ? 'forever' : 'never';
-                                                            setMeetingRetention(nextRetention);
-                                                            window.electronAPI?.setMeetingRetention?.(nextRetention);
+                                                    <select
+                                                        id="meeting-retention"
+                                                        value={meetingRetention}
+                                                        onChange={async (event) => {
+                                                            const nextRetention = event.target.value as 'forever' | '7d' | '30d' | 'never';
+                                                            setRetentionError(null);
+                                                            try {
+                                                                const result = await window.electronAPI.setMeetingRetention(nextRetention);
+                                                                if (result.success || result.error === 'retention_cleanup_pending') {
+                                                                    setMeetingRetention(nextRetention);
+                                                                }
+                                                                if (!result.success) {
+                                                                    setRetentionError(result.error === 'retention_cleanup_pending'
+                                                                        ? 'Some expired meetings could not be removed. InterviewOS will retry on the next sweep or launch.'
+                                                                        : 'Could not change retention. Try again.');
+                                                                }
+                                                            } catch {
+                                                                setRetentionError('Could not change retention. Try again.');
+                                                            }
                                                         }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer shrink-0 mt-2 ${meetingRetention === 'never' ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                        role="switch"
-                                                        aria-checked={meetingRetention === 'never'}
-                                                        aria-label="Do not save meetings"
+                                                        className="min-h-9 rounded-lg bg-bg-item-surface border border-border-subtle text-sm text-text-primary px-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-primary"
                                                     >
-                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${meetingRetention === 'never' ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                    </div>
+                                                        <option value="forever">Keep forever</option>
+                                                        <option value="30d">Keep for 30 days</option>
+                                                        <option value="7d">Keep for 7 days</option>
+                                                        <option value="never">Don’t save new meetings</option>
+                                                    </select>
                                                 </div>
+
+                                                {/* Analytics transport is suspended until an owned relay is available. */}
+                                                <div className="flex items-start justify-between px-4 py-3 gap-4">
+                                                    <div className="flex items-start gap-4">
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-tertiary flex items-center justify-center shrink-0">
+                                                            <Globe size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">Usage analytics unavailable</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">InterviewOS sends no analytics to GA4. Local usage diagnostics remain enabled only if you opted in on an older installation.</p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        disabled={savingAnalytics || (!localTelemetryEnabled && analyticsConsent !== 'granted')}
+                                                        onClick={async () => {
+                                                            setSavingAnalytics(true);
+                                                            setAnalyticsError('');
+                                                            try {
+                                                                const result = await window.electronAPI?.setAnalyticsConsent?.('denied');
+                                                                if (!result?.success) {
+                                                                    setAnalyticsError('Could not revoke your saved analytics consent. Try again.');
+                                                                } else {
+                                                                    setAnalyticsConsent('denied');
+                                                                    setLocalTelemetryEnabled(false);
+                                                                }
+                                                            } catch {
+                                                                setAnalyticsError('Could not revoke your saved analytics consent. Try again.');
+                                                            } finally {
+                                                                setSavingAnalytics(false);
+                                                            }
+                                                        }}
+                                                        className="rounded-md border border-border-muted px-3 py-2 text-xs text-text-secondary hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                        {savingAnalytics ? 'Saving…' : 'Disable local telemetry'}
+                                                    </button>
+                                                </div>
+                                                {analyticsError && <p role="alert" className="px-4 text-xs text-red-500">{analyticsError}</p>}
 
                                                 {/* Debug Logging */}
                                                 <div className="flex items-center justify-between px-4 py-3">

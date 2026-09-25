@@ -9,17 +9,140 @@ import { AudioDevices } from './audio/AudioDevices';
 import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manager
 import { AppState } from './main';
 import { CodexCliService } from './services/CodexCliService';
-import { InterviewContextDocsManager, ingestMarkdownDocument } from './services/InterviewContextDocsManager';
+import { InterviewContextDocsManager, VALID_DOCUMENT_KINDS } from './services/InterviewContextDocsManager';
+import { InterviewDocumentCapabilities } from './services/InterviewDocumentCapabilities';
+import { readSelectedDocument } from './services/SelectedDocumentReader';
 import { InterviewWorkspaceStateManager } from './services/InterviewWorkspaceStateManager';
 import { PhoneMirrorService } from './services/PhoneMirrorService';
 import { SettingsManager } from './services/SettingsManager';
+import { runMeetingRetentionSweep } from './services/MeetingRetentionPolicy';
 import { SkillsManager } from './services/SkillsManager';
+import { isAllowedExternalUrl } from './services/ExternalUrlPolicy';
 
 import { TRIAL_SENTINEL_KEY } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 
 const DEBUG_LOG_FILE_NAME = 'answercue_debug.log';
+const LEGAL_ACCEPTANCE_VERSION = '2026-09-01';
+const VALID_ANALYTICS_CONSENTS = new Set(['unset', 'granted', 'denied']);
+const interviewDocumentCapabilities = new InterviewDocumentCapabilities();
+const MAX_INTERVIEW_DOCUMENTS_PER_BATCH = 10;
+const MAX_INTERVIEW_DOCUMENT_BYTES = 15 * 1024 * 1024;
+const ALLOWED_INTERVIEW_DOCUMENT_EXTENSIONS = new Set(['.md', '.markdown', '.txt', '.pdf', '.docx']);
+
+function isValidLegalAcceptanceTimestamp(value: unknown): value is string {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value));
+}
+
+export function isLocalTelemetryEnabledAtStartup(settings: { get(key: string): unknown }): boolean {
+  const legalAccepted = settings.get('legalConsentVersion') === LEGAL_ACCEPTANCE_VERSION
+    && isValidLegalAcceptanceTimestamp(settings.get('legalConsentAt'));
+  if (!legalAccepted || settings.get('telemetryEnabled') !== true) return false;
+
+  const consent = settings.get('analyticsConsent');
+  return consent === 'granted'
+    || (consent === 'denied' && settings.get('localTelemetryConsent') === true);
+}
+
+export interface AnalyticsConsentHandlerDependencies {
+  getSettings: () => { get(key: string): unknown; setAtomic(updates: Record<string, unknown>): void };
+  configureTelemetry: (config: { enabled: boolean; localEnabled: boolean }) => void;
+  getWindows: () => Array<{ isDestroyed(): boolean; webContents: { send(channel: string, consent: string): void } }>;
+}
+
+/** Registers consent IPC separately so its persistence boundary is behavior-testable. */
+export function registerAnalyticsConsentHandlers(
+  registerHandler: (channel: string, listener: (event: any, ...args: any[]) => Promise<any> | any) => void,
+  dependencies: AnalyticsConsentHandlerDependencies = {
+    getSettings: () => SettingsManager.getInstance(),
+    configureTelemetry: (config) => {
+      const { telemetryService } = require('./services/telemetry/TelemetryService');
+      telemetryService.configure(config);
+    },
+    getWindows: () => BrowserWindow.getAllWindows(),
+  },
+): void {
+  registerHandler('get-analytics-consent', async () => {
+    const settings = dependencies.getSettings();
+    const storedConsent = settings.get('analyticsConsent');
+    const legalAccepted = settings.get('legalConsentVersion') === LEGAL_ACCEPTANCE_VERSION
+      && isValidLegalAcceptanceTimestamp(settings.get('legalConsentAt'));
+    // A stale or malformed grant must not appear active in Settings.
+    const consent = legalAccepted && VALID_ANALYTICS_CONSENTS.has(storedConsent as string)
+      && storedConsent !== 'unset' ? storedConsent : 'unset';
+    return {
+      consent,
+      legalAccepted,
+      legalAcceptanceVersion: legalAccepted ? LEGAL_ACCEPTANCE_VERSION : null,
+      enabled: consent === 'granted',
+      localTelemetryEnabled: isLocalTelemetryEnabledAtStartup(settings),
+    };
+  });
+
+  registerHandler('set-analytics-consent', async (_, consent: 'granted' | 'denied', legalAcceptance?: { version?: string }) => {
+    if (consent !== 'granted' && consent !== 'denied') {
+      return { success: false, error: 'invalid_analytics_consent' };
+    }
+
+    const settings = dependencies.getSettings();
+    const existingLegalAcceptance = settings.get('legalConsentVersion') === LEGAL_ACCEPTANCE_VERSION
+      && isValidLegalAcceptanceTimestamp(settings.get('legalConsentAt'));
+    const acceptingLegalTerms = legalAcceptance?.version === LEGAL_ACCEPTANCE_VERSION;
+    if (consent === 'granted' && !existingLegalAcceptance && !acceptingLegalTerms) {
+      return { success: false, error: 'legal_acceptance_required' };
+    }
+
+    const hasPriorExplicitGrant = settings.get('analyticsConsent') === 'granted'
+      && settings.get('legalConsentVersion') === LEGAL_ACCEPTANCE_VERSION
+      && isValidLegalAcceptanceTimestamp(settings.get('legalConsentAt'))
+      && settings.get('telemetryEnabled') === true;
+    const preserveLocalTelemetry = acceptingLegalTerms && consent === 'denied' && hasPriorExplicitGrant;
+    const localTelemetryEnabled = preserveLocalTelemetry || consent === 'granted';
+    const updates: Record<string, unknown> = {
+      analyticsConsent: consent,
+      telemetryEnabled: localTelemetryEnabled,
+      localTelemetryConsent: localTelemetryEnabled,
+    };
+    if (acceptingLegalTerms) {
+      updates.legalConsentVersion = LEGAL_ACCEPTANCE_VERSION;
+      updates.legalConsentAt = new Date().toISOString();
+    }
+
+    // A failed atomic write must prevent every runtime side effect below.
+    settings.setAtomic(updates);
+    dependencies.configureTelemetry({ enabled: localTelemetryEnabled, localEnabled: true });
+    dependencies.getWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('analytics-consent-changed', consent);
+    });
+    return { success: true, consent, enabled: consent === 'granted' };
+  });
+}
+
+export function registerExternalUrlHandler(
+  registerHandler: (channel: string, listener: (event: any, url: string) => Promise<void>) => void,
+  openExternal: (url: string) => Promise<void> = async (url) => { await shell.openExternal(url); },
+): void {
+  registerHandler('open-external', async (_event, url: string) => {
+    try {
+      if (typeof url !== 'string') {
+        console.warn('[IPC] Blocked invalid open-external request', { reason: 'non-string' });
+        return;
+      }
+      const parsed = new URL(url);
+      if (isAllowedExternalUrl(url)) {
+        await openExternal(url);
+      } else {
+        console.warn('[IPC] Blocked open-external request', {
+          protocol: parsed.protocol,
+          hostname: parsed.hostname,
+        });
+      }
+    } catch {
+      console.warn('[IPC] Invalid URL in open-external');
+    }
+  });
+}
 
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (
@@ -765,28 +888,36 @@ export function initializeIpcHandlers(appState: AppState): void {
             myController.signal,
           );
 
-          for await (const token of stream) {
-            // Bail if a newer stream has taken over (user triggered a new request)
-            if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
-              console.log(
-                `[IPC] gemini-chat-stream ${myStreamId} superseded for sender ${senderId}, stopping.`,
-              );
-              return null;
-            }
-            event.sender.send('gemini-stream-token', token);
-            if (recordInSession) {
-              try {
-                PhoneMirrorService.getInstance().publishToken(String(myStreamId), token);
-              } catch (_) {
-                /* noop */
+          // Capture the route in this stream's async context, not the helper's
+          // shared last-route field (another renderer can stream concurrently).
+          const completed = await llmHelper.withStreamRoute(async () => {
+            for await (const token of stream) {
+              if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
+                console.log(`[IPC] gemini-chat-stream ${myStreamId} superseded for sender ${senderId}, stopping.`);
+                return false;
               }
+              event.sender.send('gemini-stream-token', token);
+              if (recordInSession) {
+                try {
+                  PhoneMirrorService.getInstance().publishToken(String(myStreamId), token);
+                } catch (_) {
+                  /* noop */
+                }
+              }
+              fullResponse += token;
             }
-            fullResponse += token;
-          }
+            return true;
+          });
+          if (!completed.result) return null;
 
-          // Final check: only send done if we are still the active stream
+          // Only this request's committed route accompanies its completion.
           if (_chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
-            event.sender.send('gemini-stream-done');
+            const provider = completed.provider;
+            event.sender.send('gemini-stream-done', provider ? {
+              provider,
+              model: provider === llmHelper.getCurrentProvider() ? llmHelper.getCurrentModel() : 'unknown',
+              isOllama: provider === 'ollama',
+            } : null);
             if (recordInSession) {
               try {
                 PhoneMirrorService.getInstance().publishDone(String(myStreamId), fullResponse);
@@ -861,7 +992,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('delete-meeting', async (_, id: string) => {
-    return DatabaseManager.getInstance().deleteMeeting(id);
+    return DatabaseManager.getInstance().deleteMeetingCompletely(id);
   });
 
   safeHandle('check-for-updates', async () => {
@@ -1040,6 +1171,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  safeHandle('get-app-version', async () => app.getVersion());
+
+  registerAnalyticsConsentHandlers(safeHandle);
+
   safeHandle('get-meeting-retention', async () => {
     return SettingsManager.getInstance().get('meetingRetention') ?? 'forever';
   });
@@ -1048,12 +1183,24 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (!['forever', '7d', '30d', 'never'].includes(retention)) {
       return { success: false, error: 'invalid_retention' };
     }
-    SettingsManager.getInstance().set('meetingRetention', retention);
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('meeting-retention-changed', retention);
+    try {
+      SettingsManager.getInstance().set('meetingRetention', retention);
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('meeting-retention-changed', retention);
+      });
+    } catch (error) {
+      console.error('[Retention] Could not update setting:', error);
+      return { success: false, error: 'retention_setting_failed' };
+    }
+    try {
+      const result = runMeetingRetentionSweep(retention);
+      if (result.deleted < result.expired || result.pending.length) {
+        return { success: false, error: 'retention_cleanup_pending' };
       }
-    });
+    } catch (error) {
+      console.error('[Retention] Immediate sweep failed:', error);
+      return { success: false, error: 'retention_cleanup_pending' };
+    }
     return { success: true };
   });
 
@@ -1184,16 +1331,16 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   /**
-   * fileExists — check whether a file (not a directory) exists at the given path.
-   * Fail-closed: returns false for any error, missing file, empty path, or
-   * relative path. Never throws into the renderer.
+   * The launcher checks only the configured Google STT credential path.
+   * Never turn this IPC into an arbitrary filesystem-existence oracle.
    */
   safeHandle('file-exists', async (_, filePath: string) => {
     try {
-      if (typeof filePath !== 'string' || !filePath.trim()) return false;
-      if (!path.isAbsolute(filePath)) return false;
-      const stat = fs.statSync(filePath);
-      return stat.isFile();
+      if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) return false;
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const configuredPath = CredentialsManager.getInstance().getAllCredentials().googleServiceAccountPath;
+      if (!configuredPath || filePath !== configuredPath) return false;
+      return fs.statSync(configuredPath).isFile();
     } catch {
       return false;
     }
@@ -3184,11 +3331,16 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('interview-docs:delete', async (_, id: string) => {
-    const success = InterviewContextDocsManager.getInstance().deleteDocument(id);
-    if (success) {
-      broadcastInterviewDocsChanged();
+    try {
+      const success = InterviewContextDocsManager.getInstance().deleteDocument(id);
+      if (success) {
+        broadcastInterviewDocsChanged();
+      }
+      return { success };
+    } catch (error: any) {
+      console.error('[IPC] interview-docs:delete failed:', { code: error?.code || 'UNKNOWN' });
+      return { success: false, error: 'Could not delete the selected document.' };
     }
-    return { success };
   });
 
   safeHandle('interview-docs:update-metadata', async (_, id: string, metadata: any) => {
@@ -3202,11 +3354,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       return document ? { success: true, document } : { success: false, error: 'Document not found.' };
     } catch (error: any) {
-      return { success: false, error: error?.message || 'Could not update document details.' };
+      console.error('[IPC] interview-docs:update-metadata failed:', { code: error?.code || 'UNKNOWN' });
+      return { success: false, error: 'Could not update document details.' };
     }
   });
 
-  safeHandle('interview-docs:select-files', async () => {
+  safeHandle('interview-docs:select-files', async (event) => {
     try {
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile', 'multiSelections'],
@@ -3220,23 +3373,23 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: true, cancelled: true, files: [] };
       }
 
-      const files = result.filePaths.map((fp: string) => {
-        let size = 0;
-        try {
-          size = fs.statSync(fp).size;
-        } catch { /* ignore */ }
-        return {
-          path: fp,
-          name: path.basename(fp),
-          size,
-          ext: path.extname(fp).replace('.', '').toLowerCase(),
-        };
+      if (result.filePaths.length > MAX_INTERVIEW_DOCUMENTS_PER_BATCH) {
+        return { success: false, cancelled: false, files: [], error: 'Select no more than 10 documents at a time.' };
+      }
+      const files = result.filePaths.map((filePath: string) => {
+        const stat = fs.lstatSync(filePath);
+        const ext = path.extname(filePath).toLowerCase();
+        if (!stat.isFile() || !ALLOWED_INTERVIEW_DOCUMENT_EXTENSIONS.has(ext) || stat.size > MAX_INTERVIEW_DOCUMENT_BYTES) {
+          throw new Error(`Unsupported or oversized document: ${path.basename(filePath)}`);
+        }
+        const capability = interviewDocumentCapabilities.issue(event.sender.id, filePath, path.basename(filePath), stat.size, ext, stat.ino, stat.dev, stat.mtimeMs, stat.ctimeMs);
+        return { token: capability.token, name: capability.name, size: capability.size, ext: capability.ext.slice(1) };
       });
 
       return { success: true, cancelled: false, files };
     } catch (error: any) {
-      console.error('[IPC] interview-docs:select-files error:', error?.message ?? error);
-      return { success: false, cancelled: false, files: [], error: error?.message || 'Failed to open file picker.' };
+      console.error('[IPC] interview-docs:select-files failed:', { code: error?.code || 'UNKNOWN' });
+      return { success: false, cancelled: false, files: [], error: 'Could not select the requested documents.' };
     }
   });
 
@@ -3258,39 +3411,88 @@ export function initializeIpcHandlers(appState: AppState): void {
       broadcastInterviewDocsChanged();
       return { success: true, document };
     } catch (error: any) {
-      console.error('[IPC] interview-docs:upload error:', error?.message ?? error);
-      return {
-        success: false,
-        error: error?.message || 'Could not read the selected document.',
-      };
+      console.error('[IPC] interview-docs:upload failed:', { code: error?.code || 'UNKNOWN' });
+      return { success: false, error: 'Could not read the selected document. Please select it again.' };
     }
   });
 
-  safeHandle('interview-docs:upload-from-path', async (_, filePath: string, metadata?: { contextKind?: any; contextDescription?: string }) => {
+  safeHandle('interview-docs:batch-upload', async (event, items: Array<{ token?: string; name?: string; data?: Uint8Array; contextKind?: any; contextDescription?: string }>) => {
+    let tokensConsumed = false;
+    let pickerTokenRequiresReselection = false;
     try {
-      if (!filePath || typeof filePath !== 'string') {
-        return { success: false, error: 'Invalid file path' };
+      if (!Array.isArray(items) || items.length === 0 || items.length > MAX_INTERVIEW_DOCUMENTS_PER_BATCH) {
+        return { success: false, error: 'Provide between 1 and 10 documents.' };
       }
-      const document = await InterviewContextDocsManager.getInstance().addDocumentFromFile(filePath, metadata);
-      broadcastInterviewDocsChanged();
-      return { success: true, document };
-    } catch (error: any) {
-      console.error('[IPC] interview-docs:upload-from-path error:', error?.message ?? error);
-      return { success: false, error: error?.message || 'Could not read document.' };
-    }
-  });
-
-  safeHandle('interview-docs:batch-upload', async (_, items: Array<{ filePath: string; contextKind?: any; contextDescription?: string }>) => {
-    try {
-      if (!Array.isArray(items) || items.length === 0) {
-        return { success: false, error: 'No files provided for batch upload.' };
+      // Detect expired, forged, or cross-window picker tokens before other validation can reject the batch.
+      for (const item of items) {
+        if (typeof item?.token === 'string' && !interviewDocumentCapabilities.peek(item.token, event.sender.id)) {
+          pickerTokenRequiresReselection = true;
+          throw new Error('Document selection expired or is not valid for this window. Select the document again.');
+        }
       }
-      const documents = await InterviewContextDocsManager.getInstance().addDocumentsFromFiles(items);
+      const bufferedItems: Array<{ name: string; data: Buffer; contextKind?: any; contextDescription?: string }> = [];
+      let aggregateInputBytes = 0;
+      // Validate the whole batch before consuming any one-shot picker tokens.
+      for (const item of items) {
+        if (!item || typeof item !== 'object') throw new Error('Invalid document entry.');
+        if ((item.contextKind !== undefined && !VALID_DOCUMENT_KINDS.includes(item.contextKind))
+          || (item.contextDescription !== undefined && typeof item.contextDescription !== 'string')
+          || (typeof item.contextDescription === 'string' && item.contextDescription.length > 1000)
+          || (item.contextKind === 'other' && !(typeof item.contextDescription === 'string' && item.contextDescription.trim()))) {
+          throw new Error('Invalid document metadata.');
+        }
+        let name: string;
+        let data: Buffer;
+        let capability: ReturnType<typeof interviewDocumentCapabilities.consume> = null;
+        if (typeof item.token === 'string') {
+          capability = interviewDocumentCapabilities.peek(item.token, event.sender.id);
+          if (!capability) {
+            pickerTokenRequiresReselection = true;
+            throw new Error('Document selection expired or is not valid for this window. Select the document again.');
+          }
+          if (!ALLOWED_INTERVIEW_DOCUMENT_EXTENSIONS.has(capability.ext)) {
+            throw new Error('Selected document is no longer valid. Select it again.');
+          }
+          name = capability.name;
+          data = Buffer.alloc(0);
+        } else {
+          if (typeof item.name !== 'string' || !(item.data instanceof Uint8Array)
+            || item.data.byteLength === 0 || item.data.byteLength > MAX_INTERVIEW_DOCUMENT_BYTES) {
+            throw new Error('Invalid or oversized document data.');
+          }
+          name = item.name;
+          data = Buffer.alloc(0);
+        }
+        aggregateInputBytes += capability?.size ?? item.data?.byteLength ?? 0;
+        if (aggregateInputBytes > 30 * 1024 * 1024) throw new Error('Batch exceeds the 30 MB total input limit.');
+        if (!capability) data = Buffer.from(item.data!);
+        const ext = path.extname(name).toLowerCase();
+        if (!ALLOWED_INTERVIEW_DOCUMENT_EXTENSIONS.has(ext) || data.length > MAX_INTERVIEW_DOCUMENT_BYTES) {
+          throw new Error('Unsupported or oversized document.');
+        }
+        bufferedItems.push({ name, data, contextKind: item.contextKind, contextDescription: item.contextDescription });
+      }
+      // Consume only after all batch-level validation succeeds, then securely read each selected inode.
+      for (let index = 0; index < items.length; index++) {
+        if (typeof items[index].token !== 'string') continue;
+        const capability = interviewDocumentCapabilities.consume(items[index].token, event.sender.id);
+        if (capability) tokensConsumed = true;
+        if (!capability) {
+          pickerTokenRequiresReselection = true;
+          throw new Error('Document selection expired or is not valid for this window. Select the document again.');
+        }
+        bufferedItems[index].data = readSelectedDocument(capability.filePath, capability);
+      }
+      const documents = await InterviewContextDocsManager.getInstance().addDocumentsFromBuffers(bufferedItems);
       broadcastInterviewDocsChanged();
       return { success: true, documents };
     } catch (error: any) {
-      console.error('[IPC] interview-docs:batch-upload error:', error?.message ?? error);
-      return { success: false, error: error?.message || 'Batch upload failed.' };
+      console.error('[IPC] interview-docs:batch-upload failed:', { code: error?.code || 'UNKNOWN' });
+      return {
+        success: false,
+        error: 'Could not read one or more selected documents. Please select them again.',
+        requiresReselection: tokensConsumed || pickerTokenRequiresReselection,
+      };
     }
   });
 
@@ -3725,37 +3927,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     };
   });
 
-  safeHandle('open-external', async (event, url: string) => {
-    try {
-      if (typeof url !== 'string') {
-        console.warn('[IPC] Blocked invalid open-external request', { reason: 'non-string' });
-        return;
-      }
-
-      const parsed = new URL(url);
-      const allowedWebUrl =
-        parsed.protocol === 'https:' &&
-        parsed.hostname === 'mail.google.com' &&
-        parsed.pathname === '/mail/';
-      // x-apple.systempreferences is a macOS-only URI scheme. Allowing it on
-      // Windows let renderer regressions hand Windows shell an unknown
-      // protocol → Microsoft Store popup (issue #252). Gate the allowlist on
-      // the actual platform so the IPC layer is the last line of defense.
-      const allowedSystemSettingsUrl =
-        parsed.protocol === 'x-apple.systempreferences:' && process.platform === 'darwin';
-
-      if (allowedWebUrl || allowedSystemSettingsUrl) {
-        await shell.openExternal(url);
-      } else {
-        console.warn('[IPC] Blocked open-external request', {
-          protocol: parsed.protocol,
-          hostname: parsed.hostname,
-        });
-      }
-    } catch {
-      console.warn('[IPC] Invalid URL in open-external');
-    }
-  });
+  registerExternalUrlHandler(safeHandle);
 
   // ==========================================
   // Intelligence Mode Handlers
@@ -4675,37 +4847,74 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Profile Engine IPC Handlers
   // ==========================================
 
-  // Allowlist of file paths the user explicitly selected via profile:select-file.
-  // Without this, a compromised renderer could pass arbitrary filesystem paths
-  // (e.g. /etc/passwd, ~/.ssh/id_rsa) to the upload handlers and exfiltrate
-  // their contents through the knowledge index. Entries expire after 60s.
-  const PROFILE_SELECTED_PATH_TTL_MS = 60_000;
-  const profileSelectedPaths = new Map<string, number>();
-  const normalizeProfilePath = (p: string): string => path.resolve(p);
-  const sweepExpiredProfilePaths = (now: number): void => {
-    for (const [key, expiresAt] of profileSelectedPaths) {
-      if (now > expiresAt) profileSelectedPaths.delete(key);
+  // Picker capabilities are unpredictable, sender-bound, expiring and single-use.
+  // The renderer receives neither the selected filesystem path nor authority to
+  // choose a path itself.
+  const PROFILE_PICK_TOKEN_TTL_MS = 60_000;
+  const PROFILE_MAX_FILE_BYTES = 15 * 1024 * 1024;
+  const PROFILE_ALLOWED_EXTENSIONS = new Set(['.pdf', '.docx', '.txt']);
+  const profilePickTokens = new Map<string, { senderId: number; filePath: string; expiresAt: number; dev: number; ino: number; size: number; mtimeMs: number; ctimeMs: number }>();
+  const sweepExpiredProfileTokens = (now: number): void => {
+    for (const [token, capability] of profilePickTokens) {
+      if (now >= capability.expiresAt) profilePickTokens.delete(token);
     }
   };
-  const registerSelectedProfilePath = (filePath: string): void => {
-    const now = Date.now();
-    sweepExpiredProfilePaths(now);
-    profileSelectedPaths.set(normalizeProfilePath(filePath), now + PROFILE_SELECTED_PATH_TTL_MS);
-  };
-  const consumeSelectedProfilePath = (filePath: unknown): string | null => {
-    if (typeof filePath !== 'string' || filePath.length === 0) return null;
-    const key = normalizeProfilePath(filePath);
-    const expiresAt = profileSelectedPaths.get(key);
-    if (!expiresAt) return null;
-    if (Date.now() > expiresAt) {
-      profileSelectedPaths.delete(key);
-      return null;
+  const validateProfileFile = (filePath: string) => {
+    const extension = path.extname(filePath).toLowerCase();
+    if (!PROFILE_ALLOWED_EXTENSIONS.has(extension)) throw new Error('invalid profile file');
+    const before = fs.lstatSync(filePath);
+    if (!before.isFile() || before.isSymbolicLink() || before.size > PROFILE_MAX_FILE_BYTES) throw new Error('invalid profile file');
+    const noFollow = fs.constants.O_NOFOLLOW;
+    if (typeof noFollow !== 'number') throw new Error('secure file open unavailable');
+    const fd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
+    try {
+      const opened = fs.fstatSync(fd);
+      if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size || opened.size > PROFILE_MAX_FILE_BYTES) {
+        throw new Error('invalid profile file');
+      }
+      return { dev: opened.dev, ino: opened.ino, size: opened.size, mtimeMs: opened.mtimeMs, ctimeMs: opened.ctimeMs };
+    } finally {
+      fs.closeSync(fd);
     }
-    profileSelectedPaths.delete(key);
-    return key;
+  };
+  const issueProfilePickToken = (senderId: number, filePath: string): string => {
+    const fileIdentity = validateProfileFile(filePath);
+    sweepExpiredProfileTokens(Date.now());
+    // Only the most recent picker result per window remains usable.
+    for (const [token, existing] of profilePickTokens) {
+      if (existing.senderId === senderId) profilePickTokens.delete(token);
+    }
+    const token = crypto.randomBytes(32).toString('hex');
+    profilePickTokens.set(token, { senderId, filePath: path.resolve(filePath), expiresAt: Date.now() + PROFILE_PICK_TOKEN_TTL_MS, ...fileIdentity });
+    return token;
+  };
+  const consumeProfilePickToken = (token: unknown, senderId: number) => {
+    if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) return null;
+    const capability = profilePickTokens.get(token);
+    if (!capability) return null;
+    // Consume even on sender mismatch or stale/replaced files; capabilities cannot be retried.
+    profilePickTokens.delete(token);
+    if (Date.now() >= capability.expiresAt || capability.senderId !== senderId) return null;
+    return capability;
+  };
+  const withProfileSnapshot = async <T>(
+    capability: NonNullable<ReturnType<typeof consumeProfilePickToken>>,
+    ingest: (stagedPath: string) => Promise<T>,
+  ): Promise<T> => {
+    // The private knowledge engine accepts a path. Take a descriptor-verified
+    // snapshot first so the picked file cannot be replaced during ingestion.
+    const bytes = readSelectedDocument(capability.filePath, capability);
+    const temporaryDir = fs.mkdtempSync(path.join(app.getPath('userData'), 'profile-upload-'));
+    try {
+      const stagedPath = path.join(temporaryDir, path.basename(capability.filePath));
+      fs.writeFileSync(stagedPath, bytes, { flag: 'wx', mode: 0o600 });
+      return await ingest(stagedPath);
+    } finally {
+      fs.rmSync(temporaryDir, { recursive: true, force: true });
+    }
   };
 
-  safeHandle('profile:upload-resume', async (_, filePath: string) => {
+  safeHandle('profile:upload-resume', async (event, token: unknown) => {
     try {
       // Premium gate: require active license or free trial for profile features
       if (!isProOrTrialActive()) {
@@ -4715,25 +4924,20 @@ export function initializeIpcHandlers(appState: AppState): void {
             'Pro license required. Please activate a license key to use Profile Intelligence features.',
         };
       }
-      const resolvedPath = consumeSelectedProfilePath(filePath);
-      if (!resolvedPath) {
-        console.warn('[IPC] profile:upload-resume rejected: path was not produced by profile:select-file or has expired.');
-        return { success: false, error: 'Please re-select the resume file.' };
-      }
-      console.log(`[IPC] profile:upload-resume called with: ${resolvedPath}`);
+      const capability = consumeProfilePickToken(token, event.sender.id);
+      if (!capability) return { success: false, error: 'Unable to upload file. Please select it again.' };
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
-        return {
-          success: false,
-          error: 'Knowledge engine not initialized. Please ensure API keys are configured.',
-        };
+        return { success: false, error: 'Unable to upload file. Please select it again.' };
       }
       const { DocType } = require('../premium/electron/knowledge/types');
-      const result = await orchestrator.ingestDocument(resolvedPath, DocType.RESUME);
-      return result;
+      const result = await withProfileSnapshot<{ success?: boolean }>(capability, stagedPath => orchestrator.ingestDocument(stagedPath, DocType.RESUME));
+      return result?.success === false
+        ? { success: false, error: 'Unable to upload file. Please select it again.' }
+        : result;
     } catch (error: any) {
       console.error('[IPC] profile:upload-resume error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: 'Unable to upload file. Please select it again.' };
     }
   });
 
@@ -4806,7 +5010,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('profile:select-file', async () => {
+  safeHandle('profile:select-file', async (event) => {
     try {
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
@@ -4818,10 +5022,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
 
       const selected = result.filePaths[0];
-      registerSelectedProfilePath(selected);
-      return { success: true, filePath: selected };
+      const token = issueProfilePickToken(event.sender.id, selected);
+      return { success: true, token, displayName: path.basename(selected) };
     } catch (error: any) {
-      return { success: false, error: error.message };
+      console.error('[IPC] profile:select-file error:', error);
+      return { success: false, error: 'Unable to select file.' };
     }
   });
 
@@ -4829,7 +5034,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // JD & Research IPC Handlers
   // ==========================================
 
-  safeHandle('profile:upload-jd', async (_, filePath: string) => {
+  safeHandle('profile:upload-jd', async (event, token: unknown) => {
     try {
       // Premium gate
       if (!isProOrTrialActive()) {
@@ -4839,25 +5044,20 @@ export function initializeIpcHandlers(appState: AppState): void {
             'Pro license required. Please activate a license key to use Profile Intelligence features.',
         };
       }
-      const resolvedPath = consumeSelectedProfilePath(filePath);
-      if (!resolvedPath) {
-        console.warn('[IPC] profile:upload-jd rejected: path was not produced by profile:select-file or has expired.');
-        return { success: false, error: 'Please re-select the JD file.' };
-      }
-      console.log(`[IPC] profile:upload-jd called with: ${resolvedPath}`);
+      const capability = consumeProfilePickToken(token, event.sender.id);
+      if (!capability) return { success: false, error: 'Unable to upload file. Please select it again.' };
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
-        return {
-          success: false,
-          error: 'Knowledge engine not initialized. Please ensure API keys are configured.',
-        };
+        return { success: false, error: 'Unable to upload file. Please select it again.' };
       }
       const { DocType } = require('../premium/electron/knowledge/types');
-      const result = await orchestrator.ingestDocument(resolvedPath, DocType.JD);
-      return result;
+      const result = await withProfileSnapshot<{ success?: boolean }>(capability, stagedPath => orchestrator.ingestDocument(stagedPath, DocType.JD));
+      return result?.success === false
+        ? { success: false, error: 'Unable to upload file. Please select it again.' }
+        : result;
     } catch (error: any) {
       console.error('[IPC] profile:upload-jd error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: 'Unable to upload file. Please select it again.' };
     }
   });
 
@@ -5031,7 +5231,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         content: document.markdown,
       };
     } catch (error: any) {
-      return { success: false, error: error.message || 'Could not import the selected file.' };
+      console.error('[IPC] profile:import-markdown-context error:', error);
+      return { success: false, error: 'Could not import the selected file.' };
     }
   });
 

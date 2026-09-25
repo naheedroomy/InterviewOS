@@ -276,8 +276,11 @@ export class RAGManager {
         // Ensure meeting row exists in DB to satisfy foreign key constraints for chunks
         try {
             this.db.prepare(`
-                INSERT OR IGNORE INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, source, is_processed)
-                VALUES (?, 'Live Meeting', ?, 0, '{}', ?, 'manual', 0)
+                INSERT INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, source, is_processed, is_ephemeral)
+                VALUES (?, 'Live Meeting', ?, 0, '{}', ?, 'manual', 0, 1)
+                ON CONFLICT(id) DO UPDATE SET
+                    is_processed = 0,
+                    is_ephemeral = 1
             `).run(meetingId, Date.now(), new Date().toISOString());
         } catch (e) {
             console.warn('[RAGManager] Failed to create transient meeting row for live indexing', e);
@@ -339,11 +342,9 @@ export class RAGManager {
             console.warn(`[RAGManager] Failed to clear embedding_queue for meeting ${meetingId}`, e);
         }
         
-        // 3. Clean up transient meeting row if it was a live session
+        // 3. Remove a transient row only when it is explicitly marked ephemeral.
         try {
-            if (meetingId === 'live-meeting-current') {
-                this.db.prepare('DELETE FROM meetings WHERE id = ?').run(meetingId);
-            }
+            this.db.prepare('DELETE FROM meetings WHERE id = ? AND is_ephemeral = 1').run(meetingId);
         } catch (e) {
             console.warn('[RAGManager] Failed to delete transient meeting row', e);
         }

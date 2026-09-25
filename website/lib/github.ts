@@ -73,16 +73,16 @@ export function pickAsset(assets: ReleaseAsset[], platform: Platform): ReleaseAs
   switch (platform) {
     case "mac-arm":
       // Apple Silicon: native DMG first, then the native zip.
-      return is(/arm64\.dmg$/i) ?? is(/arm64.*mac\.zip$/i);
+      return is(/arm64.*\.dmg$/i) ?? is(/arm64.*mac\.zip$/i) ?? is(/arm64.*\.zip$/i);
     case "mac-intel":
       // Intel: the non-arm64 DMG first, then the non-arm64 zip.
-      return isIntel(/\.dmg$/i) ?? isIntel(/mac\.zip$/i);
+      return isIntel(/\.dmg$/i) ?? isIntel(/mac\.zip$/i) ?? isIntel(/\.zip$/i);
     case "mac":
       // Generic: the Intel DMG runs on every Mac (natively on Intel, Rosetta on
       // Apple Silicon), so it's the safe single fallback; then any DMG/zip.
       return isIntel(/\.dmg$/i) ?? is(/\.dmg$/i) ?? is(/mac\.zip$/i);
     case "windows":
-      return is(/\.exe$/i);
+      return is(/setup.*\.exe$/i) ?? is(/\.exe$/i);
     default:
       return null;
   }

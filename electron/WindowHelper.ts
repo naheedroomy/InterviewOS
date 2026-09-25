@@ -1,8 +1,9 @@
-import { app, BrowserWindow, Menu, screen } from 'electron';
+import { app, BrowserWindow, Menu, screen, shell } from 'electron';
 import path from 'node:path';
 import { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
 import { SettingsManager } from './services/SettingsManager';
+import { installRendererNavigationGuards } from './RendererNavigationPolicy';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -409,8 +410,8 @@ export class WindowHelper {
         nodeIntegration: false,
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js'),
+        additionalArguments: ['--answercue-window-role=launcher'],
         scrollBounce: true,
-        webSecurity: !isDev, // DEBUG: Disable web security only in dev
       },
       show: false, // DEBUG: Force show -> Fixed white screen, now relies on ready-to-show
       // Platform-specific frame settings
@@ -470,6 +471,7 @@ export class WindowHelper {
     try {
       this.launcherWindow = new BrowserWindow(launcherSettings);
       this.attachWindowDiagnostics('launcher', this.launcherWindow);
+      installRendererNavigationGuards(this.launcherWindow.webContents, startUrl, async (url) => { await shell.openExternal(url); });
       console.log('[WindowHelper] BrowserWindow created successfully');
     } catch (err) {
       console.error('[WindowHelper] Failed to create BrowserWindow:', err);
@@ -513,6 +515,7 @@ export class WindowHelper {
         nodeIntegration: false,
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js'),
+        additionalArguments: ['--answercue-window-role=overlay'],
         scrollBounce: true,
       },
       show: false,
@@ -535,6 +538,7 @@ export class WindowHelper {
 
     this.overlayWindow = new BrowserWindow(overlaySettings);
     this.attachWindowDiagnostics('overlay', this.overlayWindow);
+    installRendererNavigationGuards(this.overlayWindow.webContents, startUrl, async (url) => { await shell.openExternal(url); });
     this.overlayWindow.setContentProtection(this.contentProtection);
 
     // Register the overlay as the sole recipient of CGEventTap captured-key

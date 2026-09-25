@@ -32,6 +32,12 @@ InterviewOS may store the following on your device:
 - Audio and permission settings.
 - Theme and UI preferences.
 
+### Meeting history retention
+
+Settings offers **Keep forever** (default), **Keep for 30 days**, **Keep for 7 days**, and **Do not save meetings**. The 7- and 30-day limits remove saved meetings after their creation timestamp passes the limit. InterviewOS checks at launch, when the setting changes, and hourly while the app is open; it does not run while the app is closed. It deletes meeting transcripts, generated answers, summaries, chat history, embeddings, and screenshots stored in the app's owned screenshot directory using the same complete-deletion path as Delete Meeting. If a screenshot or embedding cannot be removed, the app records the cleanup for a later retry. The Settings screen warns if cleanup remains pending.
+
+**Do not save meetings** applies to new interviews only. It discards their meeting history when the session ends, but does not delete existing saved meetings. You can remove those meetings individually with Delete Meeting or select a time limit to remove old meetings. Documents uploaded to the reusable Knowledge Bank, provider-side copies, the separate `telemetry.jsonl` file, logs, and operating-system backups are not deleted by meeting retention. Selected or uploaded documents may remain in the reusable Knowledge Bank after a meeting is deleted. Remove them separately if needed. Delete provider-side content under that provider's policy, and manage backups separately. If the app cannot start or the database is unavailable, it cannot perform retention cleanup until it runs successfully again.
+
 Protect your machine with full-disk encryption such as FileVault on macOS or BitLocker on Windows.
 
 ## Data Sent To AI Providers
@@ -76,6 +82,14 @@ InterviewOS may request:
 - Network access for LLM provider calls and update checks.
 
 You can revoke permissions in the operating-system settings, but related features may stop working.
+
+## Optional Usage Analytics
+
+Analytics transport is currently unavailable. InterviewOS does not load Google's `gtag.js`, send events to Google Analytics 4, or queue events for later delivery. GA4 delivery is suspended until an owned first-party relay exists; zero GA4 events are delivered by this app.
+
+The first-run screen may save your analytics consent preference, but a saved grant does not enable collection. Settings identifies analytics as unavailable and lets you revoke any previously saved grant. No interview content or usage events are sent to GA4.
+
+The app's separate local `telemetry.jsonl` file is not uploaded by this analytics service. It is append-only and has no automatic retention or deletion job; it remains until you delete the app data that contains it.
 
 ## Update Checks
 

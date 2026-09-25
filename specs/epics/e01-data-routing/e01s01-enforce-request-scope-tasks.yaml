@@ -1,0 +1,60 @@
+story_id: e01s01
+title: Enforce every outbound request scope
+status: passed
+bcps: 8
+risk: P0
+tasks:
+  - id: e01s01-01
+    description: >-
+      Add focused policy regression coverage for transcript, screenshot, and
+      mixed explicit/inferred scopes, including profile-history and
+      post-call-summary denial with local fallback and fail-closed
+      cloud-blocking cases.
+    verify: >-
+      npm run build:electron && node --test
+      electron/services/__tests__/LLMHelperScopePropagation.test.mjs
+    risk: P0
+    security: high
+    status: passed
+    allure:
+      severity: critical
+      categories:
+        - Security Review
+        - Provider data scope
+        - Regression
+  - id: e01s01-02
+    description: >-
+      Make LLMHelper derive a canonical scope union and preserve caller-owned
+      extra scopes through optional trailing legacy Gemini dispatch parameters
+      before denial routing. Fail closed when denied opaque message content
+      cannot use a local fallback.
+    verify: >-
+      npm run build:electron && node --test
+      electron/services/__tests__/LLMHelperScopePropagation.test.mjs
+    risk: P0
+    security: high
+    status: passed
+    allure:
+      severity: critical
+      categories:
+        - Security Review
+        - Provider data scope
+  - id: e01s01-03
+    description: >-
+      Remove raw prompt data from the affected WhatToAnswer diagnostic and
+      prove the focused propagation, provider-router, and local-fallback
+      suites pass with no new security findings in affected paths.
+    verify: >-
+      npm run build:electron && node --test
+      electron/services/__tests__/LLMHelperScopePropagation.test.mjs
+      electron/llm/__tests__/ProviderRouter.test.mjs
+      electron/services/__tests__/ScopeLocalFallback.test.mjs
+    risk: P0
+    security: high
+    status: passed
+    allure:
+      severity: critical
+      categories:
+        - Security Review
+        - Sensitive logging
+        - Regression

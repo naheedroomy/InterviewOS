@@ -12,17 +12,16 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
 
-test('fileExists IPC handler validates non-empty absolute path', () => {
+test('fileExists IPC handler only checks the configured absolute Google credential path', () => {
   const source = read('electron/ipcHandlers.ts');
   const handler = sliceSafeHandleBlock(source, 'file-exists');
 
   assert.ok(handler.length > 0, 'file-exists IPC handler must exist');
 
-  // Must reject non-string or empty path
-  assert.match(handler, /typeof filePath !== 'string' \|\| !filePath\.trim\(\)/);
-
-  // Must reject relative paths
-  assert.match(handler, /path\.isAbsolute/);
+  // Reject malformed and unconfigured paths, including all arbitrary absolute paths.
+  assert.match(handler, /typeof filePath !== 'string' \|\| !path\.isAbsolute\(filePath\)/);
+  assert.match(handler, /getAllCredentials\(\)\.googleServiceAccountPath/);
+  assert.match(handler, /filePath !== configuredPath/);
 
   // Must fail-closed (catch block returns false)
   assert.match(handler, /return false/);

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import logoAsset from '../assets/logo.png';
 import celebFont from '../font/Masterfont - Celeb MF Medium.otf?url';
@@ -10,7 +10,7 @@ import heroVideo from '../assets/hero.webm';
 import AnswerCueInterfaceCard from './AnswerCueInterfaceCard';
 
 interface StartupSequenceProps {
-    onComplete: () => void;
+    onComplete: (analyticsConsent: 'granted' | 'denied') => Promise<boolean>;
 }
 
 // ─── Design Tokens (Stitch Semantic System) ──────────────────────────────
@@ -89,7 +89,27 @@ const PressLogos: React.FC = () => (
 );
 
 // ─── Main Subsystem ───────────────────────────────────────────────────────
+const TERMS_URL = 'https://github.com/naheedroomy/InterviewOS/blob/main/termsandcondition.md';
+const PRIVACY_URL = 'https://github.com/naheedroomy/InterviewOS/blob/main/PRIVACY.md';
+export const LEGAL_ACCEPTANCE_VERSION = '2026-09-01';
+
 const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState(false);
+
+    const continueWithChoice = async () => {
+        if (saving) return;
+        setSaving(true);
+        setError(false);
+        try {
+            if (!await onComplete('denied')) setError(true);
+        } catch {
+            setError(true);
+        } finally {
+            setSaving(false);
+        }
+    };
+
     return (
         <div
             className="fixed inset-0 z-[100] flex overflow-hidden lg:grid lg:grid-cols-[1fr_1fr]"
@@ -159,7 +179,8 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
                     {/* High-Fidelity "Continue" Button */}
                     <motion.div variants={itemVariants} className="w-full flex justify-center">
                         <motion.button
-                            onClick={onComplete}
+                            onClick={() => void continueWithChoice()}
+                            disabled={saving}
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                             className="relative w-full max-w-[320px] h-[64px] rounded-[20px] text-[20px] font-medium text-[#eef3ff] flex items-center justify-center cursor-pointer outline-none overflow-hidden"
@@ -174,30 +195,36 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
                             }} />
 
                             <span className="relative z-10 flex items-center">
-                                Continue <span className="ml-[10px] text-[22px] opacity-90">›</span>
+                                {saving ? 'Saving…' : 'Continue'} <span className="ml-[10px] text-[22px] opacity-90">›</span>
                             </span>
                         </motion.button>
                     </motion.div>
+                    {error && <p role="alert" className="mt-3 text-sm text-red-700">Could not save your choice. Try again.</p>}
                 </div>
 
                 {/* Footer Component */}
                 <motion.div variants={itemVariants} className="mt-auto flex flex-col items-center w-full">
-                    <p className="text-[12px] opacity-60 mb-6 text-center" style={{ color: '#a7a7ad' }}>
-                        By clicking Continue, you agree to our{' '}
-                        <span
-                            onClick={() => (window.electronAPI as any)?.openExternal?.('https://natively.software/termsandconditions')}
+                    <p className="text-[12px] opacity-60 mb-3 text-center" style={{ color: '#a7a7ad' }}>
+                        Before you continue, inspect our{' '}
+                        <button
+                            type="button"
+                            onClick={() => void window.electronAPI?.openExternal?.(TERMS_URL)}
                             className="font-semibold text-[#2f2f34] underline underline-offset-[3px] decoration-[#2f2f34]/30 hover:decoration-[#2f2f34]/70 cursor-pointer transition-colors"
                         >
                             Terms &amp; Conditions
-                        </span>
+                        </button>
                         {' '}and{' '}
-                        <span
-                            onClick={() => (window.electronAPI as any)?.openExternal?.('https://natively.software/privacy')}
+                        <button
+                            type="button"
+                            onClick={() => void window.electronAPI?.openExternal?.(PRIVACY_URL)}
                             className="font-semibold text-[#2f2f34] underline underline-offset-[3px] decoration-[#2f2f34]/30 hover:decoration-[#2f2f34]/70 cursor-pointer transition-colors"
                         >
                             Privacy Policy
-                        </span>
+                        </button>
                         .
+                    </p>
+                    <p className="max-w-[360px] text-[11px] leading-snug mb-6 text-center" style={{ color: '#71717a' }}>
+                        Analytics is currently unavailable. No analytics consent is requested or usage events sent to GA4.
                     </p>
                     <PressLogos />
                 </motion.div>

@@ -32,22 +32,19 @@ test('embeddings scope denial gracefully omits embeddings when Ollama is unavail
 test('transcript scope denial routes full context to Ollama when available', () => {
   const src = read('electron/LLMHelper.ts');
 
-  assert.match(src, /deniedOutboundScopes\.includes\('transcript'\)/);
+  assert.match(src, /const deniedOutboundScopes = this\.getDeniedOutboundScopes\(message, imagePaths, contextScopes\)/);
   assert.match(src, /this\.logScopeFallback\(scope, ollamaAvailable \? 'routing' : 'omitting'\)/);
   assert.match(src, /return await this\.callOllama\(combinedMessages\.gemini, imagePaths, undefined\)/);
-  assert.match(src, /yield\* this\.streamWithOllama\(message, context/);
+  assert.match(src, /yield\* this\.recordRoutedStream\('ollama', this\.streamWithOllama\(message, context/, 'denied scope must stream the full context through local Ollama and record its actual route');
 });
 
-test('transcript scope denial omits transcript from cloud calls when Ollama is unavailable', () => {
+test('transcript scope denial blocks cloud dispatch when Ollama is unavailable', () => {
   const src = read('electron/LLMHelper.ts');
 
-  assert.match(src, /shouldOmitContext = deniedOutboundScopes\.some\(scope => scope === 'transcript' \|\| scope === 'reference_files' \|\| scope === 'profile_history' \|\| scope === 'post_call_summary'\)/);
-  assert.match(src, /cloudContext = shouldOmitContext \? undefined : context/);
-  assert.match(src, /const cloudCombinedMessages = \{/);
-  assert.match(src, /return await this\.generateWithCodexCli\(cloudUserContent/);
-  assert.match(src, /return await this\.generateWithGroq\(cloudUserContent/);
-  assert.match(src, /return await this\.chatWithCurl\(cloudUserContent/);
-  assert.match(src, /shouldOmitContext \? "" : context \|\| ""/);
+  assert.match(src, /Ollama unavailable, blocking cloud dispatch/);
+  assert.match(src, /return this\.scopeBlockedResponse\(deniedOutboundScopes\);/);
+  assert.match(src, /yield this\.scopeBlockedResponse\(deniedOutboundScopes\);/);
+  assert.doesNotMatch(src, /cloudContext = shouldOmitContext \? undefined : context/);
 });
 
 test('LLMHelper infers auxiliary context scopes before cloud routing', () => {

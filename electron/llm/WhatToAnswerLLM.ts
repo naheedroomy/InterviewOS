@@ -149,10 +149,10 @@ ${promptInstruction.trim()}
                 tokenBudget: Math.max(1000, assemblerBudget),
                 systemPrompt: finalPromptOverride,
             });
-            console.log('[WhatToAnswerRaw] input', JSON.stringify({
-                systemPrompt: finalPromptOverride,
-                userMessage: packet.userMessage,
-            }));
+            console.log('[WhatToAnswer] input metadata', {
+                systemPromptLength: finalPromptOverride.length,
+                userMessageLength: packet.userMessage.length,
+            });
 
             if (MEASURE) tPrompt = performance.now();
             if (MEASURE) tStream = performance.now();

@@ -169,6 +169,7 @@ export class MeetingPersistence {
         const snapshot = {
             transcript: [...this.session.getFullTranscript()],
             usage: [...this.session.getFullUsage()],
+            screenshotPaths: this.session.getFullScreenshotPaths(),
             startTime: this.session.getSessionStartTime(),
             durationMs: durationMs,
             context: this.session.getFullSessionContext()
@@ -223,6 +224,7 @@ export class MeetingPersistence {
             detailedSummary: { actionItems: [], keyPoints: [] },
             transcript: snapshot.transcript,
             usage: snapshot.usage,
+            screenshotPaths: snapshot.screenshotPaths,
             isProcessed: false,
             titleSource: 'placeholder'
         };
@@ -247,7 +249,7 @@ export class MeetingPersistence {
      * Heavy lifting: LLM Title, Summary, and DB Write
      */
     private async processAndSaveMeeting(
-        data: { transcript: TranscriptSegment[], usage: any[], startTime: number, durationMs: number, context: string },
+        data: { transcript: TranscriptSegment[], usage: any[], screenshotPaths?: string[], startTime: number, durationMs: number, context: string },
         meetingId: string,
         // BUG-04 fix: accept metadata snapshot so calendar info is not lost after session.reset()
         metadata?: {
@@ -503,6 +505,7 @@ Return ONLY valid JSON (no markdown code blocks):
                 detailedSummary: summaryData,
                 transcript: data.transcript,
                 usage: data.usage,
+                screenshotPaths: data.screenshotPaths,
                 calendarEventId: calendarEventId,
                 source: source,
                 isProcessed: true,
@@ -553,6 +556,10 @@ Return ONLY valid JSON (no markdown code blocks):
     public async recoverUnprocessedMeetings(): Promise<void> {
         console.log('[MeetingPersistence] Checking for unprocessed meetings...');
         const db = DatabaseManager.getInstance();
+        const removedEphemeralIds = db.deleteEphemeralMeetings();
+        if (removedEphemeralIds.length > 0) {
+            console.log(`[MeetingPersistence] Removed ${removedEphemeralIds.length} interrupted live-indexing record(s).`);
+        }
         const unprocessed = db.getUnprocessedMeetings();
 
         if (unprocessed.length === 0) {
@@ -585,6 +592,7 @@ Return ONLY valid JSON (no markdown code blocks):
                 const snapshot = {
                     transcript: details.transcript as TranscriptSegment[],
                     usage: details.usage,
+                    screenshotPaths: (details as any).screenshotPaths,
                     startTime: startTime,
                     durationMs: durationMs,
                     context: context

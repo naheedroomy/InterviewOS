@@ -356,17 +356,29 @@ export class VectorStore {
                 const ids = this.db.prepare(
                     'SELECT id FROM chunks WHERE meeting_id = ?'
                 ).all(meetingId) as any[];
+                const summaries = this.db.prepare(
+                    'SELECT id FROM chunk_summaries WHERE meeting_id = ?'
+                ).all(meetingId) as any[];
+                const vectorTables = (this.db.prepare(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND (name LIKE 'vec_chunks_%' OR name LIKE 'vec_summaries_%')"
+                ).all() as Array<{ name: string }>)
+                    .map(row => row.name)
+                    .filter(name => /^vec_(?:chunks|summaries)_\d+$/.test(name));
 
-                if (ids.length > 0) {
-                    const placeholders = ids.map(() => '?').join(',');
-                    const idList = ids.map(r => r.id);
-                    // Delete from all known dimension-specific vec0 tables
-                    for (const dim of DatabaseManager.KNOWN_DIMS) {
-                        try {
-                            this.db.prepare(
-                                `DELETE FROM vec_chunks_${dim} WHERE chunk_id IN (${placeholders})`
-                            ).run(...idList);
-                        } catch (_) { /* dim table may not exist */ }
+                const idList = ids.map(r => r.id);
+                const placeholders = idList.map(() => '?').join(',');
+                for (const table of vectorTables) {
+                    try {
+                        if (idList.length > 0 && table.startsWith('vec_chunks_')) {
+                            this.db.prepare(`DELETE FROM ${table} WHERE chunk_id IN (${placeholders})`).run(...idList);
+                        }
+                        if (table.startsWith('vec_summaries_')) {
+                            for (const summary of summaries) {
+                                this.db.prepare(`DELETE FROM ${table} WHERE summary_id = ?`).run(summary.id);
+                            }
+                        }
+                    } catch (error) {
+                        console.warn(`[VectorStore] Failed to delete vector rows from ${table}:`, error);
                     }
                 }
             } catch (e) {
@@ -375,6 +387,7 @@ export class VectorStore {
         }
 
         this.db.prepare('DELETE FROM chunks WHERE meeting_id = ?').run(meetingId);
+        this.db.prepare('DELETE FROM chunk_summaries WHERE meeting_id = ?').run(meetingId);
     }
 
     /**

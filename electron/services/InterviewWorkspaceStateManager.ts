@@ -613,6 +613,32 @@ export class InterviewWorkspaceStateManager {
 
   // ─── Backward Compatibility Adapters ──────────────────────────────────────
 
+  /** Remove only round links to a deleted meeting, preserving all workspace content. */
+  public unlinkMeetingReferences(meetingId: string): void {
+    const id = normalizeString(meetingId).trim();
+    if (!id) return;
+    if (!fs.existsSync(this.statePath)) return;
+
+    const parsed = JSON.parse(fs.readFileSync(this.statePath, 'utf8'));
+    const rawWorkspaces = Array.isArray(parsed?.workspaces) ? parsed.workspaces : Array.isArray(parsed) ? parsed : [];
+    let changed = false;
+    const workspaces = rawWorkspaces.map((rawWorkspace: any) => {
+      const workspace = normalizeWorkspace(rawWorkspace);
+      let workspaceChanged = false;
+      const rounds = workspace.rounds.map((round: any) => {
+        if (round?.meetingId !== id) return round;
+        changed = true;
+        workspaceChanged = true;
+        const { meetingId: _meetingId, ...unlinkedRound } = round;
+        return unlinkedRound;
+      });
+      const legacyLinksPresent = rawWorkspace?.meetingId === id || (Array.isArray(rawWorkspace?.meetingIds) && rawWorkspace.meetingIds.includes(id));
+      if (legacyLinksPresent) changed = true;
+      return workspaceChanged || legacyLinksPresent ? { ...workspace, rounds, updatedAt: new Date().toISOString() } : workspace;
+    });
+    if (changed) this.writeStore({ version: 3, workspaces });
+  }
+
   /**
    * Finds a workspace associated with a meeting ID by searching all rounds.
    */

@@ -2630,7 +2630,7 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
 
     // Stream Done
     cleanups.push(
-      window.electronAPI.onGeminiStreamDone(() => {
+      window.electronAPI.onGeminiStreamDone((routed) => {
         const pendingText = streamingTextRef.current;
         const pendingMsgId = streamingMsgIdRef.current;
         flushToken();
@@ -2643,10 +2643,12 @@ const AnswerCueInterface: React.FC<AnswerCueInterfaceProps> = ({
           requestStartTimeRef.current = null;
         }
 
-        // Track Usage
-        analytics.trackModelUsed({
-          model_name: currentModel,
-          provider_type: detectProviderType(currentModel),
+        // The route is delivered with this completion event, so overlapping
+        // streams cannot substitute another request's provider identity.
+        if (routed) analytics.trackModelUsed({
+          model_name: routed.model,
+          provider: routed.provider,
+          provider_type: detectProviderType(routed.provider, routed.isOllama),
           latency_ms: latency,
         });
 
