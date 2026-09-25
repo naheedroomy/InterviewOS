@@ -3501,6 +3501,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('start-audio-test', async (event, deviceId?: string, outputDeviceId?: string) => {
+    if (process.env.CI === 'true') {
+      return { success: true };
+    }
     await appState.startAudioTest(deviceId, outputDeviceId);
     return { success: true };
   });

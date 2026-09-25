@@ -23,9 +23,7 @@ test('packaged app starts with isolated data and reports permission state throug
   const launchOutput: string[] = [];
   let app: Awaited<ReturnType<typeof electron.launch>> | undefined;
   let page: Page | undefined;
-  let traceStarted = false;
   const rendererErrors: string[] = [];
-  const tracePath = path.join(artifactDir!, 'packaged-boundary-trace.zip');
 
   try {
     console.log('[smoke] 1. Launching packaged Electron app...');
@@ -76,8 +74,6 @@ test('packaged app starts with isolated data and reports permission state throug
       console.error('[smoke] Renderer error:', error);
       rendererErrors.push(error.stack ?? error.message);
     });
-    await app.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
-    traceStarted = true;
 
     console.log('[smoke] 4. Waiting for domcontentloaded...');
     await page!.waitForLoadState('domcontentloaded');
@@ -163,11 +159,10 @@ test('packaged app starts with isolated data and reports permission state throug
   } catch (error) {
     if (page && artifactDir) {
       await mkdir(artifactDir, { recursive: true }).catch(() => undefined);
-      await page.screenshot({ path: path.join(artifactDir, 'packaged-boundary-failure.png'), fullPage: true }).catch(() => undefined);
-    }
-    if (traceStarted && app) {
-      await app.context().tracing.stop({ path: tracePath }).catch(() => undefined);
-      traceStarted = false;
+      await Promise.race([
+        page.screenshot({ path: path.join(artifactDir, 'packaged-boundary-failure.png'), fullPage: true }),
+        new Promise((r) => setTimeout(r, 3000)),
+      ]).catch(() => undefined);
     }
     await testInfo.attach('electron-launch-output.txt', {
       body: Buffer.from(launchOutput.join('')),
@@ -185,9 +180,6 @@ test('packaged app starts with isolated data and reports permission state throug
     if (artifactDir) {
       await mkdir(artifactDir, { recursive: true }).catch(() => undefined);
       await writeFile(path.join(artifactDir, 'electron-launch-output.txt'), launchOutput.join('')).catch(() => undefined);
-    }
-    if (traceStarted && app) {
-      await app.context().tracing.stop().catch(() => undefined);
     }
     await app?.close().catch(() => undefined);
   }
