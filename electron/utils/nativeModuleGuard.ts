@@ -41,7 +41,7 @@ function findRepoRoot(): string {
     if (fs.existsSync(pkgPath)) {
       try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        if (pkg?.name === 'natively') return current;
+        if (pkg?.name === 'interviewos' || pkg?.name === 'natively' || pkg?.name === 'answercue') return current;
       } catch {
         // fall through
       }
