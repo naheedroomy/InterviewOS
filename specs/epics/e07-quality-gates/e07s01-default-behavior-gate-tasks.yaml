@@ -1,0 +1,23 @@
+story_id: e07s01
+title: Run behavioral data-lifecycle tests by default
+status: done
+bcps: 8
+tasks:
+  - id: e07s01-01
+    description: >-
+      Restore the clean-install test prerequisite so the declared test command
+      reaches the test suite on a supported Node LTS environment.
+    verify: npm ci && npm test
+    status: done
+  - id: e07s01-02
+    description: >-
+      Add the Phase 0 routing, persistence, deletion, retention, and migration
+      lifecycle suites to the default quality gate.
+    verify: npm test
+    status: done
+  - id: e07s01-03
+    description: >-
+      Replace source-order-only checks with tests that execute real temporary
+      database and request-policy behavior.
+    verify: npm test
+    status: done

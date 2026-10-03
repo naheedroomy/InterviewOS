@@ -1,0 +1,430 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronDown, Check, Cloud, Terminal, Monitor, Server, Bot } from 'lucide-react';
+import { getCodexCliModelDisplayName, isAllowedStandardCloudModel, isAllowedGeminiModel, isAllowedOpenAIModel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+
+interface ModelSelectorProps {
+    currentModel: string;
+    onSelectModel: (model: string) => void;
+    placement?: 'up' | 'down';
+    align?: 'left' | 'right';
+    className?: string;
+    triggerClassName?: string;
+}
+
+interface CustomProvider {
+    id: string;
+    name: string;
+    curlCommand: string;
+}
+
+export const ModelSelector: React.FC<ModelSelectorProps> = ({
+    currentModel,
+    onSelectModel,
+    placement = 'up',
+    align = 'left',
+    className = '',
+    triggerClassName = '',
+}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState<'cloud' | 'custom' | 'local'>('cloud');
+    const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+    const [customProviders, setCustomProviders] = useState<CustomProvider[]>([]);
+    const [openAIEndpoints, setOpenAIEndpoints] = useState<any[]>([]);
+    const [cloudModels, setCloudModels] = useState<{ id: string; name: string; desc: string; provider: string }[]>([]);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Close on click outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Load Data
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const loadData = async () => {
+            try {
+                // Load Custom
+                const custom = await window.electronAPI?.getCustomProviders() as CustomProvider[];
+                if (custom) setCustomProviders(custom);
+
+                // Load OpenAI-Compatible Endpoints
+                const endpoints = await window.electronAPI?.getOpenAICompatibleEndpoints?.() || [];
+                if (Array.isArray(endpoints)) setOpenAIEndpoints(endpoints);
+
+                // Load Ollama
+                const local = await window.electronAPI?.getAvailableOllamaModels() as string[];
+                if (local) setOllamaModels(local);
+
+                // Build dynamic cloud models from credentials
+                // @ts-ignore
+                const creds = await window.electronAPI?.getStoredCredentials?.();
+                const cModels: { id: string; name: string; desc: string; provider: string }[] = [];
+
+                if (creds?.hasAnswerCueKey) {
+                    cModels.push({ id: 'natively', name: 'InterviewOS API', desc: 'Managed AI • Fast execution', provider: 'natively' });
+                }
+                for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
+                    if (!cfg.hasKeyCheck(creds)) continue;
+
+                    if (prov === 'gemini') {
+                        // Gemini: fetch dynamically — include every discovered model via the IPC.
+                        // The IPC handler resolves the stored key when called with an empty string.
+                        try {
+                            const geminiResult = await window.electronAPI?.fetchProviderModels('gemini', '');
+                            if (geminiResult?.success && geminiResult.models) {
+                                for (const m of geminiResult.models) {
+                                    if (m.id.toLowerCase().includes('banana') || m.id.toLowerCase().includes('nano') || (m.label && (m.label.toLowerCase().includes('banana') || m.label.toLowerCase().includes('nano')))) continue;
+                                    if (!cModels.some(cm => cm.id === m.id)) {
+                                        cModels.push({
+                                            id: m.id,
+                                            name: m.label || m.id,
+                                            desc: 'Google • Gemini',
+                                            provider: 'gemini',
+                                        });
+                                    }
+                                }
+                            }
+                        } catch (_geminiErr) {
+                            console.warn('Failed to fetch Gemini models for cloud selector');
+                        }
+                        if (creds?.geminiPreferredModel && isAllowedGeminiModel(creds.geminiPreferredModel) && !cModels.some(cm => cm.id === creds.geminiPreferredModel)) {
+                            cModels.push({
+                                id: creds.geminiPreferredModel,
+                                name: prettifyModelId(creds.geminiPreferredModel),
+                                desc: 'Google • Preferred',
+                                provider: 'gemini',
+                            });
+                        }
+                    } else if (prov === 'openai') {
+                        // OpenAI: fetch dynamically if key exists, allowing all models 5.5 onwards
+                        let fetchedOpenAI = false;
+                        try {
+                            const openaiResult = await window.electronAPI?.fetchProviderModels('openai', '');
+                            if (openaiResult?.success && openaiResult.models && openaiResult.models.length > 0) {
+                                fetchedOpenAI = true;
+                                for (const m of openaiResult.models) {
+                                    if (!isAllowedOpenAIModel(m.id)) continue;
+                                    if (!cModels.some(cm => cm.id === m.id)) {
+                                        cModels.push({
+                                            id: m.id,
+                                            name: m.label || prettifyModelId(m.id),
+                                            desc: 'OpenAI',
+                                            provider: 'openai',
+                                        });
+                                    }
+                                }
+                            }
+                        } catch (_err) {
+                            console.warn('Failed to fetch OpenAI models for cloud selector');
+                        }
+                        if (!fetchedOpenAI) {
+                            cfg.ids.forEach((id, i) => cModels.push({ id, name: cfg.names[i], desc: cfg.descs[i], provider: 'openai' }));
+                        }
+                        if (creds?.openaiPreferredModel && isAllowedOpenAIModel(creds.openaiPreferredModel) && !cModels.some(cm => cm.id === creds.openaiPreferredModel)) {
+                            cModels.push({
+                                id: creds.openaiPreferredModel,
+                                name: prettifyModelId(creds.openaiPreferredModel),
+                                desc: 'OpenAI • Preferred',
+                                provider: 'openai',
+                            });
+                        }
+                    } else {
+                        cfg.ids.forEach((id, i) => cModels.push({ id, name: cfg.names[i], desc: cfg.descs[i], provider: prov }));
+                    }
+
+                    const pm = creds?.[cfg.pmKey];
+                    if (prov !== 'gemini' && pm && !cfg.ids.includes(pm) && !cModels.some(cm => cm.id === pm) && isAllowedStandardCloudModel(prov, pm)) {
+                        cModels.push({ id: pm, name: prettifyModelId(pm), desc: `${prov.charAt(0).toUpperCase() + prov.slice(1)} • Preferred`, provider: prov });
+                    }
+                }
+                setCloudModels(cModels);
+            } catch (e) {
+                console.error("Failed to load models:", e);
+            }
+        };
+        loadData();
+    }, [isOpen]);
+
+    // Preload cloud models on initial mount so getModelDisplayName displays immediately
+    useEffect(() => {
+        let mounted = true;
+        const preload = async () => {
+            try {
+                // @ts-ignore
+                const creds = await window.electronAPI?.getStoredCredentials?.();
+                if (!mounted || !creds) return;
+                const models: { id: string; name: string; desc: string; provider: string }[] = [];
+                if (creds.hasGeminiKey) {
+                    const geminiResult = await window.electronAPI?.fetchProviderModels('gemini', '');
+                    if (geminiResult?.success && geminiResult.models && mounted) {
+                        for (const m of geminiResult.models) {
+                            if (m.id.toLowerCase().includes('banana') || m.id.toLowerCase().includes('nano') || (m.label && (m.label.toLowerCase().includes('banana') || m.label.toLowerCase().includes('nano')))) continue;
+                            if (!models.some(cm => cm.id === m.id)) {
+                                models.push({ id: m.id, name: m.label || m.id, desc: 'Google • Gemini', provider: 'gemini' });
+                            }
+                        }
+                        if (creds.geminiPreferredModel && isAllowedGeminiModel(creds.geminiPreferredModel) && !models.some(cm => cm.id === creds.geminiPreferredModel)) {
+                            models.push({ id: creds.geminiPreferredModel, name: prettifyModelId(creds.geminiPreferredModel), desc: 'Google • Preferred', provider: 'gemini' });
+                        }
+                    }
+                }
+                if (creds.hasOpenaiKey) {
+                    const openaiResult = await window.electronAPI?.fetchProviderModels('openai', '');
+                    if (openaiResult?.success && openaiResult.models && mounted) {
+                        for (const m of openaiResult.models) {
+                            if (!isAllowedOpenAIModel(m.id)) continue;
+                            if (!models.some(cm => cm.id === m.id)) {
+                                models.push({ id: m.id, name: m.label || prettifyModelId(m.id), desc: 'OpenAI', provider: 'openai' });
+                            }
+                        }
+                        if (creds.openaiPreferredModel && isAllowedOpenAIModel(creds.openaiPreferredModel) && !models.some(cm => cm.id === creds.openaiPreferredModel)) {
+                            models.push({ id: creds.openaiPreferredModel, name: prettifyModelId(creds.openaiPreferredModel), desc: 'OpenAI • Preferred', provider: 'openai' });
+                        }
+                    }
+                }
+                if (models.length > 0 && mounted) {
+                    setCloudModels(prev => [...prev, ...models.filter(nm => !prev.some(pm => pm.id === nm.id))]);
+                }
+            } catch {
+                // silent preload fallback
+            }
+        };
+        preload();
+        return () => { mounted = false; };
+    }, []);
+
+    const handleSelect = (model: string) => {
+        // For custom/local, we might need to pass an ID or specific format
+        // The backend logic (LLMHelper) needs to know how to handle this string or we need a richer object
+        // For now, consistent with existing app, we pass a string. 
+        // We'll rely on a prefix convention or just the name if unique enough, 
+        // OR the app state handling this selection needs to store provider type.
+        // Assuming onSelectModel handles the switching logic.
+
+        onSelectModel(model);
+        setIsOpen(false);
+    };
+
+    const getModelDisplayName = (model: string) => {
+        const codexCliName = getCodexCliModelDisplayName(model);
+        if (codexCliName) return codexCliName;
+        if (model.startsWith('ollama-')) return model.replace('ollama-', '');
+        if (model === 'gemini-3.8-flash' || model === 'models/gemini-3.8-flash') return 'Gemini 3.8 Flash';
+        if (model === 'gemini-3.8-live' || model === 'models/gemini-3.8-live') return 'Gemini 3.8 Live';
+        if (model === 'gemini-3.5-flash' || model === 'models/gemini-3.5-flash') return 'Gemini 3.5 Flash';
+        if (model === 'gemini-2.5-flash' || model === 'models/gemini-2.5-flash') return 'Gemini 2.5 Flash';
+        if (model === 'gemini-2.5-pro' || model === 'models/gemini-2.5-pro') return 'Gemini 2.5 Pro';
+        if (model === 'gemini-2.0-flash' || model === 'models/gemini-2.0-flash') return 'Gemini 2.0 Flash';
+        if (model === 'gemini-2.0-flash-lite' || model === 'models/gemini-2.0-flash-lite') return 'Gemini 2.0 Flash Lite';
+        if (model === 'gemini-1.5-pro' || model === 'models/gemini-1.5-pro') return 'Gemini 1.5 Pro';
+        if (model === 'gemini-1.5-flash' || model === 'models/gemini-1.5-flash') return 'Gemini 1.5 Flash';
+        if (model === 'gemini-3.1-flash-lite-preview') return 'Gemini 3.1 Flash';
+        if (model === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
+        if (model === 'claude-opus-5.5') return 'Claude Opus 5.5';
+        if (model === 'claude-sonnet-5') return 'Claude Sonnet 5';
+        if (model === 'claude-haiku-4.5') return 'Claude Haiku 4.5';
+        if (model === 'claude-opus-4-8') return 'Opus 4.8';
+        if (model === 'claude-opus-4-7') return 'Opus 4.7';
+        if (model === 'claude-opus-4-6') return 'Opus 4.6';
+        if (model === 'claude-sonnet-4-6') return 'Sonnet 4.6';
+        if (model === 'gpt-6-astra') return 'GPT 6 Astra';
+        if (model === 'gpt-6-sol') return 'GPT 6 Sol';
+        if (model === 'gpt-6-luna') return 'GPT 6 Luna';
+        if (model === 'chat-latest') return 'GPT 5.5 Instant';
+        if (model === 'gpt-5.5') return 'GPT 5.5';
+        if (model === 'gpt-5.5-thinking-low') return 'GPT 5.5 Thinking';
+        if (model === 'gpt-5.4') return 'GPT 5.4';
+        if (model === 'deepseek-v4.1-flash') return 'DeepSeek V4.1 Flash';
+        if (model === 'deepseek-v4-pro') return 'DeepSeek V4 Pro';
+        if (model === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';
+
+        // Check dynamic cloud models
+        const cloud = cloudModels.find(m => m.id === model || m.id === model.replace(/^models\//, '') || m.id === `models/${model}`);
+        if (cloud) return cloud.name;
+
+        // Check custom providers
+        const custom = customProviders.find(p => p.id === model || p.name === model);
+        if (custom) return custom.name;
+
+        // Check OpenAI-compatible custom endpoints
+        const ep = openAIEndpoints.find(e => e.id === model);
+        if (ep) return `${ep.name} (${ep.modelId})`;
+
+        return model;
+    };
+
+    return (
+        <div className="relative" ref={dropdownRef}>
+            <button
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                className={triggerClassName || `inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-border-subtle bg-bg-card hover:bg-bg-elevated text-text-primary transition-all duration-150 shrink-0 select-none cursor-pointer max-w-[200px] ${className}`}
+                title="Active AI Model for this interview (Click to switch)"
+            >
+                <Bot size={12} className="text-amber-500 shrink-0" />
+                <span className="truncate">{getModelDisplayName(currentModel)}</span>
+                <ChevronDown size={11} className={`shrink-0 text-text-secondary transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isOpen && (
+                <div className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} w-64 bg-bg-card border border-border-subtle rounded-xl shadow-2xl z-[120] overflow-hidden ${placement === 'down' ? 'top-full mt-2' : 'bottom-full mb-2'}`}>
+                    {/* Tabs */}
+                    <div className="flex border-b border-border-subtle bg-black/20">
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('cloud')}
+                            className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${activeTab === 'cloud' ? 'text-amber-400 bg-bg-card border-b-2 border-b-amber-500' : 'text-text-secondary hover:text-text-primary'}`}
+                        >
+                            Cloud
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('custom')}
+                            className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${activeTab === 'custom' ? 'text-amber-400 bg-bg-card border-b-2 border-b-amber-500' : 'text-text-secondary hover:text-text-primary'}`}
+                        >
+                            Custom
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('local')}
+                            className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${activeTab === 'local' ? 'text-amber-400 bg-bg-card border-b-2 border-b-amber-500' : 'text-text-secondary hover:text-text-primary'}`}
+                        >
+                            Local
+                        </button>
+                    </div>
+
+                    {/* Content */}
+                    <div className="p-2 max-h-64 overflow-y-auto">
+
+                        {/* Cloud Models */}
+                        {activeTab === 'cloud' && (
+                            <div className="space-y-1">
+                                {cloudModels.length === 0 ? (
+                                    <div className="text-center py-6 text-text-tertiary">
+                                        <p className="text-xs mb-2">No cloud providers configured.</p>
+                                        <p className="text-[10px] opacity-70">Add API keys in Settings.</p>
+                                    </div>
+                                ) : (
+                                    cloudModels.map((m, idx) => {
+                                        const prevProvider = idx > 0 ? cloudModels[idx - 1].provider : null;
+                                        const showDivider = prevProvider && prevProvider !== m.provider;
+                                        const icon = m.provider === 'gemini' ? <Monitor size={14} /> : <Cloud size={14} />;
+                                        return (
+                                            <React.Fragment key={m.id}>
+                                                {showDivider && <div className="h-px bg-border-subtle my-1" />}
+                                                <ModelOption
+                                                    id={m.id}
+                                                    name={m.name}
+                                                    desc={m.desc}
+                                                    icon={icon}
+                                                    selected={currentModel === m.id}
+                                                    onSelect={() => handleSelect(m.id)}
+                                                />
+                                            </React.Fragment>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        )}
+
+                        {/* Custom Models */}
+                        {activeTab === 'custom' && (
+                            <div className="space-y-1">
+                                {customProviders.length === 0 && openAIEndpoints.filter(e => e.enabled !== false).length === 0 ? (
+                                    <div className="text-center py-6 text-text-tertiary">
+                                        <p className="text-xs mb-2">No custom endpoints configured.</p>
+                                        <button className="text-[10px] text-accent-primary hover:underline">Manage in Settings</button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {customProviders.map(provider => (
+                                            <ModelOption
+                                                key={provider.id}
+                                                id={provider.id}
+                                                name={provider.name}
+                                                desc="Custom cURL"
+                                                icon={<Terminal size={14} />}
+                                                selected={currentModel === provider.id}
+                                                onSelect={() => handleSelect(provider.id)}
+                                            />
+                                        ))}
+                                        {openAIEndpoints.filter(e => e.enabled !== false).map(ep => (
+                                            <ModelOption
+                                                key={ep.id}
+                                                id={ep.id}
+                                                name={ep.name}
+                                                desc={`${ep.modelId} • Custom Endpoint`}
+                                                icon={<Server size={14} />}
+                                                selected={currentModel === ep.id}
+                                                onSelect={() => handleSelect(ep.id)}
+                                            />
+                                        ))}
+                                    </>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Local Models (Ollama) */}
+                        {activeTab === 'local' && (
+                            <div className="space-y-1">
+                                {ollamaModels.length === 0 ? (
+                                    <div className="text-center py-6 text-text-tertiary">
+                                        <p className="text-xs">No Ollama models found.</p>
+                                        <p className="text-[10px] mt-1 opacity-70">Ensure Ollama is running.</p>
+                                    </div>
+                                ) : (
+                                    ollamaModels.map(model => (
+                                        <ModelOption
+                                            key={model}
+                                            id={`ollama-${model}`}
+                                            name={model}
+                                            desc="Local"
+                                            icon={<Server size={14} />}
+                                            selected={currentModel === `ollama-${model}`}
+                                            onSelect={() => handleSelect(`ollama-${model}`)}
+                                        />
+                                    ))
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+interface ModelOptionProps {
+    id: string;
+    name: string;
+    desc: string;
+    icon: React.ReactNode;
+    selected: boolean;
+    onSelect: () => void;
+}
+
+const ModelOption: React.FC<ModelOptionProps> = ({ name, desc, icon, selected, onSelect }) => (
+    <button
+        type="button"
+        onClick={onSelect}
+        className={`w-full flex items-center justify-between p-2 rounded-lg transition-colors group cursor-pointer ${selected ? 'bg-amber-500/15 text-amber-300' : 'hover:bg-white/5 text-text-primary'}`}
+    >
+        <div className="flex items-center gap-2.5 min-w-0">
+            <div className={`p-1.5 rounded-md shrink-0 ${selected ? 'bg-amber-500/20 text-amber-400' : 'bg-bg-elevated text-text-secondary group-hover:text-text-primary'}`}>
+                {icon}
+            </div>
+            <div className="text-left min-w-0">
+                <div className={`text-xs font-medium truncate max-w-[150px] ${selected ? 'text-amber-300 font-semibold' : 'text-text-primary'}`}>{name}</div>
+                <div className="text-[10px] text-text-tertiary truncate">{desc}</div>
+            </div>
+        </div>
+        {selected && <Check size={14} className="text-amber-400 shrink-0 ml-2" />}
+    </button>
+);

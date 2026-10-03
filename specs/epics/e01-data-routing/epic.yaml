@@ -1,0 +1,14 @@
+id: e01
+title: Data routing integrity
+scope_item: P0-03
+delta: MODIFIED
+wsjf: 7.0
+total_bcps: 8
+status: completed
+dependencies: []
+stories:
+  - id: e01s01
+    title: Enforce every outbound request scope
+    bcps: 8
+    status: passed
+    tasks: e01s01-enforce-request-scope-tasks.yaml

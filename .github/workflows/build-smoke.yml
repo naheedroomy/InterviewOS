@@ -1,0 +1,65 @@
+name: Build Smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 09:00 UTC
+
+jobs:
+  electron-entry-smoke:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer
+        run: npm run build
+
+      - name: Run default behavioral suites
+        run: npm test
+
+      - name: Verify package inputs exist
+        run: npm run verify:package-inputs
+
+  api-smoke:
+    # Runs weekly (Monday 09:00 UTC) and on demand via workflow_dispatch.
+    # Requires secrets: ANSWERCUE_API_KEY (or ANSWERCUE_TRIAL_TOKEN) set in repo.
+    # Without credentials the suite is skipped cleanly via the env gate.
+    name: API Smoke (weekly)
+    runs-on: macos-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron (test prerequisite)
+        run: npm run build:electron
+
+      - name: Run API smoke tests
+        run: npm test -- --test-name-pattern 'AnswerCue API'
+        env:
+          RUN_ANSWERCUE_API_E2E: ${{ secrets.RUN_ANSWERCUE_API_E2E }}
+          ANSWERCUE_API_KEY: ${{ secrets.ANSWERCUE_API_KEY }}
+          ANSWERCUE_TRIAL_TOKEN: ${{ secrets.ANSWERCUE_TRIAL_TOKEN }}
+          ANSWERCUE_API_BASE: ${{ secrets.ANSWERCUE_API_BASE }}

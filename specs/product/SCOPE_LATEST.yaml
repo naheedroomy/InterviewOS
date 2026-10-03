@@ -1,0 +1,232 @@
+# Bigpowers scope-work — Phase 0
+# Source of truth for the trust-and-reliability hardening initiative.
+initiative:
+  id: phase-0
+  name: Trustworthy interview lifecycle
+  status: proposed
+  planning_spine: scope-work
+
+core_value: >-
+  A candidate can use InterviewOS for sensitive interview preparation and review
+  with clear consent, accurate data handling, and reliable preservation or
+  removal of their information.
+
+summary: >-
+  Phase 0 makes the existing desktop interview workflow safe to validate and
+  sell. It addresses the highest-risk failures in the lifecycle of interview
+  data: first-run consent, capture, cloud-routing disclosure, persistence,
+  recovery, deletion, retention, and release validation. It is deliberately a
+  hardening initiative, not a feature-expansion release.
+
+  The intended outcome is a product whose local/private claims, analytics
+  behavior, data lifecycle, supported-platform claims, and automated gates are
+  demonstrably true. This is a prerequisite for paid tiers, managed model
+  credits, and later team or coaching offerings because those offerings increase
+  both trust expectations and the cost of a data-handling failure.
+
+target_users:
+  - >-
+    Candidates who handle private résumés, transcripts, interview recordings,
+    and API keys.
+  - >-
+    Early paid users who need a credible local/private option before adopting
+    the product.
+  - >-
+    Support and release operators who need reproducible evidence that a
+    packaged build works.
+
+in_scope:
+  - id: P0-01
+    name: Consent, legal access, and truthful telemetry
+    outcome: >-
+      Users can inspect the applicable legal documents before acceptance, choose
+      whether analytics is enabled, and understand what telemetry is collected
+      and where it goes.
+    future_epic: e03-consent-telemetry
+
+  - id: P0-02
+    name: Renderer and desktop trust boundary
+    outcome: >-
+      Privileged desktop capabilities are exposed only to the windows and
+      operations that require them, and untrusted remote content cannot widen
+      that authority.
+    future_epic: e04-electron-boundary
+
+  - id: P0-03
+    name: Accurate cloud-routing and private-mode behavior
+    outcome: >-
+      The app derives the actual data categories in each request, honors the
+      user's chosen provider scope, and fails safely rather than silently
+      sending private-mode data to a cloud service.
+    future_epic: e01-data-routing
+
+  - id: P0-04
+    name: Correct meeting persistence and recovery
+    outcome: >-
+      A meeting has one authoritative saved representation; finalization and
+      recovery do not duplicate, lose, or expose transcript and AI-interaction
+      data.
+    future_epic: e02-meeting-integrity
+
+  - id: P0-05
+    name: Complete user-directed deletion and retention
+    outcome: >-
+      Deleting a meeting removes its associated persisted artifacts, and every
+      retention option either has verified behavior or is unavailable to users.
+    future_epic: e05-data-lifecycle
+
+  - id: P0-06
+    name: Recoverable database schema changes
+    outcome: >-
+      Failed database upgrades cannot be represented as successful and can be
+      safely retried or repaired without silently corrupting the user's
+      interview history.
+    future_epic: e06-migration-safety
+
+  - id: P0-07
+    name: Supported-platform and release truthfulness
+    outcome: >-
+      Download routes, installers, native dependencies, and public platform
+      claims agree; every advertised capability has repeatable validation
+      evidence on that platform.
+    future_epic: e08-release-truth
+
+  - id: P0-08
+    name: Meaningful automated quality gates
+    outcome: >-
+      The default developer and CI gates execute the behavior that protects
+      sensitive data and packaged desktop workflows rather than only selected
+      source-level checks.
+    future_epic: e07-quality-gates
+
+out_of_scope:
+  - item: New LLM, STT, embedding, local-vision, or OCR providers
+    reason: >-
+      Deferred until the existing data-routing contract and release validation
+      are trustworthy.
+  - item: Managed local model runtime or model-download manager
+    reason: >-
+      A separate packaging, licensing, and support-risk initiative; not needed
+      to correct current behavior.
+  - item: New interview-coaching, rehearsal, evidence-linking, or RAG features
+    reason: >-
+      Product expansion would compete with stabilizing the current interview
+      lifecycle.
+  - item: >-
+      Account system, cloud sync, collaboration, coach/team sharing, or billing
+      implementation
+    reason: >-
+      Monetization delivery depends on this phase, but it expands the data model
+      and privacy surface before the foundation is safe.
+  - item: Encryption at rest rollout
+    reason: >-
+      Important follow-on security work, but key management, migration, and
+      recovery need a separately scoped design after deletion and persistence
+      semantics are correct.
+  - item: Cross-platform feature parity for unsupported capture stacks
+    reason: >-
+      This phase requires truthful claims and validated support boundaries, not
+      new Linux or architecture-specific capture implementations.
+  - item: General visual redesign or marketing-site refresh
+    reason: >-
+      Only consent, privacy disclosure, support-status, and download-path UX
+      necessary to make user-facing promises true are included.
+
+constraints:
+  - >-
+    Preserve the active Electron/Vite architecture and public-fork AGPL
+    obligations.
+  - >-
+    Preserve existing user data unless a user explicitly deletes it or
+    documented migration behavior requires action.
+  - >-
+    Do not broaden network access, renderer authority, or data collection to
+    solve a Phase 0 requirement.
+  - >-
+    Do not claim a platform, privacy mode, retention option, or test gate is
+    supported without repeatable evidence.
+  - >-
+    Keep private-mode behavior explicit: local STT alone must not imply that
+    embeddings, LLM, or screen data remains local.
+  - >-
+    Maintain a viable path for a future commercial offering without
+    contradicting the current repository license or public release notices.
+
+success_criteria:
+  - id: SC-01
+    criterion: >-
+      A clean supported developer setup can install dependencies and run the
+      declared baseline quality gate to completion.
+  - id: SC-02
+    criterion: >-
+      Acceptance links open only approved canonical legal destinations and users
+      can inspect them before accepting.
+  - id: SC-03
+    criterion: >-
+      Analytics is off unless the user has made an informed choice; disclosures
+      match the events, processor, version, and retention behavior.
+  - id: SC-04
+    criterion: >-
+      Automated tests prove that denied data categories are not included in
+      outbound provider requests or retained in logs.
+  - id: SC-05
+    criterion: >-
+      Automated SQLite lifecycle tests prove placeholder-to-final meeting save,
+      crash recovery, deletion, and configured retention outcomes without
+      duplicate or orphaned sensitive records.
+  - id: SC-06
+    criterion: >-
+      A failed database migration remains detectable and recoverable; it cannot
+      advance the recorded schema version as though it succeeded.
+  - id: SC-07
+    criterion: >-
+      The app's public platform matrix, download selection, installer contents,
+      and native-module availability are verified together for every advertised
+      target.
+  - id: SC-08
+    criterion: >-
+      At least one packaged Electron smoke path validates the actual preload/IPC
+      boundary and permissions-dependent startup on each supported release
+      platform.
+  - id: SC-09
+    criterion: >-
+      Product and legal copy accurately distinguish local processing from cloud
+      processing and list known privacy limitations.
+
+nonfunctional_acceptance:
+  privacy: >-
+    Consent, routing, storage, deletion, and retention have observable evidence
+    and are not dependent on undocumented best effort.
+  reliability: >-
+    Core persistence behavior is atomic from the user's perspective and failures
+    leave diagnosable, recoverable state.
+  security: >-
+    Renderer compromise has a reduced blast radius and no remote renderer
+    dependency can exercise broad desktop capabilities.
+  operability: >-
+    Support can identify the supported release matrix and reproduce the
+    release-validation evidence.
+  commercialization_readiness: >-
+    The completed scope provides a credible trust baseline for later paid plans;
+    it does not itself implement billing or change licensing.
+
+assumptions:
+  - >-
+    Phase 0 is completed before feature expansion and before any production
+    monetization launch.
+  - >-
+    The current comprehensive audit is a prioritization input; each
+    implementation story will re-verify its source code path before change.
+  - >-
+    The supported release matrix may shrink if validation shows a configured
+    target cannot meet the stated capability promise.
+
+references:
+  - docs/COMPREHENSIVE_REPOSITORY_REPORT_2026-09.md
+  - docs/APPLICATION_FLOW_AUDIT.md
+  - docs/PROJECT_STATUS.md
+  - docs/ARCHITECTURE.md
+  - docs/TESTING.md
+  - docs/RELEASE.md
+  - PRIVACY.md
+  - REPORT.md

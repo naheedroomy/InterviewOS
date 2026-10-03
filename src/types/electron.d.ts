@@ -1,0 +1,707 @@
+// Phase 3 — DynamicActionPayload mirrors electron/services/dynamic-actions/DynamicAction.ts.
+// Kept as a structural interface (not a class import) to preserve the strict main↔renderer
+// type boundary — the renderer never imports from electron/* directly.
+export interface DynamicActionEvidenceRef {
+  source: 'transcript' | 'screen' | 'reference' | 'meeting_history'
+  text: string
+  timestamp?: number
+  speaker?: string
+  fileId?: string
+  chunkId?: string
+}
+
+export interface DynamicActionPayload {
+  id: string
+  sessionId: string
+  modeId: string
+  modeTemplateType: string
+  type: string
+  label: string
+  description?: string
+  confidence: number
+  priority: number
+  evidenceRefs: DynamicActionEvidenceRef[]
+  status: 'candidate' | 'shown' | 'accepted' | 'dismissed' | 'completed' | 'expired'
+  createdAt: number
+  expiresAt?: number
+  promptInstruction: string
+  answerStyle?: {
+    maxWords: number
+    format: 'bullets' | 'short_script' | 'code' | 'checklist' | 'summary'
+    tone: string
+  }
+}
+
+// ─── Interview Workspace State (v2) ──────────────────────────────────────────
+// Mirrors electron/services/InterviewWorkspaceStateManager.ts types.
+// Kept as structural interfaces to preserve the main↔renderer type boundary.
+
+export type InterviewContextDocumentKind =
+  | 'resume'
+  | 'job_description'
+  | 'cover_letter'
+  | 'prep_kit'
+  | 'project'
+  | 'notes'
+  | 'other';
+
+export interface InterviewWorkspaceAttachment {
+  id: string;
+  name: string;
+  fileType: 'md' | 'txt' | 'pdf' | 'docx';
+  contextKind?: InterviewContextDocumentKind;
+  sizeBytes: number;
+}
+
+export interface InterviewWorkspaceMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: number;
+  phase?: 'before' | 'during' | 'after';
+  attachments?: InterviewWorkspaceAttachment[];
+}
+
+export interface InterviewRound {
+  id: string;
+  name: string;
+  roundNumber: number;
+  status: 'draft' | 'active' | 'completed';
+  prepMessages: any[];
+  meetingId?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface InterviewWorkspace {
+  id: string;
+  title: string;
+  documentIds: string[];
+  rounds: InterviewRound[];
+  activeRoundId: string;
+  hasCustomOverrides?: boolean;
+  candidateBackgroundOverride?: string;
+  aiPersonaOverride?: string;
+  modelOverride?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InterviewWorkspaceState {
+  id: string;
+  meetingIds: string[];
+  activeMeetingId?: string;
+  meetingId?: string;
+  status: 'draft' | 'active' | 'complete';
+  messages: InterviewWorkspaceMessage[];
+  selectedDocumentIds: string[];
+  contextMarkdown?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ElectronAPI {
+  updateContentDimensions: (dimensions: {
+    width: number
+    height: number
+  }) => Promise<void>
+  onToggleExpand: (callback: () => void) => () => void
+  toggleOverlayExpand: () => Promise<void>
+  getOverlayExpanded: () => Promise<boolean>
+  onOverlayExpandedChanged: (callback: (expanded: boolean) => void) => () => void
+  getOverlaySizingMode: () => Promise<'compact' | 'viewport'>
+  onOverlaySizingModeChanged: (callback: (mode: 'compact' | 'viewport') => void) => () => void
+  clearCompactLatch: () => Promise<void>
+  getRecognitionLanguages: () => Promise<Record<string, any>>
+  getScreenshots: () => Promise<Array<{ path: string; preview: string }>>
+  deleteScreenshot: (
+    path: string
+  ) => Promise<{ success: boolean; error?: string }>
+  openScreenshotFile: (
+    path: string
+  ) => Promise<{ success: boolean; error?: string }>
+  saveScreenshotFile: (screenshot: {
+    path?: string
+    preview?: string
+  }) => Promise<{ success: boolean; error?: string; canceled?: boolean; path?: string }>
+  onScreenshotTaken: (
+    callback: (data: { path: string; preview: string }) => void
+  ) => () => void
+  onScreenshotAttached: (
+    callback: (data: { path: string; preview: string }) => void
+  ) => () => void
+  onCaptureAndProcess: (
+    callback: (data: { path: string; preview: string }) => void
+  ) => () => void
+  onSolutionsReady: (callback: (solutions: string) => void) => () => void
+  onResetView: (callback: () => void) => () => void
+  onSolutionStart: (callback: () => void) => () => void
+  onDebugStart: (callback: () => void) => () => void
+  onDebugSuccess: (callback: (data: any) => void) => () => void
+  onSolutionError: (callback: (error: string) => void) => () => void
+  onProcessingNoScreenshots: (callback: () => void) => () => void
+  onProblemExtracted: (callback: (data: any) => void) => () => void
+  onSolutionSuccess: (callback: (data: any) => void) => () => void
+  onUnauthorized: (callback: () => void) => () => void
+  onDebugError: (callback: (error: string) => void) => () => void
+  takeScreenshot: () => Promise<{ path: string; preview: string }>
+  takeSelectiveScreenshot: () => Promise<{ path: string; preview: string; cancelled?: boolean }>
+  moveWindowLeft: () => Promise<void>
+  moveWindowRight: () => Promise<void>
+  moveWindowUp: () => Promise<void>
+  moveWindowDown: () => Promise<void>
+  windowMinimize: () => Promise<void>
+  windowMaximize: () => Promise<void>
+  windowClose: () => Promise<void>
+  windowIsMaximized: () => Promise<boolean>
+
+  analyzeImageFile: (path: string) => Promise<void>
+  quitApp: () => Promise<void>
+  toggleWindow: () => Promise<void>
+  showWindow: (inactive?: boolean) => Promise<void>
+  hideWindow: () => Promise<void>
+  showOverlay: () => Promise<void>
+  hideOverlay: () => Promise<void>
+  getMeetingActive: () => Promise<boolean>
+  onMeetingStateChanged: (callback: (data: { isActive: boolean }) => void) => () => void
+  onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void
+  onEnsureExpanded: (callback: () => void) => () => void
+  openExternal: (url: string) => Promise<void>
+  // UX2: in-app TCC repair. macOS only; returns { ok, bundleId, results, message, promptRelaunch }.
+  repairTccPermissions: () => Promise<{
+    ok: boolean
+    bundleId?: string
+    results?: Array<{ service: string; ok: boolean; output: string }>
+    promptRelaunch?: boolean
+    error?: string
+    message: string
+  }>
+  setUndetectable: (state: boolean) => Promise<{ success: boolean; error?: string }>
+  getUndetectable: () => Promise<boolean>
+  setOverlayMousePassthrough: (enabled: boolean) => Promise<{ success: boolean }>
+  toggleOverlayMousePassthrough: () => Promise<{ success: boolean; enabled: boolean }>
+  getOverlayMousePassthrough: () => Promise<boolean>
+  onOverlayMousePassthroughChanged: (callback: (enabled: boolean) => void) => () => void
+  setDisguise: (mode: 'terminal' | 'settings' | 'activity' | 'none') => Promise<{ success: boolean; error?: string }>
+  getDisguise: () => Promise<'none' | 'terminal' | 'settings' | 'activity'>
+  onDisguiseChanged: (callback: (mode: 'terminal' | 'settings' | 'activity' | 'none') => void) => () => void
+  setOpenAtLogin: (open: boolean) => Promise<{ success: boolean; error?: string }>
+  getOpenAtLogin: () => Promise<boolean>
+  onSettingsVisibilityChange: (callback: (isVisible: boolean) => void) => () => void
+  toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>
+  closeSettingsWindow: () => Promise<void>
+  toggleAdvancedSettings: () => Promise<void>
+  closeAdvancedSettings: () => Promise<void>
+  openSettingsTab: (tab: string) => Promise<void>
+  onOpenSettingsTab: (callback: (tab: string) => void) => () => void
+
+  // LLM Model Management
+  getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli" | "natively" | "groq" | "openai" | "claude" | "deepseek"; model: string; isOllama: boolean }>
+  getAvailableOllamaModels: () => Promise<string[]>
+  switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>
+  switchToGemini: (apiKey?: string, modelId?: string) => Promise<{ success: boolean; error?: string }>
+  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey?: string) => Promise<{ success: boolean; error?: string }>
+  selectServiceAccount: () => Promise<{ success: boolean; path?: string; cancelled?: boolean; error?: string }>
+
+  // API Key Management
+  setGeminiApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setGroqApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setOpenaiApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setClaudeApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setDeepseekApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setAnswerCueApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  getAnswerCuePricing: () => Promise<{ ok: boolean; currency?: string; fetchedAt?: string; stale?: boolean; products?: Record<string, { id: string; dodoProductId: string; name: string; amount: number | null; currency: string; formattedPrice: string | null; interval: 'month' | 'year' | 'lifetime'; checkoutUrl: string; coupon: { code: string; eligible: boolean; discountPercent: number; reason?: string } }>; error?: string; status?: number }>
+  getAnswerCueUsage: () => Promise<{ ok: boolean; error?: string; plan?: string; quota?: { transcription: { used: number; limit: number; remaining: number }; ai: { used: number; limit: number; remaining: number }; search: { used: number; limit: number; remaining: number }; resets_at: string }; member_since?: string }>
+  getStoredCredentials: () => Promise<{ hasAnswerCueKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; googleServiceAccountPath: string | null; sttProvider: 'local-whisper' | 'google'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
+  // Permissions
+  checkPermissions:     () => Promise<{ microphone: 'granted'|'denied'|'not-determined'|'restricted'; screen: 'granted'|'denied'|'not-determined'|'restricted'; accessibility?: 'granted'|'denied'|'not-determined'|'restricted'; platform: string }>
+  requestMicPermission: () => Promise<boolean>
+
+  // Free Trial
+  startTrial:     () => Promise<{ ok: boolean; hasToken?: boolean; started_at?: string; expires_at?: string; expired?: boolean; already_used?: boolean; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: { duration_ms: number; ai_requests: number; stt_minutes: number; search_requests: number }; error?: string; status?: number }>
+  getTrialStatus: () => Promise<{ ok: boolean; expired?: boolean; remaining_ms?: number; started_at?: string; expires_at?: string; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: object; error?: string }>
+  getLocalTrial:  () => Promise<{ hasToken: boolean; trialClaimed?: boolean; expiresAt?: string; startedAt?: string; expired?: boolean }>
+  convertTrial:   (choice: string) => Promise<{ ok: boolean }>
+  endTrialByok:        () => Promise<{ success: boolean; error?: string }>
+  wipeTrialProfileData: () => Promise<{ success: boolean; error?: string }>
+  onTrialEnded:   (cb: (data: { choice: string }) => void) => () => void
+
+  // STT Provider Management — canonical values only
+  setSttProvider: (provider: 'local-whisper' | 'google') => Promise<{ success: boolean; error?: string }>
+  getSttProvider: () => Promise<'local-whisper' | 'google'>
+  localWhisperGetModels: () => Promise<{ models: Array<{ id: string; name: string; sizeMb: number; status: 'available' | 'missing' | 'downloading' | 'error'; errorMessage?: string }>; activeModelId: string }>
+  localWhisperSetModel: (modelId: string) => Promise<{ success: boolean; error?: string }>
+  localWhisperDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>
+  localWhisperStartDownload: (modelId: string) => Promise<{ success: boolean; error?: string }>
+  onLocalWhisperDownloadProgress: (callback: (data: { modelId: string; progress: number }) => void) => () => void
+  onLocalWhisperDownloadComplete: (callback: (data: { modelId: string }) => void) => () => void
+  onLocalWhisperDownloadError: (callback: (data: { modelId: string; error: string }) => void) => () => void
+  localWhisperPreload: (modelId?: string) => Promise<{ success: boolean; reason?: string; error?: string }>
+  setGroqSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setOpenAiSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setOpenAiSttBaseUrl: (url: string) => Promise<{ success: boolean; error?: string }>
+  setDeepgramApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setElevenLabsApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setAzureApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setAzureRegion: (region: string) => Promise<{ success: boolean; error?: string }>
+  setIbmWatsonApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setGroqSttModel: (model: string) => Promise<{ success: boolean; error?: string }>
+  setSonioxApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setIbmWatsonRegion: (region: string) => Promise<{ success: boolean; error?: string }>
+  testSttConnection: (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox', apiKey: string, region?: string) => Promise<{ success: boolean; error?: string }>
+
+  // STT Config Events (fired when STT provider/key changes during a meeting)
+  onSttConfigChanged: (callback: (data: { configured: boolean; provider: string }) => void) => () => void
+  onCredentialsChanged: (callback: () => void) => () => void
+
+  // Native Audio Service Events
+  onNativeAudioTranscript: (callback: (transcript: { speaker: string; text: string; final: boolean }) => void) => () => void
+  onNativeAudioSuggestion: (callback: (suggestion: { context: string; lastQuestion: string; confidence: number }) => void) => () => void
+  onNativeAudioConnected: (callback: () => void) => () => void
+  onNativeAudioDisconnected: (callback: () => void) => () => void
+  onSuggestionGenerated: (callback: (data: { question: string; suggestion: string; confidence: number }) => void) => () => void
+  onSuggestionProcessingStart: (callback: () => void) => () => void
+  onSuggestionError: (callback: (error: { error: string }) => void) => () => void
+  generateSuggestion: (context: string, lastQuestion: string) => Promise<{ suggestion: string }>
+  getInputDevices: () => Promise<Array<{ id: string; name: string }>>
+  getOutputDevices: () => Promise<Array<{ id: string; name: string }>>
+  setRecognitionLanguage: (key: string) => Promise<{ success: boolean; error?: string }>
+  getAiResponseLanguages: () => Promise<Array<{ label: string; code: string }>>
+  setAiResponseLanguage: (language: string) => Promise<{ success: boolean; error?: string }>
+  getSttLanguage: () => Promise<string>
+  getAiResponseLanguage: () => Promise<string>
+  onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void
+  onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void
+  onDeviceSelectionApplied: (callback: (payload: { kind: 'input' | 'output'; requested: string | null; actual: string | null; fellBack: boolean; reason?: string }) => void) => () => void
+  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean }) => void) => () => void
+
+  // STT Status Events
+  onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
+
+  getNativeAudioStatus: () => Promise<{ connected: boolean }>
+
+  // Intelligence Mode IPC
+  generateAssist: () => Promise<{ insight: string | null }>
+  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string }) => Promise<{
+    answer: string | null;
+    question?: string;
+    error?: string;
+    nullReason?: 'cooldown' | 'superseded' | 'nothing_actionable' | 'unknown';
+    /** Direct screenshot input metadata. What-to-answer no longer runs a vision pre-pass. */
+    screenContextStatus?: 'not_available' | 'available' | 'failed';
+    visionProviderUsed?: string;
+    visionModelUsed?: string;
+    visionAttempts?: number;
+    visionFailureReason?: 'no_vision_provider' | 'all_vision_failed' | 'privacy_blocked' | 'scope_blocked' | 'provider_timeout';
+    imageCount?: number;
+    usedImageInput?: boolean;
+  }>
+  generateClarify: () => Promise<{ clarification: string | null }>
+  generateCodeHint: (imagePaths?: string[], problemStatement?: string) => Promise<{ hint: string | null }>
+  generateBrainstorm: (imagePaths?: string[], problemStatement?: string) => Promise<{ script: string | null }>
+  generateFollowUp: (intent: string, userRequest?: string) => Promise<{ refined: string | null; intent: string }>
+  generateFollowUpQuestions: () => Promise<{ questions: string | null }>
+  generateRecap: () => Promise<{ summary: string | null }>
+  submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>
+  getIntelligenceContext: () => Promise<{ context: string; lastAssistantMessage: string | null; activeMode: string }>
+  resetIntelligence: () => Promise<{ success: boolean; error?: string }>
+
+  // Dynamic Action Button Mode
+  getActionButtonMode: () => Promise<'recap' | 'brainstorm'>
+  setActionButtonMode: (mode: 'recap' | 'brainstorm') => Promise<{ success: boolean }>
+  onActionButtonModeChanged: (callback: (mode: 'recap' | 'brainstorm') => void) => () => void
+  onModeChanged: (callback: (data: { id: string | null; name: string | null }) => void) => () => void
+
+  // Modes
+  modesGetAll: () => Promise<Array<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string; referenceFileCount: number }>>
+  modesGetActive: () => Promise<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string } | null>
+  modesCreate: (params: { name: string; templateType: string }) => Promise<{ success: boolean; mode?: any; error?: string }>
+  modesUpdate: (id: string, updates: { name?: string; templateType?: string; customContext?: string }) => Promise<{ success: boolean; error?: string }>
+  modesDelete: (id: string) => Promise<{ success: boolean; error?: string }>
+  modesSetActive: (id: string | null) => Promise<{ success: boolean; error?: string }>
+  modesGetReferenceFiles: (modeId: string) => Promise<Array<{ id: string; modeId: string; fileName: string; content: string; createdAt: string }>>
+  modesUploadReferenceFile: (modeId: string) => Promise<{ success: boolean; file?: any; cancelled?: boolean; error?: string }>
+  modesDeleteReferenceFile: (id: string) => Promise<{ success: boolean; error?: string }>
+  modesGetNoteSections: (modeId: string) => Promise<Array<{ id: string; modeId: string; title: string; description: string; sortOrder: number }>>
+  modesAddNoteSection: (modeId: string, title: string, description: string) => Promise<{ success: boolean; section?: any; error?: string }>
+  modesUpdateNoteSection: (id: string, updates: { title?: string; description?: string }) => Promise<{ success: boolean; error?: string }>
+  modesDeleteNoteSection: (id: string) => Promise<{ success: boolean; error?: string }>
+  modesRemoveAllNoteSections: (modeId: string) => Promise<{ success: boolean; error?: string }>
+
+  // Meeting Lifecycle
+  interviewDocsList: () => Promise<Array<{ id: string; name: string; fileType: 'md' | 'txt' | 'pdf' | 'docx'; markdown: string; contextKind?: InterviewContextDocumentKind; contextDescription?: string; sizeBytes: number; createdAt: string; updatedAt: string }>>
+  interviewDocsSelectFiles: () => Promise<{ success: boolean; cancelled: boolean; files: Array<{ token: string; name: string; size: number; ext: string }>; error?: string }>
+  interviewDocsBatchUpload: (items: Array<{ token?: string; name?: string; data?: Uint8Array; contextKind?: InterviewContextDocumentKind; contextDescription?: string }>) => Promise<{ success: boolean; documents?: any[]; error?: string; requiresReselection?: boolean }>
+  interviewDocsUpload: () => Promise<{ success: boolean; document?: any; cancelled?: boolean; error?: string }>
+  interviewDocsUpdateMetadata: (id: string, metadata: { contextKind: InterviewContextDocumentKind; contextDescription?: string }) => Promise<{ success: boolean; document?: any; error?: string }>
+  interviewDocsDelete: (id: string) => Promise<{ success: boolean; error?: string }>
+  // Interview Workspace & Multi-Round APIs
+  interviewWorkspaceList: () => Promise<{ success: boolean; workspaces?: InterviewWorkspace[]; error?: string }>
+  interviewWorkspaceCreate: (payload?: { title?: string; initialDocIds?: string[] }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceGetById: (id: string) => Promise<any | null>
+  interviewWorkspaceRename: (payload: { id: string; title: string } | string, maybeTitle?: string) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceDelete: (id: string) => Promise<{ success: boolean; error?: string }>
+  interviewWorkspaceDuplicate: (id: string) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceAddRound: (payload: { workspaceId: string; name?: string } | string, name?: string) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceRenameRound: (payload: { workspaceId: string; roundId: string; name: string }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceSetActiveRound: (payload: { workspaceId: string; roundId: string }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceUpdateRoundPrep: (payload: { workspaceId: string; roundId: string; messages: any[] }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceUpdateDocuments: (payload: { workspaceId: string; documentIds: string[] }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceStartMeeting: (payload: { workspaceId: string; roundId: string }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; meetingId?: string; error?: string }>
+  interviewWorkspaceFinishMeeting: (payload: { workspaceId: string; roundId: string; meetingId: string }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceRedoRound: (payload: { workspaceId: string; roundId?: string } | string, roundId?: string) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceUpdatePersonaOverrides: (payload: {
+    workspaceId: string;
+    hasCustomOverrides?: boolean;
+    candidateBackgroundOverride?: string;
+    aiPersonaOverride?: string;
+  }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceUpdateModelOverride: (payload: {
+    workspaceId: string;
+    modelOverride?: string;
+  }) => Promise<{ success: boolean; workspace?: InterviewWorkspace; error?: string }>
+  interviewWorkspaceSyncLlmContext: (payload: {
+    workspaceId?: string;
+    hasCustomOverrides?: boolean;
+    candidateBackgroundOverride?: string;
+    aiPersonaOverride?: string;
+  }) => Promise<{ success: boolean; error?: string }>
+  knowledgeBankGetDocumentUsage: () => Promise<{
+    success: boolean;
+    usage: Record<string, Array<{ workspaceId: string; workspaceTitle: string }>>;
+    error?: string;
+  }>
+  onInterviewDocsChanged?: (callback: () => void) => () => void
+
+  // Backward Compatibility Workspace APIs
+  interviewWorkspaceGetByMeeting: (meetingId: string) => Promise<any | null>
+  interviewWorkspaceSave: (state: any) => Promise<{ success: boolean; state?: any; error?: string }>
+  interviewWorkspaceResolveDraft: (options?: { preferredId?: string; forceNew?: boolean }) => Promise<{ success: boolean; workspace?: InterviewWorkspaceState; created?: boolean; error?: string }>
+  interviewWorkspaceUpdatePrep: (payload: { id: string; messages?: InterviewWorkspaceMessage[]; contextMarkdown?: string; selectedDocumentIds?: string[] }) => Promise<{ success: boolean; workspace?: InterviewWorkspaceState; error?: string }>
+  interviewWorkspaceBeginRun: (id: string) => Promise<{ success: boolean; workspace?: InterviewWorkspaceState; error?: string }>
+  interviewWorkspaceFinishRun: (payload: { id: string; meetingId: string }) => Promise<{ success: boolean; workspace?: InterviewWorkspaceState; error?: string }>
+  interviewWorkspaceCancelRun: (id: string) => Promise<{ success: boolean; workspace?: InterviewWorkspaceState; error?: string }>
+  startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string }>
+  endMeeting: () => Promise<{ success: boolean; error?: string }>
+  finalizeMicSTT: () => Promise<void>
+  getRecentMeetings: () => Promise<Array<{ id: string; title: string; date: string; duration: string; summary: string; isProcessed?: boolean; titleSource?: 'placeholder' | 'auto' | 'manual' | 'calendar' }>>
+  getMeetingDetails: (id: string) => Promise<any>
+  updateMeetingTitle: (id: string, title: string) => Promise<boolean>
+  updateMeetingSummary: (id: string, updates: { overview?: string, actionItems?: string[], keyPoints?: string[], actionItemsTitle?: string, keyPointsTitle?: string }) => Promise<boolean>
+  deleteMeeting: (id: string) => Promise<boolean>
+  setWindowMode: (mode: 'launcher' | 'overlay', inactive?: boolean) => Promise<void>
+  setMeetingInterfaceTheme: (theme: string) => void
+  onMeetingInterfaceThemeChanged: (callback: (theme: string) => void) => () => void
+
+  // Phase 3 — Cluely-style dynamic action cards.
+  onIntelligenceDynamicAction: (callback: (data: { action: DynamicActionPayload }) => void) => () => void
+  acceptDynamicAction: (actionId: string) => Promise<{ success: boolean; action?: DynamicActionPayload; error?: string }>
+  dismissDynamicAction: (actionId: string) => Promise<{ success: boolean; error?: string }>
+  listDynamicActions: () => Promise<{ success: boolean; actions: DynamicActionPayload[]; error?: string }>
+
+  // Intelligence Mode Events
+  onIntelligenceAssistUpdate: (callback: (data: { insight: string }) => void) => () => void
+  onIntelligenceSuggestedAnswerToken: (callback: (data: { token: string; question: string; confidence: number }) => void) => () => void
+  onIntelligenceSuggestedAnswer: (callback: (data: { answer: string; question: string; confidence: number }) => void) => () => void
+  // Sprint 7: dedicated negotiation-coaching channel.
+  onIntelligenceNegotiationCoaching: (callback: (data: { payload: any }) => void) => () => void
+  // Sprint 9: time-batched IPC token channel.
+  onIntelligenceTokenBatch: (callback: (data: { kind: 'suggested_answer' | 'refined_answer' | 'recap' | 'clarify' | 'follow_up_questions'; items: any[] }) => void) => () => void
+  onIntelligenceRefinedAnswerToken: (callback: (data: { token: string; intent: string }) => void) => () => void
+  onIntelligenceRefinedAnswer: (callback: (data: { answer: string; intent: string }) => void) => () => void
+  onIntelligenceFollowUpQuestionsUpdate: (callback: (data: { questions: string }) => void) => () => void
+  onIntelligenceFollowUpQuestionsToken: (callback: (data: { token: string }) => void) => () => void
+  onIntelligenceRecap: (callback: (data: { summary: string }) => void) => () => void
+  onIntelligenceRecapToken: (callback: (data: { token: string }) => void) => () => void
+  onIntelligenceClarify: (callback: (data: { clarification: string }) => void) => () => void
+  onIntelligenceClarifyToken: (callback: (data: { token: string }) => void) => () => void
+  onIntelligenceManualStarted: (callback: () => void) => () => void
+  onIntelligenceManualResult: (callback: (data: { answer: string; question: string }) => void) => () => void
+  onIntelligenceModeChanged: (callback: (data: { mode: string }) => void) => () => void
+  onIntelligenceError: (callback: (data: { error: string, mode: string }) => void) => () => void;
+  // Session Management
+  onSessionReset: (callback: () => void) => () => void;
+
+  // Streaming listeners
+  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean, systemPrompt?: string, recordInSession?: boolean }) => Promise<void>
+  onGeminiStreamToken: (callback: (token: string) => void) => () => void
+  onGeminiStreamDone: (callback: (route: { provider: string; model: string; isOllama: boolean } | null) => void) => () => void
+  onGeminiStreamError: (callback: (error: string) => void) => () => void;
+  cancelChatStream: () => void;
+
+  // Model Management
+  getDefaultModel: () => Promise<{ model: string }>;
+  setModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
+  setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
+  toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) => Promise<void>;
+  modelSelectorCloseIfOpen: () => Promise<void>;
+  forceRestartOllama: () => Promise<void>;
+
+  // Settings Window
+  toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>;
+
+  // Groq Fast Text Mode
+  getGroqFastTextMode: () => Promise<{ enabled: boolean }>;
+  setGroqFastTextMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  getCodexCliConfig: () => Promise<{ enabled: boolean; path: string; model: string; fastModel: string; timeoutMs: number; sandboxMode: string; serviceTier?: string; modelReasoningEffort?: string }>;
+  setCodexCliConfig: (config: { enabled: boolean; path: string; model: string; fastModel: string; timeoutMs: number; sandboxMode?: string; serviceTier?: string; modelReasoningEffort?: string }) => Promise<{ success: boolean; error?: string; config?: { enabled: boolean; path: string; model: string; fastModel: string; timeoutMs: number; sandboxMode: string; serviceTier?: string; modelReasoningEffort?: string } }>;
+  testCodexCli: (config?: { enabled?: boolean; path?: string; model?: string; fastModel?: string; timeoutMs?: number; sandboxMode?: string; serviceTier?: string; modelReasoningEffort?: string }) => Promise<{ success: boolean; error?: string; resolvedPath?: string; config?: { enabled: boolean; path: string; model: string; fastModel: string; timeoutMs: number; sandboxMode: string; serviceTier?: string; modelReasoningEffort?: string } }>;
+
+  // Demo
+  seedDemo: () => Promise<{ success: boolean }>;
+
+  // Custom Providers
+  saveCustomProvider: (provider: any) => Promise<{ success: boolean; id?: string; error?: string }>;
+  getCustomProviders: () => Promise<any[]>;
+  deleteCustomProvider: (id: string) => Promise<{ success: boolean; error?: string }>;
+
+  // OpenAI-Compatible Endpoints & Thinking Effort
+  getOpenAICompatibleEndpoints: () => Promise<any[]>;
+  saveOpenAICompatibleEndpoint: (endpoint: any) => Promise<{ success: boolean; endpoint?: any; error?: string }>;
+  deleteOpenAICompatibleEndpoint: (id: string) => Promise<{ success: boolean; error?: string }>;
+  fetchOpenAICompatibleModels: (params: { baseUrl: string; apiKey?: string; customHeaders?: Record<string, string>; endpointId?: string }) => Promise<{ success: boolean; models?: any[]; error?: string }>;
+  testOpenAICompatibleEndpoint: (params: { endpoint: any; apiKey?: string }) => Promise<{ success: boolean; error?: string }>;
+  getThinkingEffort: () => Promise<'auto' | 'low' | 'medium' | 'high'>;
+  setThinkingEffort: (effort: 'auto' | 'low' | 'medium' | 'high') => Promise<{ success: boolean; error?: string }>;
+
+  // Follow-up Email
+  generateFollowupEmail: (input: any) => Promise<string>;
+  extractEmailsFromTranscript: (transcript: Array<{ text: string }>) => Promise<string[]>;
+  getCalendarAttendees: (eventId: string) => Promise<Array<{ email: string; name: string }>>;
+  openMailto: (params: { to: string; subject: string; body: string }) => Promise<{ success: boolean; error?: string }>;
+
+  // Audio Test
+  startAudioTest: (deviceId?: string, outputDeviceId?: string) => Promise<{ success: boolean }>;
+  stopAudioTest: () => Promise<{ success: boolean }>;
+  onAudioTestLevel: (callback: (level: number) => void) => () => void;
+  // UX4: parallel system-audio probe — level + error events emitted during
+  // the same startAudioTest lifecycle.
+  onAudioTestSystemLevel: (callback: (level: number) => void) => () => void;
+  onAudioTestSystemError: (callback: (errorMessage: string) => void) => () => void;
+
+  // Database
+  flushDatabase: () => Promise<{ success: boolean }>;
+
+  onUndetectableChanged: (callback: (state: boolean) => void) => () => void;
+  onGroqFastTextChanged: (callback: (enabled: boolean) => void) => () => void;
+  onModelChanged: (callback: (modelId: string) => void) => () => void;
+
+  onOllamaPullProgress: (callback: (data: { status: string; percent: number }) => void) => () => void;
+  onOllamaPullComplete: (callback: () => void) => () => void;
+
+  onMeetingsUpdated: (callback: () => void) => () => void
+
+  // Provider Compatibility
+  onIncompatibleProviderWarning: (callback: (data: { count: number, oldProvider: string, newProvider: string }) => void) => () => void;
+  reindexIncompatibleMeetings: () => Promise<void>;
+
+  // Theme API
+  getThemeMode: () => Promise<{ mode: 'system' | 'light' | 'dark', resolved: 'light' | 'dark' }>
+  setThemeMode: (mode: 'system' | 'light' | 'dark') => Promise<void>
+  onThemeChanged: (callback: (data: { mode: 'system' | 'light' | 'dark', resolved: 'light' | 'dark' }) => void) => () => void
+
+  // Calendar
+  calendarConnect: () => Promise<{ success: boolean; error?: string }>
+  calendarDisconnect: () => Promise<{ success: boolean; error?: string }>
+  getCalendarStatus: () => Promise<{ connected: boolean; email?: string }>
+  getUpcomingEvents: () => Promise<Array<{ id: string; title: string; startTime: string; endTime: string; link?: string; source: 'google'; attendees?: Array<{ email: string; name?: string; photoUrl?: string; response?: 'accepted' | 'declined' | 'tentative' | 'needsAction' }> }>>
+  calendarRefresh: () => Promise<{ success: boolean; error?: string }>
+
+  // Auto-Update
+  onUpdateAvailable: (callback: (info: any) => void) => () => void
+  onUpdateDownloaded: (callback: (info: any) => void) => () => void
+  onUpdateChecking: (callback: () => void) => () => void
+  onUpdateNotAvailable: (callback: (info: any) => void) => () => void
+  onUpdateError: (callback: (err: string) => void) => () => void
+  onDownloadProgress: (callback: (progressObj: any) => void) => () => void
+  restartAndInstall: () => Promise<void>
+  checkForUpdates: () => Promise<void>
+  downloadUpdate: () => Promise<void>
+  getCanAutoUpdate: () => Promise<{ canAutoUpdate: boolean }>
+  testReleaseFetch: () => Promise<{ success: boolean; error?: string }>
+
+  // RAG (Retrieval-Augmented Generation) API
+  ragQueryMeeting: (meetingId: string, query: string) => Promise<{ success?: boolean; fallback?: boolean; error?: string }>
+  ragQueryLive: (query: string) => Promise<{ success?: boolean; fallback?: boolean; error?: string }>
+  ragQueryGlobal: (query: string) => Promise<{ success?: boolean; fallback?: boolean; error?: string }>
+  ragCancelQuery: (options: { meetingId?: string; global?: boolean }) => Promise<{ success: boolean }>
+  ragIsMeetingProcessed: (meetingId: string) => Promise<boolean>
+  ragGetQueueStatus: () => Promise<{ pending: number; processing: number; completed: number; failed: number }>
+  ragRetryEmbeddings: () => Promise<{ success: boolean }>
+  onRAGStreamChunk: (callback: (data: { meetingId?: string; global?: boolean; chunk: string }) => void) => () => void
+  onRAGStreamComplete: (callback: (data: { meetingId?: string; global?: boolean }) => void) => () => void
+  onRAGStreamError: (callback: (data: { meetingId?: string; global?: boolean; error: string }) => void) => () => void
+
+  // Donation API
+  getDonationStatus: () => Promise<{ shouldShow: boolean; hasDonated: boolean; lifetimeShows: number }>;
+  markDonationToastShown: () => Promise<{ success: boolean }>;
+  setDonationComplete: () => Promise<{ success: boolean }>;
+
+  // Keybind Management
+  getKeybinds: () => Promise<Array<{ id: string; label: string; accelerator: string; isGlobal: boolean; defaultAccelerator: string }>>
+  setKeybind: (id: string, accelerator: string) => Promise<boolean>
+  resetKeybinds: () => Promise<Array<{ id: string; label: string; accelerator: string; isGlobal: boolean; defaultAccelerator: string }>>
+  onKeybindsUpdate: (callback: (keybinds: Array<any>) => void) => () => void
+  onKeybindRegistrationFailed: (callback: (data: { id: string; accelerator: string }) => void) => () => void
+  onGlobalShortcut: (
+    callback: (data: { action: string; attachment?: { path: string; preview: string } }) => void
+  ) => () => void
+
+  // CGEventTap-backed stealth typing (macOS only — graceful degradation elsewhere)
+  stealthTapAvailable: () => Promise<boolean>
+  stealthTapOpenSettings: () => Promise<void>
+  stealthTapStop: () => Promise<void>
+  stealthTapStart: () => Promise<boolean>
+  /** False on macOS when a composition IME (Pinyin/Hangul/Kanji/…) is
+   *  enabled — the tap captures below the IME and breaks composition, so
+   *  the renderer falls back to plain DOM focus on click. */
+  stealthTapShouldAutoEngage: () => Promise<boolean>
+  stealthTapRefreshIme: () => Promise<boolean>
+  onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => () => void
+  onStealthKeyCaptured: (cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void) => () => void
+
+  // Profile Engine API
+  profileUploadResume: (token: string) => Promise<{ success: boolean; error?: string }>
+  profileGetStatus: () => Promise<{ hasProfile: boolean; profileMode: boolean; name?: string; role?: string; totalExperienceYears?: number }>
+  profileSetMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  profileDelete: () => Promise<{ success: boolean; error?: string }>
+  profileGetProfile: () => Promise<any>
+  profileSelectFile: () => Promise<{ success?: boolean; cancelled?: boolean; token?: string; displayName?: string; error?: string }>
+
+  // JD & Research API
+  profileUploadJD: (token: string) => Promise<{ success: boolean; error?: string }>
+  profileDeleteJD: () => Promise<{ success: boolean; error?: string }>
+  profileResearchCompany: (companyName: string) => Promise<{ success: boolean; dossier?: any; error?: string; searchQuotaExhausted?: boolean }>
+  profileGenerateNegotiation: (force?: boolean) => Promise<{ success: boolean; script?: any; error?: string }>
+  profileGetNegotiationState: () => Promise<{ success: boolean; state?: any; isActive?: boolean; error?: string }>
+  profileResetNegotiation: () => Promise<{ success: boolean; error?: string }>
+  profileImportMarkdownContext: () => Promise<{ success?: boolean; cancelled?: boolean; fileName?: string; fileType?: 'md' | 'txt' | 'pdf' | 'docx'; content?: string; error?: string }>
+  profileGetNotes: () => Promise<{ success: boolean; content: string; error?: string }>
+  profileSaveNotes: (content: string) => Promise<{ success: boolean; error?: string }>
+  profileGetPersona: () => Promise<{ success: boolean; content: string; error?: string }>
+  profileSavePersona: (content: string) => Promise<{ success: boolean; error?: string }>
+
+  // Tavily Search API
+  setTavilyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+
+  // Dynamic Model Discovery
+  fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey: string) => Promise<{ success: boolean; models?: {id: string, label: string}[]; error?: string }>
+  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', modelId: string) => Promise<void>
+
+  // License Management
+  licenseActivate: (key: string) => Promise<{ success: boolean; error?: string }>
+  licenseCheckPremium: () => Promise<boolean>
+  licenseGetDetails: () => Promise<{ isPremium: boolean; plan?: string; provider?: string }>
+  /** Async startup check — calls Dodo validate endpoint to detect server-side revocations. */
+  licenseCheckPremiumAsync: () => Promise<boolean>
+  onLicenseStatusChanged: (callback: (data: { isPremium: boolean, plan?: string }) => void) => () => void
+  licenseDeactivate: () => Promise<void>
+  licenseGetHardwareId: () => Promise<string>
+
+  // Overlay Opacity (Stealth Mode)
+  setOverlayOpacity: (opacity: number) => Promise<void>;
+  onOverlayOpacityChanged: (callback: (opacity: number) => void) => () => void;
+
+  // Consent, version, and debug settings
+  getAppVersion: () => Promise<string>;
+  getAnalyticsConsent: () => Promise<{
+    consent: 'unset' | 'granted' | 'denied';
+    legalAccepted: boolean;
+    legalAcceptanceVersion: string | null;
+    enabled: boolean;
+    localTelemetryEnabled: boolean;
+  }>;
+  setAnalyticsConsent: (
+    consent: 'granted' | 'denied',
+    legalAcceptance?: { version?: string },
+  ) => Promise<{
+    success: boolean;
+    consent?: 'granted' | 'denied';
+    enabled?: boolean;
+    error?: string;
+  }>;
+  onAnalyticsConsentChanged: (callback: (consent: 'granted' | 'denied') => void) => () => void;
+
+  // Verbose / Debug Logging
+  getVerboseLogging: () => Promise<boolean>;
+  setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+  getMeetingRetention: () => Promise<'forever' | '7d' | '30d' | 'never'>;
+  setMeetingRetention: (retention: 'forever' | '7d' | '30d' | 'never') => Promise<{ success: boolean; error?: string }>;
+  onMeetingRetentionChanged: (callback: (retention: 'forever' | '7d' | '30d' | 'never') => void) => () => void;
+  getProviderDataScopes: () => Promise<{ transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }>;
+  setProviderDataScopes: (scopes: { transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }) => Promise<{ success: boolean; error?: string }>;
+  onProviderDataScopesChanged: (callback: (scopes: { transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }) => void) => () => void;
+  getScreenUnderstandingMode: () => Promise<'vision_first' | 'vision_only' | 'private_vision'>;
+  setScreenUnderstandingMode: (mode: 'vision_first' | 'vision_only' | 'private_vision') => Promise<{ success: boolean; error?: string }>;
+  onScreenUnderstandingModeChanged: (callback: (mode: 'vision_first' | 'vision_only' | 'private_vision') => void) => () => void;
+  getTechnicalInterviewVisionFirst: () => Promise<boolean>;
+  setTechnicalInterviewVisionFirst: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  onTechnicalInterviewVisionFirstChanged: (callback: (enabled: boolean) => void) => () => void;
+  getSpeculativeInferenceEnabled?: () => Promise<boolean>;
+  setSpeculativeInferenceEnabled?: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  onSpeculativeInferenceEnabledChanged?: (callback: (enabled: boolean) => void) => () => void;
+  /** @deprecated alias retained for older renderer builds — maps to technicalInterviewVisionFirst */
+  getTechnicalInterviewDirectVision: () => Promise<boolean>;
+  /** @deprecated alias retained for older renderer builds — maps to technicalInterviewVisionFirst */
+  setTechnicalInterviewDirectVision: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  /** @deprecated alias retained for older renderer builds — maps to technicalInterviewVisionFirstChanged */
+  onTechnicalInterviewDirectVisionChanged: (callback: (enabled: boolean) => void) => () => void;
+  getLogFilePath: () => Promise<string | null>;
+  openLogFile: () => Promise<{ success: boolean; error?: string }>;
+
+  // Arch
+  getArch: () => Promise<string>;
+  getOsVersion: () => Promise<string>;
+
+  // File System
+  fileExists: (filePath: string) => Promise<boolean>;
+
+  // Cropper API
+  cropperConfirmed: (bounds: { x: number; y: number; width: number; height: number }) => void;
+  cropperCancelled: () => void;
+  onResetCropper: (callback: (data: { hudPosition: { x: number; y: number } }) => void) => () => void;
+
+  // Platform
+  platform: NodeJS.Platform;
+
+  // Skills
+  skillsRefresh: () => Promise<SkillSummary[]>;
+  skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>;
+
+  // Phone Mirror
+  phoneMirrorGetInfo: () => Promise<PhoneMirrorInfo>;
+  phoneMirrorEnable: (exposeOnLan: boolean) => Promise<PhoneMirrorInfo | { error: string }>;
+  phoneMirrorDisable: () => Promise<{ success: true }>;
+  phoneMirrorSetLan: (exposeOnLan: boolean) => Promise<PhoneMirrorInfo | { error: string }>;
+  phoneMirrorRotateToken: () => Promise<PhoneMirrorInfo | { error: string }>;
+  onPhoneMirrorStatus: (callback: (info: PhoneMirrorInfo) => void) => () => void;
+  onPhoneMirrorIncomingChat: (
+    callback: (data: { message: string; streamId: string }) => void,
+  ) => () => void;
+}
+
+export interface SkillSummary {
+  id: string;
+  name: string;
+  description: string;
+  source: 'builtin' | 'userData';
+}
+
+export interface PhoneMirrorInfo {
+  running: boolean;
+  enabled: boolean;
+  exposeOnLan: boolean;
+  port: number;
+  loopbackUrl: string | null;
+  primaryUrl: string | null;
+  lanUrls: string[];
+  token: string | null;
+  qrDataUrl: string | null;
+  clients: number;
+}
+
+declare global {
+  interface Window {
+    electronAPI: ElectronAPI
+  }
+}

@@ -1,0 +1,61 @@
+import type { Metadata } from "next";
+import "./globals.css";
+
+const SITE = "https://interviewos.vercel.app";
+
+export const metadata: Metadata = {
+  metadataBase: new URL(SITE),
+  title: "InterviewOS — Free AI Interview Assistant",
+  description:
+    "InterviewOS is a free, undetectable desktop interview assistant — invisible to screen sharing and recording. Bring your own AI model, upload your docs per interview, and control exactly what the assistant remembers and says. Stop paying $1,000s for closed subscriptions.",
+  keywords: [
+    "interview assistant",
+    "AI interview copilot",
+    "undetectable interview assistant",
+    "invisible to screen share",
+    "free interview assistant",
+    "bring your own model",
+    "live transcription",
+    "InterviewOS",
+  ],
+  openGraph: {
+    title: "InterviewOS — Free AI Interview Assistant",
+    description:
+      "Free, bring-your-own-model interview copilot. Upload docs per interview and control exactly what it remembers and says.",
+    url: SITE,
+    siteName: "InterviewOS",
+    images: [{ url: "/icon.png", width: 1024, height: 1024, alt: "InterviewOS" }],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "InterviewOS — Free AI Interview Assistant",
+    description:
+      "Free, bring-your-own-model interview copilot. Upload docs per interview and control exactly what it remembers and says.",
+    images: ["/icon.png"],
+  },
+  icons: { icon: "/icon.png", apple: "/icon.png" },
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        <meta name="theme-color" content="#f3f2fb" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="font-sans antialiased">
+        <div className="mesh" />
+        <div className="mesh-rotate" />
+        <div className="vignette" />
+        <div className="grain" />
+        {children}
+      </body>
+    </html>
+  );
+}
